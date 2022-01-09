@@ -1,0 +1,6 @@
+/target
+Cargo.lock
+.idea
+env_setup.ps1
+test_data.csv
+.env
