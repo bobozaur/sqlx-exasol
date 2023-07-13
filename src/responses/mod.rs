@@ -1,18 +1,19 @@
-mod fetched;
+mod error;
+pub(crate) mod fetched;
 mod hosts;
 mod login_info;
 mod prepared_stmt;
 mod pub_key;
 mod result;
 
-use std::fmt::Display;
-
 use serde::Deserialize;
 
 use self::{
-    fetched::FetchedData, hosts::Hosts, prepared_stmt::PreparedStatement, pub_key::PublicKey,
-    result::Results, login_info::LoginInfo,
+    fetched::FetchedData, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
+    pub_key::PublicKey, result::Results,
 };
+
+pub use error::DatabaseError;
 
 /// Generic response received from the Exasol server
 /// This is the first deserialization step
@@ -30,7 +31,7 @@ pub enum Response {
         attributes: Option<Attributes>,
     },
     Error {
-        exception: ExaError,
+        exception: DatabaseError,
     },
 }
 
@@ -78,22 +79,3 @@ pub struct Attributes {
     timezone: String,
     timezone_behavior: String,
 }
-
-/// Generic struct containing the response fields
-/// returned by Exasol in case of an error.
-///
-/// These errors are directly issued by the Exasol database.
-#[derive(Debug, Deserialize)]
-pub struct ExaError {
-    text: String,
-    #[serde(rename = "sqlCode")]
-    code: String,
-}
-
-impl Display for ExaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Exasol Error {}: {}", self.code, self.text)
-    }
-}
-
-impl std::error::Error for ExaError {}

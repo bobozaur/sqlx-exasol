@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use super::{ConOpts, LoginKind, ProtocolVersion};
+use super::{ExaConnectOptions, LoginKind, ProtocolVersion};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,8 +32,8 @@ impl<'a> SerializableConOpts<'a> {
     const CLIENT_RUNTIME: &str = "Rust";
 }
 
-impl<'a> From<&'a ConOpts> for SerializableConOpts<'a> {
-    fn from(value: &'a ConOpts) -> Self {
+impl<'a> From<&'a ExaConnectOptions> for SerializableConOpts<'a> {
+    fn from(value: &'a ExaConnectOptions) -> Self {
         let attributes = Attributes {
             current_schema: value.schema.as_deref(),
             query_timeout: value.query_timeout,

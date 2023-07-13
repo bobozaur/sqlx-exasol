@@ -59,10 +59,28 @@ pub struct Fetch {
     num_bytes: usize,
 }
 
+impl Fetch {
+    pub fn new(result_set_handle: u16, start_position: usize, num_bytes: usize) -> Self {
+        Self {
+            result_set_handle,
+            start_position,
+            num_bytes,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloseResultSet {
-    result_set_handles: Vec<u16>,
+    result_set_handles: [u16; 1],
+}
+
+impl From<u16> for CloseResultSet {
+    fn from(value: u16) -> Self {
+        Self {
+            result_set_handles: [value],
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

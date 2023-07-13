@@ -1,28 +1,30 @@
-use crate::connection::ExaError;
+use async_tungstenite::tungstenite::Error as WsError;
 use crossbeam::channel::RecvError;
 use rsa;
 use serde_json;
+use serde_json::error::Error as JsonError;
 use std::array::TryFromSliceError;
 use std::fmt::Debug;
-use std::net::TcpStream;
 use std::num::ParseIntError;
 use thiserror::Error as ThisError;
-use tungstenite;
-use tungstenite::stream::MaybeTlsStream;
-use tungstenite::{ClientHandshake, HandshakeError};
 
-/// Result implementation for the crate.;
-pub type Result<T> = std::result::Result<T, Error>;
+use crate::responses::DatabaseError;
+
+/// Result implementation for the crate.
+pub type ExaResult<T> = std::result::Result<T, Error>;
+
+// Convenience aliases
+pub(crate) type DriverResult<T> = std::result::Result<T, DriverError>;
+pub(crate) type ConResult<T> = std::result::Result<T, ConnectionError>;
+pub(crate) type ReqResult<T> = std::result::Result<T, RequestError>;
 
 /// Error type for the crate.
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error(transparent)]
-    QueryError(#[from] QueryError),
-    #[error(transparent)]
     DriverError(#[from] DriverError),
     #[error(transparent)]
-    ExasolError(#[from] ExaError),
+    DatabaseError(#[from] DatabaseError),
 }
 
 /// Driver related errors.
@@ -44,54 +46,6 @@ pub enum DriverError {
     ResponseMismatch(&'static str),
 }
 
-/// Query related errors.
-#[derive(Debug, ThisError)]
-pub enum QueryErrorImpl {
-    #[error(transparent)]
-    BindError(#[from] BindError),
-    #[error(transparent)]
-    QueryError(#[from] ExaError),
-}
-
-/// Error related to parameter binding.
-#[derive(Debug, ThisError)]
-pub enum BindError {
-    #[error("Missing parameter to bind for {0}")]
-    MappingError(String),
-    #[error("Parameter type must serialize to a sequence or map")]
-    SerializeError,
-    #[error(transparent)]
-    DeserializeError(#[from] serde_json::error::Error),
-}
-
-/// Implementation for an actual error occurring on a query
-#[derive(Debug, ThisError)]
-#[error("Error: {source:#?}\nQuery: {query}")]
-pub struct QueryError {
-    query: String,
-    source: QueryErrorImpl,
-}
-
-impl QueryError {
-    pub(crate) fn new<T>(source: QueryErrorImpl, query: T) -> Self
-    where
-        T: AsRef<str>,
-    {
-        let query = query.as_ref().to_owned();
-        Self { query, source }
-    }
-
-    pub(crate) fn map_err<T>(err: Error, query: T) -> Error
-    where
-        T: AsRef<str>,
-    {
-        match err {
-            Error::ExasolError(e) => Error::QueryError(QueryError::new(e.into(), query)),
-            _ => err,
-        }
-    }
-}
-
 /// Data processing related errors.
 #[derive(Debug, ThisError)]
 pub enum DataError {
@@ -102,20 +56,24 @@ pub enum DataError {
     #[error("Data iterator items must deserialize to sequences or maps")]
     InvalidIterType,
     #[error(transparent)]
-    TypeParseError(#[from] serde_json::error::Error),
+    JsonError(#[from] JsonError),
 }
 
 /// Request related errors
 #[derive(Debug, ThisError)]
 pub enum RequestError {
     #[error(transparent)]
-    MessageParseError(#[from] serde_json::error::Error),
+    MessageParseError(#[from] JsonError),
     #[error(transparent)]
-    WebsocketError(#[from] tungstenite::error::Error),
+    WebsocketError(#[from] WsError),
     #[error(transparent)]
     CompressionError(#[from] std::io::Error),
     #[error("Cannot fetch rows chunk - missing statement handle")]
     MissingHandleError,
+    #[error("No data message returned for request")]
+    NoMessageReturned,
+    #[error("Server closed the connection")]
+    Closed,
 }
 
 /// Connection related errors
@@ -134,9 +92,9 @@ pub enum ConnectionError {
     #[error("The fingerprint in the DSN and the server fingerprint do not match: {0:?} - {1:?}")]
     FingerprintMismatch(String, String),
     #[error(transparent)]
-    WebsocketError(#[from] tungstenite::error::Error),
-    #[error(transparent)]
-    HandshakeError(#[from] HandshakeError<ClientHandshake<MaybeTlsStream<TcpStream>>>),
+    WebsocketError(#[from] WsError),
+    // #[error(transparent)]
+    // HandshakeError(#[from] HandshakeError<ClientHandshake<MaybeTlsStream<TcpStream>>>),
     #[error("Unsupported connector type")]
     UnsupportedConnector,
     #[cfg(feature = "native-tls-basic")]

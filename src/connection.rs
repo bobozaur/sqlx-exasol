@@ -1,4 +1,4 @@
-use sqlx::{Connection, Database, Executor};
+use sqlx::{Connection, Database, Error as SqlxError, Executor};
 
 use async_tungstenite::{
     tungstenite::{protocol::Role, Message},
@@ -8,7 +8,13 @@ use async_tungstenite::{
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{SinkExt, StreamExt};
 
-use crate::{command::Command, con_opts::ConOpts, database::Exasol};
+use crate::{
+    command::{CloseResultSet, Command, Fetch},
+    con_opts::ExaConnectOptions,
+    database::Exasol,
+    error::{ConnectionError, DriverError, DriverResult, ExaResult, RequestError},
+    responses::{fetched::FetchedData, Response, ResponseData},
+};
 
 pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
 
@@ -16,6 +22,7 @@ pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
 pub struct ExaConnection {
     ws: WebSocketStream<Box<dyn Socket>>,
     use_compression: bool,
+    last_result_set_handle: Option<u16>,
 }
 
 impl ExaConnection {
@@ -23,14 +30,44 @@ impl ExaConnection {
         Self {
             ws: WebSocketStream::from_raw_socket(stream, Role::Client, None).await,
             use_compression: false,
+            last_result_set_handle: None,
         }
     }
 
-    pub async fn execute(&self, query: &str) {
-        // self.ws.send(Message)
+    async fn wait_until_ready(&mut self) -> Result<(), String> {
+        if let Some(handle) = self.last_result_set_handle.take() {
+            let cmd = Command::CloseResultSet(handle.into());
+            self.send_cmd(&cmd).await?;
+        };
+        Ok(())
     }
 
-    async fn send_cmd(&mut self, command: &Command) {
+    async fn disconnect(&mut self) -> Result<(), String> {
+        self.send_cmd(&Command::Disconnect).await?;
+        Ok(())
+    }
+
+    async fn close_ws(&mut self) -> Result<(), String> {
+        self.ws.close(None).await.map_err(|e| e.to_string());
+        Ok(())
+    }
+
+    pub(crate) async fn fetch_chunk(&mut self, fetch_cmd: Fetch) -> Result<FetchedData, String> {
+        let resp_data = self.get_resp_data(&Command::Fetch(fetch_cmd)).await?;
+
+        match resp_data {
+            ResponseData::FetchedData(f) => Ok(f),
+            _ => Err("Expected fetched data response".to_owned()),
+        }
+    }
+
+    async fn get_resp_data(&mut self, command: &Command) -> Result<ResponseData, String> {
+        self.send_cmd(command)
+            .await?
+            .ok_or_else(|| "No response data received".to_owned())
+    }
+
+    async fn send_cmd(&mut self, command: &Command) -> Result<Option<ResponseData>, String> {
         let msg_string = serde_json::to_string(command).unwrap();
 
         // if self.use_compression {
@@ -40,20 +77,44 @@ impl ExaConnection {
         //     self.send_uncompressed_cmd(msg_string)
         // }
 
-        // self.send_uncompressed_cmd(msg_string)
+        let response = self.send_uncompressed_cmd(msg_string).await?;
+
+        match response {
+            Response::Ok {
+                response_data,
+                attributes,
+            } => todo!(),
+            Response::Error { exception } => Err(exception.to_string()),
+        }
     }
 
-    async fn send_uncompressed_cmd(&mut self, msg_string: String) {
-        self.ws.send(Message::Text(msg_string)).await.unwrap();
+    async fn send_uncompressed_cmd(&mut self, msg_string: String) -> Result<Response, String> {
+        self.ws
+            .send(Message::Text(msg_string))
+            .await
+            .map_err(|e| e.to_string())?;
 
         while let Some(response) = self.ws.next().await {
-            return match response.unwrap() {
-                Message::Text(s) => (),
-                Message::Binary(v) => (),
-                Message::Close(c) => (),
+            let msg = response.map_err(|e| e.to_string())?;
+
+            return match msg {
+                Message::Text(s) => serde_json::from_str(&s).map_err(|e| e.to_string())?,
+                Message::Binary(v) => serde_json::from_slice(&v).map_err(|e| e.to_string())?,
+                Message::Close(c) => Err("Close frame received".to_owned()),
                 _ => continue,
             };
         }
+
+        Err("No message received".to_owned())
+    }
+
+    async fn ping(&mut self) -> Result<(), String> {
+        self.ws
+            .send(Message::Ping(Vec::new()))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
     }
 
     // #[cfg(feature = "flate2")]
@@ -77,18 +138,35 @@ impl ExaConnection {
 impl Connection for ExaConnection {
     type Database = Exasol;
 
-    type Options = ConOpts;
+    type Options = ExaConnectOptions;
 
-    fn close(self) -> futures_util::future::BoxFuture<'static, Result<(), sqlx::Error>> {
-        todo!()
+    fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), sqlx::Error>> {
+        Box::pin(async move {
+            self.disconnect().await.map_err(SqlxError::Protocol)?;
+
+            self.close_ws()
+                .await
+                .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+
+            Ok(())
+        })
     }
 
-    fn close_hard(self) -> futures_util::future::BoxFuture<'static, Result<(), sqlx::Error>> {
-        todo!()
+    fn close_hard(mut self) -> futures_util::future::BoxFuture<'static, Result<(), sqlx::Error>> {
+        Box::pin(async move {
+            self.close_ws()
+                .await
+                .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+
+            Ok(())
+        })
     }
 
     fn ping(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
-        todo!()
+        Box::pin(async move {
+            self.ping().await.map_err(SqlxError::Protocol)?;
+            Ok(())
+        })
     }
 
     fn begin(
@@ -103,16 +181,14 @@ impl Connection for ExaConnection {
         todo!()
     }
 
-    fn shrink_buffers(&mut self) {
-        todo!()
-    }
+    fn shrink_buffers(&mut self) {}
 
     fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
-        todo!()
+        Box::pin(async move { Ok(()) })
     }
 
     fn should_flush(&self) -> bool {
-        todo!()
+        false
     }
 }
 

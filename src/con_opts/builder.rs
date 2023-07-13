@@ -5,7 +5,7 @@ use std::{
 
 use crate::error::{ConResult, ConnectionError};
 
-use super::{ConOpts, LoginKind, ProtocolVersion};
+use super::{ExaConnectOptions, LoginKind, ProtocolVersion};
 use lazy_regex::regex;
 use rand::seq::SliceRandom;
 
@@ -53,8 +53,8 @@ impl ConOptsBuilder<false, false> {
 }
 
 impl ConOptsBuilder<true, true> {
-    pub fn build(self) -> ConOpts {
-        ConOpts {
+    pub fn build(self) -> ExaConnectOptions {
+        ExaConnectOptions {
             addresses: self.addresses,
             fingerprint: self.fingerprint,
             login_kind: self.login_kind.unwrap(),

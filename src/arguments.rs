@@ -2,10 +2,8 @@ use sqlx::Arguments;
 
 use crate::database::Exasol;
 
-pub struct ExaArgumentValue;
-
 #[derive(Debug, Default, Clone)]
-pub struct ExaArguments;
+pub struct ExaArguments(pub Vec<String>);
 
 impl<'q> Arguments<'q> for ExaArguments {
     type Database = Exasol;

@@ -4,14 +4,15 @@ use sqlx::{
 };
 
 use crate::{
-    arguments::{ExaArgumentValue, ExaArguments},
+    arguments::ExaArguments,
+    column::ExaColumn,
     connection::ExaConnection,
     query_result::ExaQueryResult,
     row::ExaRow,
     statement::ExaStatement,
     transaction::ExaTransactionManager,
     type_info::ExaTypeInfo,
-    value::{ExaValue, ExaValueRef}, column::ExaColumn,
+    value::{ExaValue, ExaValueRef},
 };
 
 #[derive(Debug)]
@@ -48,7 +49,7 @@ impl HasArguments<'_> for Exasol {
 
     type Arguments = ExaArguments;
 
-    type ArgumentBuffer = Vec<ExaArgumentValue>;
+    type ArgumentBuffer = Vec<String>;
 }
 
 impl<'q> HasStatement<'q> for Exasol {

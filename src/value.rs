@@ -6,12 +6,12 @@ use crate::{type_info::ExaTypeInfo, database::Exasol};
 
 #[derive(Clone)]
 pub struct ExaValue {
-    value: Value,
+    pub(crate) value: Value,
     type_info: ExaTypeInfo,
 }
 
 #[derive(Clone)]
-pub struct ExaValueRef<'r>(&'r ExaValue);
+pub struct ExaValueRef<'r>(pub(crate) &'r ExaValue);
 
 impl sqlx::Value for ExaValue {
     type Database = Exasol;

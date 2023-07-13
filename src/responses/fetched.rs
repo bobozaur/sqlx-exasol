@@ -9,3 +9,9 @@ pub struct FetchedData {
     pub chunk_rows_num: usize,
     pub data: Vec<Vec<Value>>,
 }
+
+impl FetchedData {
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}

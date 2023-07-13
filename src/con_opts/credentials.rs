@@ -1,65 +1,65 @@
-use super::ConResult;
+use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rand::rngs::OsRng;
-use rsa::{PaddingScheme, PublicKey, RsaPublicKey};
+use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
+use serde::Serialize;
+
+use crate::error::ConResult;
+
+/// Login type.
+/// The variant chosen dictates which login process is called.
+#[derive(Clone, Debug, Serialize)]
+pub enum LoginKind {
+    Credentials(Credentials),
+    // Requires TLS
+    AccessToken(AccessToken),
+    // Requires TLS
+    RefreshToken(RefreshToken),
+}
 
 /// Login credentials.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Credentials {
     username: String,
     password: String,
 }
 
 impl Credentials {
-    pub fn new<T, U>(username: T, password: U) -> Self
-    where
-        T: Into<String>,
-        U: Into<String>,
-    {
-        Self {
-            username: username.into(),
-            password: password.into(),
-        }
-    }
-
-    pub fn username(&self) -> &str {
-        self.username.as_str()
-    }
-
-    pub fn password(&self) -> &str {
-        self.password.as_str()
+    pub fn new(username: String, password: String) -> Self {
+        Self { username, password }
     }
 
     /// Encrypts the password with the provided key
     pub(crate) fn encrypt_password(&mut self, key: RsaPublicKey) -> ConResult<()> {
         let mut rng = OsRng;
-        let padding = PaddingScheme::new_pkcs1v15_encrypt();
+        let padding = Pkcs1v15Encrypt;
         let pass_bytes = self.password.as_bytes();
         let enc_pass = key.encrypt(&mut rng, padding, pass_bytes)?;
-        self.password = base64::encode(enc_pass);
+        self.password = STD_BASE64_ENGINE.encode(enc_pass);
         Ok(())
     }
 }
 
-/// Login type.
-/// The variant chosen dictates which login process is called.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum LoginKind {
-    Credentials(Credentials),
-    AccessToken(String),
-    RefreshToken(String),
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessToken {
+    access_token: String,
 }
 
-impl Default for LoginKind {
-    fn default() -> Self {
-        Self::Credentials(Credentials::default())
+impl AccessToken {
+    pub fn new(access_token: String) -> Self {
+        Self { access_token }
     }
 }
 
-impl LoginKind {
-    pub(crate) fn encrypt_password(&mut self, key: RsaPublicKey) -> ConResult<()> {
-        match self {
-            Self::Credentials(creds) => creds.encrypt_password(key),
-            _ => Ok(()),
-        }
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshToken {
+    refresh_token: String,
+}
+
+impl RefreshToken {
+    pub fn new(refresh_token: String) -> Self {
+        Self { refresh_token }
     }
 }

@@ -22,16 +22,12 @@ type DataResult<T> = std::result::Result<T, DataError>;
 #[derive(Debug)]
 pub struct ExaRow {
     columns: Arc<[ExaColumn]>,
-    data: &'static mut [Box<[Value]>],
+    data: Arc<[Vec<Value>]>,
     row_offset: usize,
 }
 
 impl ExaRow {
-    pub fn new(
-        data: &'static mut [Box<[Value]>],
-        columns: Arc<[ExaColumn]>,
-        row_offset: usize,
-    ) -> Self {
+    pub fn new(data: Arc<[Vec<Value>]>, columns: Arc<[ExaColumn]>, row_offset: usize) -> Self {
         Self {
             columns,
             data,
