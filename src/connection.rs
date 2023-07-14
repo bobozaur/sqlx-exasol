@@ -9,11 +9,15 @@ use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{SinkExt, StreamExt};
 
 use crate::{
-    command::{CloseResultSet, Command, Fetch},
+    command::{CloseResultSet, Command, Fetch, SqlText},
     con_opts::ExaConnectOptions,
     database::Exasol,
     error::{ConnectionError, DriverError, DriverResult, ExaResult, RequestError},
-    responses::{fetched::FetchedData, Response, ResponseData},
+    responses::{
+        fetched::DataChunk,
+        result::{QueryResultStream, Results},
+        Response, ResponseData,
+    },
 };
 
 pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
@@ -48,16 +52,30 @@ impl ExaConnection {
     }
 
     async fn close_ws(&mut self) -> Result<(), String> {
-        self.ws.close(None).await.map_err(|e| e.to_string());
+        self.ws.close(None).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    pub(crate) async fn fetch_chunk(&mut self, fetch_cmd: Fetch) -> Result<FetchedData, String> {
+    pub(crate) async fn fetch_chunk(&mut self, fetch_cmd: Fetch) -> Result<DataChunk, String> {
         let resp_data = self.get_resp_data(&Command::Fetch(fetch_cmd)).await?;
 
         match resp_data {
             ResponseData::FetchedData(f) => Ok(f),
             _ => Err("Expected fetched data response".to_owned()),
+        }
+    }
+
+    pub(crate) async fn close_result_set(&mut self, close_cmd: CloseResultSet) -> Result<(), String> {
+        self.send_cmd(&Command::CloseResultSet(close_cmd)).await?;
+        Ok(())
+    }
+
+    async fn get_results(&mut self, command: &Command) -> Result<Results, String> {
+        let resp_data = self.get_resp_data(command).await?;
+
+        match resp_data {
+            ResponseData::Results(r) => Ok(r),
+            _ => Err("Expected results response".to_owned()),
         }
     }
 

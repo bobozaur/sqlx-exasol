@@ -45,6 +45,12 @@ pub struct SqlText {
     sql_text: String,
 }
 
+impl SqlText {
+    pub fn new(sql_text: String) -> Self {
+        Self { sql_text }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SqlBatch {
@@ -73,6 +79,14 @@ impl Fetch {
 #[serde(rename_all = "camelCase")]
 pub struct CloseResultSet {
     result_set_handles: [u16; 1],
+}
+
+impl CloseResultSet {
+    pub fn new(handle: u16) -> Self {
+        Self {
+            result_set_handles: [handle],
+        }
+    }
 }
 
 impl From<u16> for CloseResultSet {

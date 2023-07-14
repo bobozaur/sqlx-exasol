@@ -4,12 +4,12 @@ mod hosts;
 mod login_info;
 mod prepared_stmt;
 mod pub_key;
-mod result;
+pub(crate) mod result;
 
 use serde::Deserialize;
 
 use self::{
-    fetched::FetchedData, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
+    fetched::DataChunk, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
     pub_key::PublicKey, result::Results,
 };
 
@@ -47,7 +47,7 @@ pub enum Response {
 pub enum ResponseData {
     PreparedStatement(PreparedStatement),
     Results(Results),
-    FetchedData(FetchedData),
+    FetchedData(DataChunk),
     Hosts(Hosts),
     LoginInfo(LoginInfo),
     PublicKey(PublicKey),
