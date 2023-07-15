@@ -6,16 +6,15 @@ use async_tungstenite::{
 };
 
 use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{stream, SinkExt, StreamExt};
 
 use crate::{
     command::{CloseResultSet, Command, Fetch, SqlText},
     con_opts::ExaConnectOptions,
     database::Exasol,
-    error::{ConnectionError, DriverError, DriverResult, ExaResult, RequestError},
     responses::{
         fetched::DataChunk,
-        result::{QueryResultStream, Results},
+        result::{Results, ResultsStream, SomeStream, StopOnErrorStream},
         Response, ResponseData,
     },
 };
@@ -26,7 +25,7 @@ pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
 pub struct ExaConnection {
     ws: WebSocketStream<Box<dyn Socket>>,
     use_compression: bool,
-    last_result_set_handle: Option<u16>,
+    pub(crate) last_result_set_handles: Option<Vec<u16>>,
 }
 
 impl ExaConnection {
@@ -34,13 +33,13 @@ impl ExaConnection {
         Self {
             ws: WebSocketStream::from_raw_socket(stream, Role::Client, None).await,
             use_compression: false,
-            last_result_set_handle: None,
+            last_result_set_handles: None,
         }
     }
 
-    async fn wait_until_ready(&mut self) -> Result<(), String> {
-        if let Some(handle) = self.last_result_set_handle.take() {
-            let cmd = Command::CloseResultSet(handle.into());
+    pub(crate) async fn close_previous_result_sets(&mut self) -> Result<(), String> {
+        if let Some(handles) = self.last_result_set_handles.take() {
+            let cmd = Command::CloseResultSet(CloseResultSet::new(handles));
             self.send_cmd(&cmd).await?;
         };
         Ok(())
@@ -65,16 +64,16 @@ impl ExaConnection {
         }
     }
 
-    pub(crate) async fn close_result_set(&mut self, close_cmd: CloseResultSet) -> Result<(), String> {
-        self.send_cmd(&Command::CloseResultSet(close_cmd)).await?;
-        Ok(())
-    }
+    pub(crate) async fn get_results_stream(
+        &mut self,
+        command: Command,
+    ) -> Result<ResultsStream<'_>, String> {
+        self.close_previous_result_sets().await?;
 
-    async fn get_results(&mut self, command: &Command) -> Result<Results, String> {
-        let resp_data = self.get_resp_data(command).await?;
+        let resp_data = self.get_resp_data(&command).await?;
 
         match resp_data {
-            ResponseData::Results(r) => Ok(r),
+            ResponseData::Results(r) => ResultsStream::new(self, r),
             _ => Err("Expected results response".to_owned()),
         }
     }
@@ -230,7 +229,9 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database>,
     {
-        todo!()
+        let sql = query.sql().to_owned();
+        let command = Command::Execute(SqlText::new(sql));
+        Box::pin(StopOnErrorStream::new(self, command))
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(

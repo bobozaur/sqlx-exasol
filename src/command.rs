@@ -78,21 +78,13 @@ impl Fetch {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloseResultSet {
-    result_set_handles: [u16; 1],
+    result_set_handles: Vec<u16>,
 }
 
 impl CloseResultSet {
-    pub fn new(handle: u16) -> Self {
+    pub fn new(handles: Vec<u16>) -> Self {
         Self {
-            result_set_handles: [handle],
-        }
-    }
-}
-
-impl From<u16> for CloseResultSet {
-    fn from(value: u16) -> Self {
-        Self {
-            result_set_handles: [value],
+            result_set_handles: handles,
         }
     }
 }

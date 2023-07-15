@@ -6,8 +6,8 @@ use std::{
 
 use either::Either;
 use futures_util::{
-    future::{self, BoxFuture},
-    stream::{self, BoxStream},
+    future::{self, BoxFuture, Ready},
+    stream::{self, Once},
     FutureExt, Stream,
 };
 use serde::Deserialize;
@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::{
     column::ExaColumn,
-    command::{CloseResultSet, Fetch},
+    command::{Command, Fetch},
     connection::ExaConnection,
     query_result::ExaQueryResult,
     row::ExaRow,
@@ -24,9 +24,67 @@ use crate::{
 use super::fetched::DataChunk;
 
 type NextChunkFuture<'a> = BoxFuture<'a, Result<(DataChunk, &'a mut ExaConnection), String>>;
-type ReturnConFuture<'a> = BoxFuture<'a, Result<&'a mut ExaConnection, String>>;
+type GetResultsFuture<'a> = BoxFuture<'a, Result<ResultsStream<'a>, String>>;
 
 const NUM_BYTES: usize = 5 * 1024 * 1024;
+
+pub struct StopOnErrorStream<'a> {
+    inner: SomeStream<'a>,
+    stop: bool,
+}
+
+impl<'a> StopOnErrorStream<'a> {
+    pub fn new(con: &'a mut ExaConnection, command: Command) -> Self {
+        Self {
+            inner: SomeStream::new(con, command),
+            stop: false,
+        }
+    }
+}
+
+impl<'a> Stream for StopOnErrorStream<'a> {
+    type Item = Result<Either<ExaQueryResult, ExaRow>, sqlx::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.stop {
+            Poll::Ready(None)
+        } else {
+            let Poll::Ready(opt_res) = Pin::new(&mut self.inner).poll_next(cx) else {return Poll::Pending};
+            let Some(res) = opt_res else { return Poll::Ready(None)} ;
+            self.stop = res.is_err();
+            Poll::Ready(Some(res.map_err(sqlx::Error::Protocol)))
+        }
+    }
+}
+
+pub struct SomeStream<'a>(SomeStreamState<'a>);
+
+enum SomeStreamState<'a> {
+    Initial(GetResultsFuture<'a>),
+    Stream(ResultsStream<'a>),
+}
+
+impl<'a> SomeStream<'a> {
+    pub fn new(con: &'a mut ExaConnection, command: Command) -> Self {
+        let fut = Box::pin(con.get_results_stream(command));
+        Self(SomeStreamState::Initial(fut))
+    }
+}
+
+impl<'a> Stream for SomeStream<'a> {
+    type Item = Result<Either<ExaQueryResult, ExaRow>, String>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match &mut self.0 {
+            SomeStreamState::Initial(fut) => {
+                let Poll::Ready(stream) = fut.poll_unpin(cx)? else {return Poll::Pending};
+                self.0 = SomeStreamState::Stream(stream);
+                Poll::Pending
+            }
+            SomeStreamState::Stream(stream) => Pin::new(stream).poll_next(cx),
+        }
+    }
+}
 
 /// Struct used for deserialization of the JSON
 /// returned after executing one or more queries
@@ -36,7 +94,13 @@ const NUM_BYTES: usize = 5 * 1024 * 1024;
 #[serde(rename_all = "camelCase")]
 pub struct Results {
     num_results: u8,
-    pub(crate) results: Vec<QueryResult>,
+    results: Vec<QueryResult>,
+}
+
+impl Results {
+    fn handles(&self) -> Option<Vec<u16>> {
+        self.results.iter().map(|qr| qr.handle()).collect()
+    }
 }
 
 pub struct ResultsStream<'a> {
@@ -46,11 +110,13 @@ pub struct ResultsStream<'a> {
 
 impl<'a> ResultsStream<'a> {
     pub fn new(con: &'a mut ExaConnection, results: Results) -> Result<Self, String> {
+        con.last_result_set_handles = results.handles();
         let mut results = results.results.into_iter();
 
         let query_result = results
             .next()
             .ok_or_else(|| "Query returned no results returned".to_owned())?;
+
         let stream = QueryResultStream::new(con, query_result)?;
 
         Ok(Self {
@@ -71,29 +137,27 @@ impl<'a> ResultsStream<'a> {
 impl<'a> Stream for ResultsStream<'a> {
     type Item = Result<Either<ExaQueryResult, ExaRow>, String>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let stream = self.get_mut();
-        let Poll::Ready(opt) = Pin::new(&mut stream.current_stream).poll_next(cx)? else {return Poll::Pending};
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let Poll::Ready(opt) = Pin::new(&mut self.current_stream).poll_next(cx)? else {return Poll::Pending};
         let Some(either) = opt else {return Poll::Ready(None)};
 
-        match either {
-            Either::Left((qr, con)) => match stream.renew_stream(con) {
-                Ok(_) => Poll::Ready(Some(Ok(Either::Left(qr)))),
-                Err(e) => Poll::Ready(Some(Err(e))),
-            },
+        let res = match either {
+            Either::Left((qr, con)) => self.renew_stream(con).map(|_| Either::Left(qr)),
             Either::Right(inner) => match inner {
-                Either::Left(row) => Poll::Ready(Some(Ok(Either::Right(row)))),
-                Either::Right(con) => match stream.renew_stream(con) {
+                Either::Left(row) => Ok(Either::Right(row)),
+                Either::Right(con) => match self.renew_stream(con) {
                     Ok(_) => {
                         // We updated the stream so we want
                         // to be polled again after this call ends
                         cx.waker().wake_by_ref();
-                        Poll::Pending
+                        return Poll::Pending;
                     }
-                    Err(e) => Poll::Ready(Some(Err(e))),
+                    Err(e) => Err(e),
                 },
             },
-        }
+        };
+
+        Poll::Ready(Some(res))
     }
 }
 
@@ -103,16 +167,25 @@ impl<'a> Stream for ResultsStream<'a> {
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 #[serde(tag = "resultType", rename_all = "camelCase")]
-pub enum QueryResult {
+enum QueryResult {
     #[serde(rename_all = "camelCase")]
     ResultSet { result_set: ResultSet },
     #[serde(rename_all = "camelCase")]
-    RowCount { row_count: usize },
+    RowCount { row_count: u64 },
 }
 
-pub enum QueryResultStream<'a> {
+impl QueryResult {
+    fn handle(&self) -> Option<u16> {
+        match self {
+            QueryResult::ResultSet { result_set } => result_set.result_set_handle,
+            QueryResult::RowCount { .. } => None,
+        }
+    }
+}
+
+enum QueryResultStream<'a> {
     ResultSet(ResultSetStream<'a>),
-    RowCount(BoxStream<'a, Result<(ExaQueryResult, &'a mut ExaConnection), String>>),
+    RowCount(Once<Ready<Result<(ExaQueryResult, &'a mut ExaConnection), String>>>),
 }
 
 impl<'a> QueryResultStream<'a> {
@@ -121,8 +194,8 @@ impl<'a> QueryResultStream<'a> {
             QueryResult::ResultSet { result_set } => {
                 Ok(Self::ResultSet(ResultSetStream::new(result_set, con)?))
             }
-            QueryResult::RowCount { row_count } => Ok(Self::RowCount(Box::pin(stream::once(
-                future::ready(Ok((ExaQueryResult::new(row_count as u64), con))),
+            QueryResult::RowCount { row_count } => Ok(Self::RowCount(stream::once(future::ready(
+                Ok((ExaQueryResult::new(row_count), con)),
             )))),
         }
     }
@@ -135,13 +208,17 @@ impl<'a> Stream for QueryResultStream<'a> {
     >;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        macro_rules! poll_map {
+            ($val:expr, $var:ident) => {
+                Pin::new($val)
+                    .poll_next(cx)
+                    .map(|o| o.map(|r| r.map(Either::$var)))
+            };
+        }
+
         match self.get_mut() {
-            QueryResultStream::RowCount(rc) => Pin::new(rc)
-                .poll_next(cx)
-                .map(|o| o.map(|r| r.map(Either::Left))),
-            QueryResultStream::ResultSet(rs) => Pin::new(rs)
-                .poll_next(cx)
-                .map(|o| o.map(|r| r.map(Either::Right))),
+            QueryResultStream::RowCount(rc) => poll_map!(rc, Left),
+            QueryResultStream::ResultSet(rs) => poll_map!(rs, Right),
         }
     }
 }
@@ -158,6 +235,128 @@ pub struct ResultSet {
     columns: Vec<ExaColumn>,
     #[serde(flatten)]
     data_chunk: DataChunk,
+}
+
+// #[derive(Debug)]
+struct ResultSetStream<'a> {
+    chunk_iter: ChunkIter,
+    chunk_stream: ChunkStream<'a>,
+}
+
+impl<'a> ResultSetStream<'a> {
+    fn new(rs: ResultSet, con: &'a mut ExaConnection) -> Result<Self, String> {
+        let pos = rs.data_chunk.len();
+
+        let fetch_future = if pos < rs.total_rows_num {
+            let handle = rs
+                .result_set_handle
+                .ok_or_else(|| "Missing result set handle".to_owned())?;
+
+            Some(ChunkFuture::new_next_chunk(con, handle, pos, NUM_BYTES))
+        } else {
+            Some(ChunkFuture::End(con))
+        };
+
+        let chunk_stream = ChunkStream {
+            total_rows_num: rs.total_rows_num,
+            total_rows_pos: pos,
+            fetch_future,
+        };
+
+        let chunk_iter = ChunkIter {
+            num_columns: rs.num_columns,
+            columns: rs.columns.into(),
+            chunk_rows_total: rs.data_chunk.chunk_rows_num,
+            chunk_rows_pos: 0,
+            data: rs.data_chunk.data.into(),
+        };
+
+        let stream = Self {
+            chunk_iter,
+            chunk_stream,
+        };
+
+        Ok(stream)
+    }
+}
+
+impl<'a> Stream for ResultSetStream<'a> {
+    type Item = Result<Either<ExaRow, &'a mut ExaConnection>, String>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if let Some(row) = self.chunk_iter.next() {
+            return Poll::Ready(Some(Ok(Either::Left(row))));
+        }
+
+        let Poll::Ready(opt) = Pin::new(&mut self.chunk_stream).poll_next(cx)? else {return Poll::Pending};
+        let Some(either) = opt else {return Poll::Ready(None)};
+
+        match either {
+            Either::Left(chunk) => {
+                // We updated the iterator so we want
+                // to be polled again after this call ends
+                self.chunk_iter.renew(chunk);
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            Either::Right(con) => Poll::Ready(Some(Ok(Either::Right(con)))),
+        }
+    }
+}
+
+pub struct ChunkStream<'a> {
+    fetch_future: Option<ChunkFuture<'a>>,
+    total_rows_num: usize,
+    total_rows_pos: usize,
+}
+
+impl<'a> ChunkStream<'a> {
+    fn make_future(&self, con: &'a mut ExaConnection, handle: u16) -> ChunkFuture<'a> {
+        if self.total_rows_pos < self.total_rows_num {
+            ChunkFuture::new_next_chunk(con, handle, self.total_rows_pos, NUM_BYTES)
+        } else {
+            ChunkFuture::End(con)
+        }
+    }
+}
+
+enum ChunkFuture<'a> {
+    Next((u16, NextChunkFuture<'a>)),
+    End(&'a mut ExaConnection),
+}
+
+impl<'a> ChunkFuture<'a> {
+    fn new_next_chunk(
+        con: &'a mut ExaConnection,
+        handle: u16,
+        pos: usize,
+        num_bytes: usize,
+    ) -> Self {
+        let cmd = Fetch::new(handle, pos, num_bytes);
+        let fut = async move { con.fetch_chunk(cmd).await.map(|chunk| (chunk, con)) };
+        Self::Next((handle, Box::pin(fut)))
+    }
+}
+
+impl<'a> Stream for ChunkStream<'a> {
+    type Item = Result<Either<DataChunk, &'a mut ExaConnection>, String>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let Some(future) = self.fetch_future.take() else {return Poll::Ready(None)};
+
+        match future {
+            ChunkFuture::Next((h, mut f)) => {
+                let Poll::Ready((chunk, con)) = f.poll_unpin(cx)? else {return Poll::Pending};
+
+                self.total_rows_pos += chunk.len();
+                self.fetch_future = Some(self.make_future(con, h));
+
+                Poll::Ready(Some(Ok(Either::Left(chunk))))
+            }
+
+            ChunkFuture::End(con) => Poll::Ready(Some(Ok(Either::Right(con)))),
+        }
+    }
 }
 
 struct ChunkIter {
@@ -187,167 +386,5 @@ impl Iterator for ChunkIter {
         let row = ExaRow::new(self.data.clone(), self.columns.clone(), self.chunk_rows_pos);
         self.chunk_rows_pos += 1;
         Some(row)
-    }
-}
-
-pub struct ChunkStream<'a> {
-    fetch_future: Option<ChunkFuture<'a>>,
-    total_rows_num: usize,
-    total_rows_pos: usize,
-}
-
-enum ChunkFuture<'a> {
-    NextChunk((u16, NextChunkFuture<'a>)),
-    CloseResult(ReturnConFuture<'a>),
-    SingleChunked(&'a mut ExaConnection),
-}
-
-impl<'a> ChunkFuture<'a> {
-    async fn next_chunk(
-        con: &'a mut ExaConnection,
-        cmd: Fetch,
-    ) -> Result<(DataChunk, &'a mut ExaConnection), String> {
-        con.fetch_chunk(cmd).await.map(|chunk| (chunk, con))
-    }
-
-    async fn close_result(
-        con: &'a mut ExaConnection,
-        handle: u16,
-    ) -> Result<&'a mut ExaConnection, String> {
-        ExaConnection::close_result_set(con, CloseResultSet::new(handle))
-            .await
-            .map(|_| con)
-    }
-
-    fn new_next_chunk(
-        con: &'a mut ExaConnection,
-        handle: u16,
-        pos: usize,
-        num_bytes: usize,
-    ) -> Self {
-        let cmd = Fetch::new(handle, pos, num_bytes);
-        let fut = Self::next_chunk(con, cmd);
-        Self::NextChunk((handle, Box::pin(fut)))
-    }
-
-    fn new_close_result(con: &'a mut ExaConnection, handle: u16) -> Self {
-        let fut = Self::close_result(con, handle);
-        Self::CloseResult(Box::pin(fut))
-    }
-}
-
-impl<'a> Stream for ChunkStream<'a> {
-    type Item = Result<Either<DataChunk, &'a mut ExaConnection>, String>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut stream = self.get_mut();
-
-        let Some(future) = stream.fetch_future.take() else {return Poll::Ready(None)};
-
-        let (output, future) = match future {
-            ChunkFuture::NextChunk((h, mut f)) => {
-                let Poll::Ready((chunk, con)) = f.poll_unpin(cx)? else {return Poll::Pending};
-                stream.total_rows_pos += chunk.len();
-
-                let future = if stream.total_rows_pos < stream.total_rows_num {
-                    ChunkFuture::new_next_chunk(con, h, stream.total_rows_pos, NUM_BYTES)
-                } else {
-                    ChunkFuture::new_close_result(con, h)
-                };
-
-                (Poll::Ready(Some(Ok(Either::Left(chunk)))), Some(future))
-            }
-
-            ChunkFuture::CloseResult(mut f) => {
-                let Poll::Ready(con) = f.poll_unpin(cx)? else {return Poll::Pending};
-                (Poll::Ready(Some(Ok(Either::Right(con)))), None)
-            }
-
-            ChunkFuture::SingleChunked(con) => (Poll::Ready(Some(Ok(Either::Right(con)))), None),
-        };
-
-        stream.fetch_future = future;
-        output
-    }
-}
-
-// #[derive(Debug)]
-pub struct ResultSetStream<'a> {
-    err_encountered: bool,
-    chunk_iter: ChunkIter,
-    chunk_stream: ChunkStream<'a>,
-}
-
-impl<'a> ResultSetStream<'a> {
-    pub(crate) fn new(rs: ResultSet, con: &'a mut ExaConnection) -> Result<Self, String> {
-        let pos = rs.data_chunk.len();
-
-        let fetch_future = if pos < rs.total_rows_num {
-            let handle = rs
-                .result_set_handle
-                .ok_or_else(|| "Missing result set handle".to_owned())?;
-
-            Some(ChunkFuture::new_next_chunk(con, handle, pos, NUM_BYTES))
-        } else {
-            Some(ChunkFuture::SingleChunked(con))
-        };
-
-        let chunk_stream = ChunkStream {
-            total_rows_num: rs.total_rows_num,
-            total_rows_pos: pos,
-            fetch_future,
-        };
-
-        let chunk_iter = ChunkIter {
-            num_columns: rs.num_columns,
-            columns: rs.columns.into(),
-            chunk_rows_total: rs.data_chunk.chunk_rows_num,
-            chunk_rows_pos: 0,
-            data: rs.data_chunk.data.into(),
-        };
-
-        let stream = Self {
-            err_encountered: false,
-            chunk_iter,
-            chunk_stream,
-        };
-
-        Ok(stream)
-    }
-}
-
-impl<'a> Stream for ResultSetStream<'a> {
-    type Item = Result<Either<ExaRow, &'a mut ExaConnection>, String>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let stream = self.get_mut();
-
-        if stream.err_encountered {
-            return Poll::Ready(None);
-        }
-
-        if let Some(row) = stream.chunk_iter.next() {
-            return Poll::Ready(Some(Ok(Either::Left(row))));
-        }
-
-        let Poll::Ready(opt_res) = Pin::new(&mut stream.chunk_stream).poll_next(cx) else {return Poll::Pending};
-        let Some(res) = opt_res else {return Poll::Ready(None)};
-
-        match res {
-            Err(e) => {
-                stream.err_encountered = true;
-                Poll::Ready(Some(Err(e)))
-            }
-            Ok(either) => match either {
-                Either::Left(chunk) => {
-                    // We updated the iterator so we want
-                    // to be polled again after this call ends
-                    stream.chunk_iter.renew(chunk);
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                Either::Right(con) => Poll::Ready(Some(Ok(Either::Right(con)))),
-            },
-        }
     }
 }
