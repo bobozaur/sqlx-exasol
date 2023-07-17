@@ -6,7 +6,7 @@ use async_tungstenite::{
 };
 
 use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{stream, SinkExt, StreamExt};
+use futures_util::{stream, SinkExt, StreamExt, TryStreamExt};
 
 use crate::{
     command::{CloseResultSet, Command, Fetch, SqlText},
@@ -14,7 +14,7 @@ use crate::{
     database::Exasol,
     responses::{
         fetched::DataChunk,
-        result::{Results, ResultsStream, SomeStream, StopOnErrorStream},
+        result::{ExaResultStream, ExecutionResults, ExecutionResultsStream},
         Response, ResponseData,
     },
 };
@@ -67,13 +67,13 @@ impl ExaConnection {
     pub(crate) async fn get_results_stream(
         &mut self,
         command: Command,
-    ) -> Result<ResultsStream<'_>, String> {
+    ) -> Result<ExecutionResultsStream<'_>, String> {
         self.close_previous_result_sets().await?;
 
         let resp_data = self.get_resp_data(&command).await?;
 
         match resp_data {
-            ResponseData::Results(r) => ResultsStream::new(self, r),
+            ResponseData::Results(r) => ExecutionResultsStream::new(self, r),
             _ => Err("Expected results response".to_owned()),
         }
     }
@@ -231,7 +231,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     {
         let sql = query.sql().to_owned();
         let command = Command::Execute(SqlText::new(sql));
-        Box::pin(StopOnErrorStream::new(self, command))
+        Box::pin(ExaResultStream::new(self, command).map_err(SqlxError::Protocol))
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(

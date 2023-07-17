@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use self::{
     fetched::DataChunk, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
-    pub_key::PublicKey, result::Results,
+    pub_key::PublicKey, result::ExecutionResults,
 };
 
 pub use error::DatabaseError;
@@ -46,7 +46,7 @@ pub enum Response {
 #[serde(untagged)]
 pub enum ResponseData {
     PreparedStatement(PreparedStatement),
-    Results(Results),
+    Results(ExecutionResults),
     FetchedData(DataChunk),
     Hosts(Hosts),
     LoginInfo(LoginInfo),
