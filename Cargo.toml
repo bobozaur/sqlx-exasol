@@ -31,5 +31,6 @@ regex = "1.5.5"
 lazy-regex = "3.0.0"
 sqlx = "0.7.0"
 either = "1.8.1"
+pin-project = "1.1.2"
 
 [features]

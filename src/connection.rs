@@ -1,3 +1,5 @@
+use std::{future, sync::Arc};
+
 use either::Either;
 use sqlx::{Connection, Database, Error as SqlxError, Executor};
 
@@ -10,7 +12,8 @@ use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{stream, SinkExt, StreamExt, TryStreamExt};
 
 use crate::{
-    command::{CloseResultSet, Command, Fetch, SqlText},
+    arguments::ExaArguments,
+    command::{CloseResultSet, Command, ExecutePreparedStmt, Fetch, SqlText},
     con_opts::ExaConnectOptions,
     database::Exasol,
     responses::{
@@ -18,6 +21,7 @@ use crate::{
         result::{ExaResultStream, ExecutionResults, ExecutionResultsStream},
         Response, ResponseData,
     },
+    statement::ExaStatementMetadata,
 };
 
 pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
@@ -63,6 +67,26 @@ impl ExaConnection {
             ResponseData::FetchedData(f) => Ok(f),
             _ => Err("Expected fetched data response".to_owned()),
         }
+    }
+
+    async fn get_or_prepare(&mut self) -> ExecutePreparedStmt {
+        todo!()
+    }
+
+    pub(crate) async fn execute_query(
+        &mut self,
+        sql: String,
+        metadata: Option<Arc<ExaStatementMetadata>>,
+        arguments: Option<ExaArguments>,
+        persistent: bool,
+    ) -> Result<ExecutionResultsStream<'_>, String> {
+        let command = if let Some(arguments) = arguments {
+            Command::ExecutePreparedStatement(self.get_or_prepare().await)
+        } else {
+            Command::Execute(SqlText::new(sql))
+        };
+
+        self.get_results_stream(command).await
     }
 
     pub(crate) async fn get_results_stream(
@@ -202,7 +226,7 @@ impl Connection for ExaConnection {
     fn shrink_buffers(&mut self) {}
 
     fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
-        Box::pin(async move { Ok(()) })
+        Box::pin(future::ready(Ok(())))
     }
 
     fn should_flush(&self) -> bool {
@@ -215,7 +239,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
     fn fetch_many<'e, 'q: 'e, E: 'q>(
         self,
-        query: E,
+        mut query: E,
     ) -> futures_util::stream::BoxStream<
         'e,
         Result<
@@ -231,8 +255,11 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         E: sqlx::Execute<'q, Self::Database>,
     {
         let sql = query.sql().to_owned();
-        let command = Command::Execute(SqlText::new(sql));
-        Box::pin(ExaResultStream::new(self, command).map_err(SqlxError::Protocol))
+        let metadata = query.statement().map(|s| s.metadata.clone());
+        let arguments = query.take_arguments();
+        let persistent = query.persistent();
+        let future = self.execute_query(sql, metadata, arguments, persistent);
+        Box::pin(ExaResultStream::new(future).map_err(SqlxError::Protocol))
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(

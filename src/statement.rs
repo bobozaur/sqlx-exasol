@@ -7,13 +7,13 @@ use crate::{column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
 #[derive(Debug, Clone)]
 pub struct ExaStatement<'q> {
     pub(crate) sql: Cow<'q, str>,
-    pub(crate) metadata: ExaStatementMetadata,
+    pub(crate) metadata: Arc<ExaStatementMetadata>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ExaStatementMetadata {
+pub struct ExaStatementMetadata {
     pub(crate) columns: Vec<ExaColumn>,
-    pub(crate) column_names: Arc<HashMap<String, usize>>,
+    pub(crate) column_names: HashMap<String, usize>,
     pub(crate) parameters: Vec<ExaTypeInfo>,
 }
 

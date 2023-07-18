@@ -10,49 +10,68 @@ use futures_util::{
     stream::{self, Once},
     Future, FutureExt, Stream,
 };
+use pin_project::pin_project;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    column::ExaColumn,
-    command::{Command, Fetch},
-    connection::ExaConnection,
-    query_result::ExaQueryResult,
+    column::ExaColumn, command::Fetch, connection::ExaConnection, query_result::ExaQueryResult,
     row::ExaRow,
 };
 
 use super::fetched::DataChunk;
 
 type NextChunkFuture<'a> = BoxFuture<'a, Result<(DataChunk, &'a mut ExaConnection), String>>;
-type GetResultsFuture<'a> = BoxFuture<'a, Result<ExecutionResultsStream<'a>, String>>;
 
 const NUM_BYTES: usize = 5 * 1024 * 1024;
 
-pub struct ExaResultStream<'a> {
-    state: ExaResultStreamState<'a>,
+#[pin_project]
+pub struct ExaResultStream<'a, F>
+where
+    F: Future<Output = Result<ExecutionResultsStream<'a>, String>>,
+{
+    #[pin]
+    state: ExaResultStreamState<'a, F>,
     had_err: bool,
 }
 
-enum ExaResultStreamState<'a> {
-    Initial(GetResultsFuture<'a>),
+#[pin_project(project = ExaResultStreamStateProj, project_replace = ExaResultStreamStateProjReplace)]
+enum ExaResultStreamState<'a, F>
+where
+    F: Future<Output = Result<ExecutionResultsStream<'a>, String>>,
+{
+    Initial(#[pin] F),
     Stream(ExecutionResultsStream<'a>),
 }
 
-impl<'a> ExaResultStream<'a> {
-    pub fn new(con: &'a mut ExaConnection, command: Command) -> Self {
-        let fut = Box::pin(con.get_results_stream(command));
+impl<'a, F> ExaResultStream<'a, F>
+where
+    F: Future<Output = Result<ExecutionResultsStream<'a>, String>>,
+{
+    pub fn new(future: F) -> Self {
         Self {
-            state: ExaResultStreamState::Initial(fut),
+            state: ExaResultStreamState::Initial(future),
             had_err: false,
         }
     }
 
-    fn poll_next_impl(&mut self, cx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
-        match &mut self.state {
-            ExaResultStreamState::Stream(stream) => Pin::new(stream).poll_next(cx),
-            ExaResultStreamState::Initial(fut) => {
-                let Poll::Ready(stream) = fut.poll_unpin(cx)? else {return Poll::Pending};
-                self.state = ExaResultStreamState::Stream(stream);
+    fn from_parts(state: ExaResultStreamState<'a, F>, had_err: bool) -> Self {
+        Self { state, had_err }
+    }
+
+    fn poll_next_impl(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<<Self as Stream>::Item>> {
+        let mut this = self.as_mut().project();
+        let state = this.state.as_mut().project();
+
+        match state {
+            ExaResultStreamStateProj::Stream(stream) => Pin::new(stream).poll_next(cx),
+            ExaResultStreamStateProj::Initial(fut) => {
+                let Poll::Ready(stream) = fut.poll(cx)? else {return Poll::Pending};
+                let state = ExaResultStreamState::Stream(stream);
+                self.set(Self::from_parts(state, self.had_err));
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }
@@ -60,7 +79,10 @@ impl<'a> ExaResultStream<'a> {
     }
 }
 
-impl<'a> Stream for ExaResultStream<'a> {
+impl<'a, F> Stream for ExaResultStream<'a, F>
+where
+    F: Future<Output = Result<ExecutionResultsStream<'a>, String>>,
+{
     type Item = Result<Either<ExaQueryResult, ExaRow>, String>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -68,9 +90,9 @@ impl<'a> Stream for ExaResultStream<'a> {
             return Poll::Ready(None);
         }
 
-        let Poll::Ready(opt_res) = self.poll_next_impl(cx) else {return Poll::Pending};
+        let Poll::Ready(opt_res) = self.as_mut().poll_next_impl(cx) else {return Poll::Pending};
         let Some(res) = opt_res else { return Poll::Ready(None)};
-        self.had_err = res.is_err();
+        *self.project().had_err = res.is_err();
         Poll::Ready(Some(res))
     }
 }
@@ -236,7 +258,6 @@ pub struct ResultSet {
     #[serde(rename = "numRows")]
     total_rows_num: usize,
     result_set_handle: Option<u16>,
-    // num_columns: usize, // unused field
     columns: Vec<ExaColumn>,
     #[serde(flatten)]
     data_chunk: DataChunk,
