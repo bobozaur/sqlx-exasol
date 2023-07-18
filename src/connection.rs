@@ -1,3 +1,4 @@
+use either::Either;
 use sqlx::{Connection, Database, Error as SqlxError, Executor};
 
 use async_tungstenite::{
@@ -245,7 +246,17 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database>,
     {
-        todo!()
+        let mut s = self.fetch_many(query);
+
+        Box::pin(async move {
+            while let Some(v) = s.try_next().await? {
+                if let Either::Right(r) = v {
+                    return Ok(Some(r));
+                }
+            }
+
+            Ok(None)
+        })
     }
 
     fn prepare_with<'e, 'q: 'e>(
