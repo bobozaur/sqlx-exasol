@@ -26,9 +26,9 @@ impl Type<Exasol> for str {
 }
 
 impl Encode<'_, Exasol> for &'_ str {
-    fn encode_by_ref(&self, args: &mut Vec<Value>) -> IsNull {
+    fn encode_by_ref(&self, args: &mut Vec<[Value; 1]>) -> IsNull {
         let arg = json!(self);
-        args.push(arg);
+        args.push([arg]);
 
         IsNull::No
     }
@@ -51,7 +51,7 @@ impl Type<Exasol> for String {
 }
 
 impl Encode<'_, Exasol> for String {
-    fn encode_by_ref(&self, buf: &mut Vec<Value>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         <&str as Encode<Exasol>>::encode(&**self, buf)
     }
 }
@@ -73,7 +73,7 @@ impl Type<Exasol> for Cow<'_, str> {
 }
 
 impl Encode<'_, Exasol> for Cow<'_, str> {
-    fn encode_by_ref(&self, buf: &mut Vec<Value>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         match self {
             Cow::Borrowed(str) => <&str as Encode<Exasol>>::encode(*str, buf),
             Cow::Owned(str) => <&str as Encode<Exasol>>::encode(&**str, buf),

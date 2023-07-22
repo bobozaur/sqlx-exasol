@@ -6,7 +6,7 @@ use crate::database::Exasol;
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(transparent)]
-pub struct ExaArguments(pub Vec<Value>);
+pub struct ExaArguments(pub Vec<[Value; 1]>);
 
 impl<'q> Arguments<'q> for ExaArguments {
     type Database = Exasol;

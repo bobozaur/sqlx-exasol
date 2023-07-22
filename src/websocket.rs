@@ -129,7 +129,7 @@ impl ExaWebSocket {
         &mut self,
         cache: &'a mut LruCache<String, PreparedStatement>,
         sql: &str,
-        persistent: bool,
+        persist: bool,
     ) -> Result<Cow<'a, PreparedStatement>, String> {
         // The double look-up is required to avoid a borrow checker limitation.
         //
@@ -143,7 +143,7 @@ impl ExaWebSocket {
             .create_prepared(Command::CreatePreparedStatement(command))
             .await?;
 
-        if persistent {
+        if persist {
             if let Some(old) = cache.put(sql.to_owned(), prepared) {
                 self.close_prepared(old.statement_handle).await?;
             }

@@ -99,11 +99,11 @@ pub struct ExecutePreparedStmt<'a> {
     num_columns: u8,
     num_rows: u64,
     columns: &'a [ExaColumn],
-    data: Vec<Vec<Value>>,
+    data: Vec<[Value; 1]>,
 }
 
 impl<'a> ExecutePreparedStmt<'a> {
-    pub fn new(handle: u16, columns: &'a [ExaColumn], data: Vec<Vec<Value>>) -> Self {
+    pub fn new(handle: u16, columns: &'a [ExaColumn], data: Vec<[Value; 1]>) -> Self {
         Self {
             statement_handle: handle,
             num_columns: columns.len() as u8,

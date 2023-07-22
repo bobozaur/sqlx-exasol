@@ -47,7 +47,7 @@ impl HasArguments<'_> for Exasol {
 
     type Arguments = ExaArguments;
 
-    type ArgumentBuffer = Vec<Value>;
+    type ArgumentBuffer = Vec<[Value; 1]>;
 }
 
 impl<'q> HasStatement<'q> for Exasol {

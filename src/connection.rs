@@ -28,7 +28,7 @@ use crate::{
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
     // use_compression: bool,
-    pub(crate) last_result_set_handle: Option<u16>,
+    pub(crate) last_rs_handle: Option<u16>,
     stmt_cache: LruCache<String, PreparedStatement>,
 }
 
@@ -37,7 +37,7 @@ impl ExaConnection {
         Self {
             ws,
             // use_compression: false,
-            last_result_set_handle: None,
+            last_rs_handle: None,
             stmt_cache: LruCache::new(NonZeroUsize::new(10).unwrap()),
         }
     }
@@ -46,31 +46,57 @@ impl ExaConnection {
         &'a mut self,
         sql: &str,
         arguments: Option<ExaArguments>,
-        persistent: bool,
+        persist: bool,
         fetch_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
         C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
-        if let Some(arguments) = arguments {
-            let prepared = self
-                .ws
-                .get_or_prepare(&mut self.stmt_cache, sql, persistent)
-                .await?;
-            let data = arguments.0.into_iter().map(|v| vec![v]).collect();
-            let command =
-                ExecutePreparedStmt::new(prepared.statement_handle, &prepared.columns, data);
-            let command = Command::ExecutePreparedStatement(command);
-            self.ws
-                .get_results_stream(command, &mut self.last_result_set_handle, fetch_maker)
-                .await
-        } else {
-            let command = Command::Execute(SqlText::new(sql));
-            self.ws
-                .get_results_stream(command, &mut self.last_result_set_handle, fetch_maker)
-                .await
+        match arguments {
+            Some(args) => self.execute_prepared(sql, args, persist, fetch_maker).await,
+            None => self.execute_plain(sql, fetch_maker).await,
         }
+    }
+
+    async fn execute_prepared<'a, C, F>(
+        &'a mut self,
+        sql: &str,
+        args: ExaArguments,
+        persist: bool,
+        fetch_maker: C,
+    ) -> Result<QueryResultStream<'a, C, F>, String>
+    where
+        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    {
+        let prepared = self
+            .ws
+            .get_or_prepare(&mut self.stmt_cache, sql, persist)
+            .await?;
+
+        let exec_prepared =
+            ExecutePreparedStmt::new(prepared.statement_handle, &prepared.columns, args.0);
+        let command = Command::ExecutePreparedStatement(exec_prepared);
+
+        self.ws
+            .get_results_stream(command, &mut self.last_rs_handle, fetch_maker)
+            .await
+    }
+
+    async fn execute_plain<'a, C, F>(
+        &'a mut self,
+        sql: &str,
+        fetch_maker: C,
+    ) -> Result<QueryResultStream<'a, C, F>, String>
+    where
+        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    {
+        let command = Command::Execute(SqlText::new(sql));
+        self.ws
+            .get_results_stream(command, &mut self.last_rs_handle, fetch_maker)
+            .await
     }
 }
 

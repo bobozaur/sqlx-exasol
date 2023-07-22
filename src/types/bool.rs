@@ -20,9 +20,9 @@ impl Type<Exasol> for bool {
 }
 
 impl<'q> Encode<'q, Exasol> for bool {
-    fn encode_by_ref(&self, args: &mut Vec<Value>) -> IsNull {
+    fn encode_by_ref(&self, args: &mut Vec<[Value; 1]>) -> IsNull {
         let arg = json!(self);
-        args.push(arg);
+        args.push([arg]);
         IsNull::No
     }
 }
