@@ -1,113 +1,79 @@
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::sync::Arc;
+use std::{borrow::Cow, collections::HashMap};
 
-use sqlx::ColumnIndex;
+use either::Either;
+use sqlx_core::column::ColumnIndex;
+use sqlx_core::database::Database;
+use sqlx_core::database::HasStatement;
+use sqlx_core::impl_statement_query;
+use sqlx_core::statement::Statement;
+use sqlx_core::Error as SqlxError;
 
-use crate::{column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
+use crate::{arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
 
 #[derive(Debug, Clone)]
 pub struct ExaStatement<'q> {
     pub(crate) sql: Cow<'q, str>,
-    pub(crate) metadata: Arc<ExaStatementMetadata>,
+    pub(crate) metadata: ExaStatementMetadata,
 }
 
 #[derive(Debug, Clone)]
 pub struct ExaStatementMetadata {
-    pub(crate) columns: Vec<ExaColumn>,
-    pub(crate) column_names: HashMap<String, usize>,
+    pub(crate) columns: Arc<[ExaColumn]>,
+    pub(crate) column_names: HashMap<Arc<str>, usize>,
     pub(crate) parameters: Vec<ExaTypeInfo>,
 }
 
-impl<'q> sqlx::Statement<'q> for ExaStatement<'q> {
-    type Database = Exasol;
+impl ExaStatementMetadata {
+    pub fn new(columns: Arc<[ExaColumn]>) -> Self {
+        let mut column_names = HashMap::with_capacity(columns.len());
+        let mut parameters = Vec::with_capacity(columns.len());
 
-    fn to_owned(&self) -> <Self::Database as sqlx::database::HasStatement<'static>>::Statement {
-        todo!()
-    }
+        for ExaColumn { name, datatype, .. } in columns.as_ref() {
+            column_names.insert(name.to_owned(), parameters.len());
+            parameters.push(datatype.clone());
+        }
 
-    fn sql(&self) -> &str {
-        todo!()
-    }
-
-    fn parameters(
-        &self,
-    ) -> Option<sqlx::Either<&[<Self::Database as sqlx::Database>::TypeInfo], usize>> {
-        todo!()
-    }
-
-    fn columns(&self) -> &[<Self::Database as sqlx::Database>::Column] {
-        todo!()
-    }
-
-    fn query(
-        &self,
-    ) -> sqlx::query::Query<
-        '_,
-        Self::Database,
-        <Self::Database as sqlx::database::HasArguments<'_>>::Arguments,
-    > {
-        todo!()
-    }
-
-    fn query_with<'s, A>(&'s self, arguments: A) -> sqlx::query::Query<'s, Self::Database, A>
-    where
-        A: sqlx::IntoArguments<'s, Self::Database>,
-    {
-        todo!()
-    }
-
-    fn query_as<O>(
-        &self,
-    ) -> sqlx::query::QueryAs<
-        '_,
-        Self::Database,
-        O,
-        <Self::Database as sqlx::database::HasArguments<'_>>::Arguments,
-    >
-    where
-        O: for<'r> sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
-    {
-        todo!()
-    }
-
-    fn query_as_with<'s, O, A>(
-        &'s self,
-        arguments: A,
-    ) -> sqlx::query::QueryAs<'s, Self::Database, O, A>
-    where
-        O: for<'r> sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
-        A: sqlx::IntoArguments<'s, Self::Database>,
-    {
-        todo!()
-    }
-
-    fn query_scalar<O>(
-        &self,
-    ) -> sqlx::query::QueryScalar<
-        '_,
-        Self::Database,
-        O,
-        <Self::Database as sqlx::database::HasArguments<'_>>::Arguments,
-    >
-    where
-        (O,): for<'r> sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
-    {
-        todo!()
-    }
-
-    fn query_scalar_with<'s, O, A>(
-        &'s self,
-        arguments: A,
-    ) -> sqlx::query::QueryScalar<'s, Self::Database, O, A>
-    where
-        (O,): for<'r> sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
-        A: sqlx::IntoArguments<'s, Self::Database>,
-    {
-        todo!()
+        Self {
+            columns,
+            column_names,
+            parameters,
+        }
     }
 }
 
+impl<'q> Statement<'q> for ExaStatement<'q> {
+    type Database = Exasol;
+
+    fn to_owned(&self) -> <Self::Database as HasStatement<'static>>::Statement {
+        ExaStatement {
+            sql: Cow::Owned(self.sql.clone().into_owned()),
+            metadata: self.metadata.clone(),
+        }
+    }
+
+    fn sql(&self) -> &str {
+        &self.sql
+    }
+
+    fn parameters(&self) -> Option<Either<&[<Self::Database as Database>::TypeInfo], usize>> {
+        Some(Either::Left(&self.metadata.parameters))
+    }
+
+    fn columns(&self) -> &[<Self::Database as Database>::Column] {
+        &self.metadata.columns
+    }
+
+    impl_statement_query!(ExaArguments);
+}
+
 impl ColumnIndex<ExaStatement<'_>> for &'_ str {
-    fn index(&self, container: &ExaStatement<'_>) -> Result<usize, sqlx::Error> {
-        todo!()
+    fn index(&self, statement: &ExaStatement<'_>) -> Result<usize, SqlxError> {
+        statement
+            .metadata
+            .column_names
+            .get(*self)
+            .ok_or_else(|| SqlxError::ColumnNotFound((*self).into()))
+            .map(|v| *v)
     }
 }

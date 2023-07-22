@@ -14,9 +14,7 @@ use crate::responses::DatabaseError;
 pub type ExaResult<T> = std::result::Result<T, Error>;
 
 // Convenience aliases
-pub(crate) type DriverResult<T> = std::result::Result<T, DriverError>;
 pub(crate) type ConResult<T> = std::result::Result<T, ConnectionError>;
-pub(crate) type ReqResult<T> = std::result::Result<T, RequestError>;
 
 /// Error type for the crate.
 #[derive(Debug, ThisError)]

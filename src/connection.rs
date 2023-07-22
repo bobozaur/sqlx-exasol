@@ -1,180 +1,77 @@
-use std::{future, sync::Arc};
+use std::{borrow::Cow, future, num::NonZeroUsize};
 
 use either::Either;
-use sqlx::{Connection, Database, Error as SqlxError, Executor};
-
-use async_tungstenite::{
-    tungstenite::{protocol::Role, Message},
-    WebSocketStream,
+use lru::LruCache;
+use sqlx_core::{
+    connection::Connection,
+    database::{Database, HasStatement},
+    describe::Describe,
+    executor::{Execute, Executor},
+    transaction::Transaction,
+    Error as SqlxError,
 };
 
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{stream, SinkExt, StreamExt, TryStreamExt};
+use futures_util::{Future, TryStreamExt};
 
 use crate::{
     arguments::ExaArguments,
-    command::{CloseResultSet, Command, ExecutePreparedStmt, Fetch, SqlText},
+    command::{Command, ExecutePreparedStmt, Fetch, SqlText},
     con_opts::ExaConnectOptions,
     database::Exasol,
-    responses::{
-        fetched::DataChunk,
-        result::{ExaResultStream, ExecutionResults, ExecutionResultsStream},
-        Response, ResponseData,
-    },
-    statement::ExaStatementMetadata,
+    responses::{fetched::DataChunk, prepared_stmt::PreparedStatement},
+    statement::{ExaStatement, ExaStatementMetadata},
+    stream::{QueryResultStream, ResultStream},
+    websocket::ExaWebSocket,
 };
-
-pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
 
 #[derive(Debug)]
 pub struct ExaConnection {
-    ws: WebSocketStream<Box<dyn Socket>>,
-    use_compression: bool,
-    pub(crate) last_result_set_handles: Option<Vec<u16>>,
+    pub(crate) ws: ExaWebSocket,
+    // use_compression: bool,
+    pub(crate) last_result_set_handle: Option<u16>,
+    stmt_cache: LruCache<String, PreparedStatement>,
 }
 
 impl ExaConnection {
-    pub async fn new(stream: Box<dyn Socket>) -> Self {
+    pub async fn new(ws: ExaWebSocket) -> Self {
         Self {
-            ws: WebSocketStream::from_raw_socket(stream, Role::Client, None).await,
-            use_compression: false,
-            last_result_set_handles: None,
+            ws,
+            // use_compression: false,
+            last_result_set_handle: None,
+            stmt_cache: LruCache::new(NonZeroUsize::new(10).unwrap()),
         }
     }
 
-    pub(crate) async fn close_previous_result_sets(&mut self) -> Result<(), String> {
-        if let Some(handles) = self.last_result_set_handles.take() {
-            let cmd = Command::CloseResultSet(CloseResultSet::new(handles));
-            self.send_cmd(&cmd).await?;
-        };
-        Ok(())
-    }
-
-    async fn disconnect(&mut self) -> Result<(), String> {
-        self.send_cmd(&Command::Disconnect).await?;
-        Ok(())
-    }
-
-    async fn close_ws(&mut self) -> Result<(), String> {
-        self.ws.close(None).await.map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub(crate) async fn fetch_chunk(&mut self, fetch_cmd: Fetch) -> Result<DataChunk, String> {
-        let resp_data = self.get_resp_data(&Command::Fetch(fetch_cmd)).await?;
-
-        match resp_data {
-            ResponseData::FetchedData(f) => Ok(f),
-            _ => Err("Expected fetched data response".to_owned()),
-        }
-    }
-
-    async fn get_or_prepare(&mut self) -> ExecutePreparedStmt {
-        todo!()
-    }
-
-    pub(crate) async fn execute_query(
-        &mut self,
-        sql: String,
-        metadata: Option<Arc<ExaStatementMetadata>>,
+    async fn execute_query<'a, C, F>(
+        &'a mut self,
+        sql: &str,
         arguments: Option<ExaArguments>,
         persistent: bool,
-    ) -> Result<ExecutionResultsStream<'_>, String> {
-        let command = if let Some(arguments) = arguments {
-            Command::ExecutePreparedStatement(self.get_or_prepare().await)
+        fetch_maker: C,
+    ) -> Result<QueryResultStream<'a, C, F>, String>
+    where
+        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    {
+        if let Some(arguments) = arguments {
+            let prepared = self
+                .ws
+                .get_or_prepare(&mut self.stmt_cache, sql, persistent)
+                .await?;
+            let data = arguments.0.into_iter().map(|v| vec![v]).collect();
+            let command =
+                ExecutePreparedStmt::new(prepared.statement_handle, &prepared.columns, data);
+            let command = Command::ExecutePreparedStatement(command);
+            self.ws
+                .get_results_stream(command, &mut self.last_result_set_handle, fetch_maker)
+                .await
         } else {
-            Command::Execute(SqlText::new(sql))
-        };
-
-        self.get_results_stream(command).await
-    }
-
-    pub(crate) async fn get_results_stream(
-        &mut self,
-        command: Command,
-    ) -> Result<ExecutionResultsStream<'_>, String> {
-        self.close_previous_result_sets().await?;
-
-        let resp_data = self.get_resp_data(&command).await?;
-
-        match resp_data {
-            ResponseData::Results(r) => ExecutionResultsStream::new(self, r),
-            _ => Err("Expected results response".to_owned()),
+            let command = Command::Execute(SqlText::new(sql));
+            self.ws
+                .get_results_stream(command, &mut self.last_result_set_handle, fetch_maker)
+                .await
         }
     }
-
-    async fn get_resp_data(&mut self, command: &Command) -> Result<ResponseData, String> {
-        self.send_cmd(command)
-            .await?
-            .ok_or_else(|| "No response data received".to_owned())
-    }
-
-    async fn send_cmd(&mut self, command: &Command) -> Result<Option<ResponseData>, String> {
-        let msg_string = serde_json::to_string(command).unwrap();
-
-        // if self.use_compression {
-        //     // #[cfg(feature = "flate2")]
-        //     self.send_compressed_cmd(msg_string)
-        // } else {
-        //     self.send_uncompressed_cmd(msg_string)
-        // }
-
-        let response = self.send_uncompressed_cmd(msg_string).await?;
-
-        match response {
-            Response::Ok {
-                response_data,
-                attributes,
-            } => todo!(),
-            Response::Error { exception } => Err(exception.to_string()),
-        }
-    }
-
-    async fn send_uncompressed_cmd(&mut self, msg_string: String) -> Result<Response, String> {
-        self.ws
-            .send(Message::Text(msg_string))
-            .await
-            .map_err(|e| e.to_string())?;
-
-        while let Some(response) = self.ws.next().await {
-            let msg = response.map_err(|e| e.to_string())?;
-
-            return match msg {
-                Message::Text(s) => serde_json::from_str(&s).map_err(|e| e.to_string())?,
-                Message::Binary(v) => serde_json::from_slice(&v).map_err(|e| e.to_string())?,
-                Message::Close(c) => Err("Close frame received".to_owned()),
-                _ => continue,
-            };
-        }
-
-        Err("No message received".to_owned())
-    }
-
-    async fn ping(&mut self) -> Result<(), String> {
-        self.ws
-            .send(Message::Ping(Vec::new()))
-            .await
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
-    }
-
-    // #[cfg(feature = "flate2")]
-    // async fn send_compressed_cmd(&mut self, msg_string: String) {
-    //     let msg = msg_string.as_bytes();
-    //     let mut buf = Vec::new();
-    //     ZlibEncoder::new(msg, Compression::default()).read_to_end(&mut buf);
-    //     self.ws.send(Message::Binary(buf)).await.unwrap();
-
-    //     while let Some(response) = self.ws.next().await {
-    //         return match response.unwrap() {
-    //             Message::Text(s) => serde_json::from_reader(ZlibDecoder::new(s.as_bytes())),
-    //             Message::Binary(v) => serde_json::from_reader(ZlibDecoder::new(v.as_slice())),
-    //             Message::Close(c) => (),
-    //             _ => continue,
-    //         };
-    //     }
-    // }
 }
 
 impl Connection for ExaConnection {
@@ -182,41 +79,34 @@ impl Connection for ExaConnection {
 
     type Options = ExaConnectOptions;
 
-    fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), sqlx::Error>> {
+    fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.disconnect().await.map_err(SqlxError::Protocol)?;
+            self.ws.disconnect().await.map_err(SqlxError::Protocol)?;
 
-            self.close_ws()
-                .await
-                .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+            self.ws.close().await.map_err(SqlxError::Protocol)?;
 
             Ok(())
         })
     }
 
-    fn close_hard(mut self) -> futures_util::future::BoxFuture<'static, Result<(), sqlx::Error>> {
+    fn close_hard(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.close_ws()
-                .await
-                .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+            self.ws.close().await.map_err(SqlxError::Protocol)?;
 
             Ok(())
         })
     }
 
-    fn ping(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
+    fn ping(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.ping().await.map_err(SqlxError::Protocol)?;
+            self.ws.ping().await.map_err(SqlxError::Protocol)?;
             Ok(())
         })
     }
 
     fn begin(
         &mut self,
-    ) -> futures_util::future::BoxFuture<
-        '_,
-        Result<sqlx::Transaction<'_, Self::Database>, sqlx::Error>,
-    >
+    ) -> futures_util::future::BoxFuture<'_, Result<Transaction<'_, Self::Database>, SqlxError>>
     where
         Self: Sized,
     {
@@ -225,7 +115,7 @@ impl Connection for ExaConnection {
 
     fn shrink_buffers(&mut self) {}
 
-    fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
+    fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
         Box::pin(future::ready(Ok(())))
     }
 
@@ -243,23 +133,20 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     ) -> futures_util::stream::BoxStream<
         'e,
         Result<
-            sqlx::Either<
-                <Self::Database as Database>::QueryResult,
-                <Self::Database as Database>::Row,
-            >,
-            sqlx::Error,
+            Either<<Self::Database as Database>::QueryResult, <Self::Database as Database>::Row>,
+            SqlxError,
         >,
     >
     where
         'c: 'e,
-        E: sqlx::Execute<'q, Self::Database>,
+        E: Execute<'q, Self::Database>,
     {
-        let sql = query.sql().to_owned();
-        let metadata = query.statement().map(|s| s.metadata.clone());
+        let sql = query.sql();
         let arguments = query.take_arguments();
         let persistent = query.persistent();
-        let future = self.execute_query(sql, metadata, arguments, persistent);
-        Box::pin(ExaResultStream::new(future).map_err(SqlxError::Protocol))
+
+        let future = self.execute_query(sql, arguments, persistent, ExaWebSocket::fetch_chunk2);
+        Box::pin(ResultStream::new(future).map_err(SqlxError::Protocol))
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(
@@ -267,11 +154,11 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         query: E,
     ) -> futures_util::future::BoxFuture<
         'e,
-        Result<Option<<Self::Database as Database>::Row>, sqlx::Error>,
+        Result<Option<<Self::Database as Database>::Row>, SqlxError>,
     >
     where
         'c: 'e,
-        E: sqlx::Execute<'q, Self::Database>,
+        E: Execute<'q, Self::Database>,
     {
         let mut s = self.fetch_many(query);
 
@@ -289,24 +176,66 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn prepare_with<'e, 'q: 'e>(
         self,
         sql: &'q str,
-        parameters: &'e [<Self::Database as Database>::TypeInfo],
+        _parameters: &'e [<Self::Database as Database>::TypeInfo],
     ) -> futures_util::future::BoxFuture<
         'e,
-        Result<<Self::Database as sqlx::database::HasStatement<'q>>::Statement, sqlx::Error>,
+        Result<<Self::Database as HasStatement<'q>>::Statement, SqlxError>,
     >
     where
         'c: 'e,
     {
-        todo!()
+        Box::pin(async move {
+            let prepared = self
+                .ws
+                .get_or_prepare(&mut self.stmt_cache, sql, true)
+                .await
+                .map_err(SqlxError::Protocol)?;
+
+            Ok(ExaStatement {
+                sql: Cow::Borrowed(sql),
+                metadata: ExaStatementMetadata::new(prepared.columns.clone()),
+            })
+        })
     }
 
     fn describe<'e, 'q: 'e>(
         self,
         sql: &'q str,
-    ) -> futures_util::future::BoxFuture<'e, Result<sqlx::Describe<Self::Database>, sqlx::Error>>
+    ) -> futures_util::future::BoxFuture<'e, Result<Describe<Self::Database>, SqlxError>>
     where
         'c: 'e,
     {
-        todo!()
+        Box::pin(async move {
+            let command = SqlText::new(sql);
+            let PreparedStatement {
+                statement_handle,
+                columns,
+            } = self
+                .ws
+                .create_prepared(Command::CreatePreparedStatement(command))
+                .await
+                .map_err(SqlxError::Protocol)?;
+
+            self.ws
+                .close_prepared(statement_handle)
+                .await
+                .map_err(SqlxError::Protocol)?;
+
+            let mut nullable = Vec::with_capacity(columns.len());
+            let mut parameters = Vec::with_capacity(columns.len());
+
+            for column in columns.as_ref() {
+                nullable.push(None);
+                parameters.push(column.datatype.clone())
+            }
+
+            let columns = columns.iter().map(ToOwned::to_owned).collect();
+
+            Ok(Describe {
+                parameters: Some(Either::Left(parameters)),
+                columns,
+                nullable,
+            })
+        })
     }
 }

@@ -2,7 +2,7 @@ mod error;
 pub(crate) mod fetched;
 mod hosts;
 mod login_info;
-mod prepared_stmt;
+pub(crate) mod prepared_stmt;
 mod pub_key;
 pub(crate) mod result;
 
@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use self::{
     fetched::DataChunk, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
-    pub_key::PublicKey, result::ExecutionResults,
+    pub_key::PublicKey, result::StmtResult,
 };
 
 pub use error::DatabaseError;
@@ -46,7 +46,7 @@ pub enum Response {
 #[serde(untagged)]
 pub enum ResponseData {
     PreparedStatement(PreparedStatement),
-    Results(ExecutionResults),
+    Results(StmtResult),
     FetchedData(DataChunk),
     Hosts(Hosts),
     LoginInfo(LoginInfo),

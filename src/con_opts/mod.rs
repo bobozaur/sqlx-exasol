@@ -8,7 +8,8 @@ use std::{net::SocketAddr, str::FromStr};
 pub use credentials::{Credentials, LoginKind};
 pub use protocol_version::ProtocolVersion;
 use serde::Serialize;
-use sqlx::ConnectOptions;
+use sqlx_core::connection::ConnectOptions;
+use sqlx_core::Error as SqlxError;
 
 use crate::connection::ExaConnection;
 
@@ -103,7 +104,7 @@ impl Serialize for ExaConnectOptions {
 }
 
 impl FromStr for ExaConnectOptions {
-    type Err = sqlx::Error;
+    type Err = SqlxError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         todo!()
@@ -113,11 +114,11 @@ impl FromStr for ExaConnectOptions {
 impl ConnectOptions for ExaConnectOptions {
     type Connection = ExaConnection;
 
-    fn from_url(url: &url::Url) -> Result<Self, sqlx::Error> {
+    fn from_url(url: &url::Url) -> Result<Self, SqlxError> {
         todo!()
     }
 
-    fn connect(&self) -> futures_util::future::BoxFuture<'_, Result<Self::Connection, sqlx::Error>>
+    fn connect(&self) -> futures_util::future::BoxFuture<'_, Result<Self::Connection, SqlxError>>
     where
         Self::Connection: Sized,
     {

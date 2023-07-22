@@ -26,11 +26,12 @@ async-tungstenite = "0.22.2"
 futures-io = "0.3.28"
 futures-util = "0.3.28"
 serde_json = "1.0.100"
-serde = { version = "1.0.169", features = ["derive"] }
+serde = { version = "1.0.169", features = ["derive", "rc"] }
 regex = "1.5.5"
 lazy-regex = "3.0.0"
-sqlx = "0.7.0"
 either = "1.8.1"
 pin-project = "1.1.2"
+lru = "0.11.0"
+sqlx-core = "=0.7.1"
 
 [features]

@@ -1,4 +1,4 @@
-use sqlx::{Database, TransactionManager};
+use sqlx_core::{database::Database, transaction::TransactionManager, Error as SqlxError};
 
 use crate::database::Exasol;
 
@@ -9,23 +9,21 @@ impl TransactionManager for ExaTransactionManager {
 
     fn begin(
         conn: &mut <Self::Database as Database>::Connection,
-    ) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
+    ) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
         todo!()
     }
 
     fn commit(
         conn: &mut <Self::Database as Database>::Connection,
-    ) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
-        todo!()
+    ) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
+        Box::pin(async move { conn.ws.commit().await.map_err(SqlxError::Protocol) })
     }
 
     fn rollback(
         conn: &mut <Self::Database as Database>::Connection,
-    ) -> futures_util::future::BoxFuture<'_, Result<(), sqlx::Error>> {
-        todo!()
+    ) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
+        Box::pin(async move { conn.ws.rollback().await.map_err(SqlxError::Protocol) })
     }
 
-    fn start_rollback(conn: &mut <Self::Database as Database>::Connection) {
-        todo!()
-    }
+    fn start_rollback(_conn: &mut <Self::Database as Database>::Connection) {}
 }

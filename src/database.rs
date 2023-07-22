@@ -1,7 +1,5 @@
-use sqlx::{
-    database::{HasArguments, HasStatement, HasStatementCache, HasValueRef},
-    Database,
-};
+use serde_json::Value;
+use sqlx_core::database::{Database, HasArguments, HasStatement, HasStatementCache, HasValueRef};
 
 use crate::{
     arguments::ExaArguments,
@@ -49,7 +47,7 @@ impl HasArguments<'_> for Exasol {
 
     type Arguments = ExaArguments;
 
-    type ArgumentBuffer = Vec<String>;
+    type ArgumentBuffer = Vec<Value>;
 }
 
 impl<'q> HasStatement<'q> for Exasol {

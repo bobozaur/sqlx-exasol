@@ -1,5 +1,6 @@
 mod arguments;
 mod column;
+mod command;
 mod con_opts;
 mod connection;
 mod database;
@@ -8,8 +9,9 @@ mod query_result;
 mod responses;
 mod row;
 mod statement;
+mod stream;
 mod transaction;
 mod type_info;
-mod value;
-mod command;
 mod types;
+mod value;
+mod websocket;

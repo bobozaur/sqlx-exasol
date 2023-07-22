@@ -1,40 +1,18 @@
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use sqlx::Column;
+use sqlx_core::{column::Column, database::Database};
 
-use crate::{type_info::ExaTypeInfo, database::Exasol};
+use crate::{database::Exasol, type_info::ExaTypeInfo};
 
 #[allow(unused)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExaColumn {
-    name: String,
+    #[serde(skip)]
+    pub(crate) ordinal: usize,
+    pub(crate) name: Arc<str>,
     #[serde(rename = "dataType")]
-    datatype: ExaTypeInfo,
-}
-
-impl ExaColumn {
-    /// Sets the column name
-    /// Could be used for changing the deserialization name to match
-    /// a certain struct without resorting to Serde
-    pub fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-
-    /// Returns a reference to the column name
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    /// Returns a reference to the column datatype
-    pub fn datatype(&self) -> &ExaTypeInfo {
-        &self.datatype
-    }
-
-    /// Turns the name of this column into lowercase
-    pub(crate) fn use_lowercase_name(&mut self) {
-        self.set_name(self.name.to_lowercase())
-    }
+    pub(crate) datatype: ExaTypeInfo,
 }
 
 impl Display for ExaColumn {
@@ -47,14 +25,14 @@ impl Column for ExaColumn {
     type Database = Exasol;
 
     fn ordinal(&self) -> usize {
-        todo!()
+        self.ordinal
     }
 
     fn name(&self) -> &str {
-        todo!()
+        &self.name
     }
 
-    fn type_info(&self) -> &<Self::Database as sqlx::Database>::TypeInfo {
-        todo!()
+    fn type_info(&self) -> &<Self::Database as Database>::TypeInfo {
+        &self.datatype
     }
 }

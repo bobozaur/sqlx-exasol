@@ -1,6 +1,13 @@
-use serde::Deserialize;
-use sqlx::{encode::IsNull, error::BoxDynError, Decode, Encode, Type};
 use std::borrow::Cow;
+
+use serde::Deserialize;
+use serde_json::{json, Value};
+use sqlx_core::{
+    decode::Decode,
+    encode::{Encode, IsNull},
+    error::BoxDynError,
+    types::Type,
+};
 
 use crate::{
     database::Exasol,
@@ -19,12 +26,8 @@ impl Type<Exasol> for str {
 }
 
 impl Encode<'_, Exasol> for &'_ str {
-    fn encode_by_ref(&self, args: &mut Vec<String>) -> IsNull {
-        let arg = serde_json::to_string(self).expect(concat!(
-            "serializing primite ",
-            stringify!(String),
-            " should work"
-        ));
+    fn encode_by_ref(&self, args: &mut Vec<Value>) -> IsNull {
+        let arg = json!(self);
         args.push(arg);
 
         IsNull::No
@@ -33,7 +36,7 @@ impl Encode<'_, Exasol> for &'_ str {
 
 impl<'r> Decode<'r, Exasol> for &'r str {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        <&str>::deserialize(&value.0.value).map_err(From::from)
+        <&str>::deserialize(value.value).map_err(From::from)
     }
 }
 
@@ -48,7 +51,7 @@ impl Type<Exasol> for String {
 }
 
 impl Encode<'_, Exasol> for String {
-    fn encode_by_ref(&self, buf: &mut Vec<String>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut Vec<Value>) -> IsNull {
         <&str as Encode<Exasol>>::encode(&**self, buf)
     }
 }
@@ -70,7 +73,7 @@ impl Type<Exasol> for Cow<'_, str> {
 }
 
 impl Encode<'_, Exasol> for Cow<'_, str> {
-    fn encode_by_ref(&self, buf: &mut Vec<String>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut Vec<Value>) -> IsNull {
         match self {
             Cow::Borrowed(str) => <&str as Encode<Exasol>>::encode(*str, buf),
             Cow::Owned(str) => <&str as Encode<Exasol>>::encode(&**str, buf),
@@ -80,6 +83,6 @@ impl Encode<'_, Exasol> for Cow<'_, str> {
 
 impl<'r> Decode<'r, Exasol> for Cow<'r, str> {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        Cow::deserialize(&value.0.value).map_err(From::from)
+        Cow::deserialize(value.value).map_err(From::from)
     }
 }

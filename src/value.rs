@@ -1,8 +1,12 @@
 use std::borrow::Cow;
 
 use serde_json::Value;
+use sqlx_core::{
+    database::{Database, HasValueRef},
+    value::ValueRef,
+};
 
-use crate::{type_info::ExaTypeInfo, database::Exasol};
+use crate::{database::Exasol, type_info::ExaTypeInfo};
 
 #[derive(Clone)]
 pub struct ExaValue {
@@ -11,16 +15,22 @@ pub struct ExaValue {
 }
 
 #[derive(Clone)]
-pub struct ExaValueRef<'r>(pub(crate) &'r ExaValue);
+pub struct ExaValueRef<'r> {
+    pub(crate) value: &'r Value,
+    pub(crate) type_info: &'r ExaTypeInfo,
+}
 
-impl sqlx::Value for ExaValue {
+impl sqlx_core::value::Value for ExaValue {
     type Database = Exasol;
 
-    fn as_ref(&self) -> <Self::Database as sqlx::database::HasValueRef<'_>>::ValueRef {
-        ExaValueRef(self)
+    fn as_ref(&self) -> <Self::Database as HasValueRef<'_>>::ValueRef {
+        ExaValueRef {
+            value: &self.value,
+            type_info: &self.type_info,
+        }
     }
 
-    fn type_info(&self) -> std::borrow::Cow<'_, <Self::Database as sqlx::Database>::TypeInfo> {
+    fn type_info(&self) -> std::borrow::Cow<'_, <Self::Database as Database>::TypeInfo> {
         Cow::Borrowed(&self.type_info)
     }
 
@@ -29,18 +39,21 @@ impl sqlx::Value for ExaValue {
     }
 }
 
-impl<'r> sqlx::ValueRef<'r> for ExaValueRef<'r> {
+impl<'r> ValueRef<'r> for ExaValueRef<'r> {
     type Database = Exasol;
 
-    fn to_owned(&self) -> <Self::Database as sqlx::Database>::Value {
-        self.0.to_owned()
+    fn to_owned(&self) -> <Self::Database as Database>::Value {
+        ExaValue {
+            value: self.value.clone(),
+            type_info: self.type_info.clone(),
+        }
     }
 
-    fn type_info(&self) -> Cow<'_, <Self::Database as sqlx::Database>::TypeInfo> {
-        Cow::Borrowed(&self.0.type_info)
+    fn type_info(&self) -> Cow<'_, <Self::Database as Database>::TypeInfo> {
+        Cow::Borrowed(self.type_info)
     }
 
     fn is_null(&self) -> bool {
-        self.0.value.is_null()
+        self.value.is_null()
     }
 }

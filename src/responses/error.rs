@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use serde::Deserialize;
+use sqlx_core::error::{self, ErrorKind};
 
 /// Type representing an error directly issued by the Exasol database.
 #[derive(Debug, Deserialize)]
@@ -19,7 +20,7 @@ impl Display for DatabaseError {
 impl std::error::Error for DatabaseError {}
 impl std::error::Error for &mut DatabaseError {}
 
-impl sqlx::error::DatabaseError for DatabaseError {
+impl error::DatabaseError for DatabaseError {
     fn message(&self) -> &str {
         &self.text
     }
@@ -36,7 +37,7 @@ impl sqlx::error::DatabaseError for DatabaseError {
         self
     }
 
-    fn kind(&self) -> sqlx::error::ErrorKind {
-        sqlx::error::ErrorKind::Other
+    fn kind(&self) -> ErrorKind {
+        ErrorKind::Other
     }
 }

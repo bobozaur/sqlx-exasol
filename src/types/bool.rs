@@ -1,5 +1,11 @@
 use serde::Deserialize;
-use sqlx::{encode::IsNull, error::BoxDynError, Decode, Encode, Type};
+use serde_json::{json, Value};
+use sqlx_core::{
+    decode::Decode,
+    encode::{Encode, IsNull},
+    error::BoxDynError,
+    types::Type,
+};
 
 use crate::{
     database::Exasol,
@@ -14,12 +20,8 @@ impl Type<Exasol> for bool {
 }
 
 impl<'q> Encode<'q, Exasol> for bool {
-    fn encode_by_ref(&self, args: &mut Vec<String>) -> IsNull {
-        let arg = serde_json::to_string(self).expect(concat!(
-            "serializing primite ",
-            stringify!(bool),
-            " should work"
-        ));
+    fn encode_by_ref(&self, args: &mut Vec<Value>) -> IsNull {
+        let arg = json!(self);
         args.push(arg);
         IsNull::No
     }
@@ -27,6 +29,6 @@ impl<'q> Encode<'q, Exasol> for bool {
 
 impl<'r> Decode<'r, Exasol> for bool {
     fn decode(value: ExaValueRef<'r>) -> Result<bool, BoxDynError> {
-        bool::deserialize(&value.0.value).map_err(From::from)
+        bool::deserialize(value.value).map_err(From::from)
     }
 }
