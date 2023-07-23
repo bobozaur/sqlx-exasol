@@ -171,7 +171,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         let arguments = query.take_arguments();
         let persistent = query.persistent();
 
-        let future = self.execute_query(sql, arguments, persistent, ExaWebSocket::fetch_chunk2);
+        let future = self.execute_query(sql, arguments, persistent, ExaWebSocket::fetch_chunk);
         Box::pin(ResultStream::new(future).map_err(SqlxError::Protocol))
     }
 

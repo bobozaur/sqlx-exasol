@@ -73,16 +73,7 @@ impl ExaWebSocket {
         Ok(())
     }
 
-    pub async fn fetch_chunk(&mut self, fetch_cmd: Fetch) -> Result<DataChunk, String> {
-        let resp_data = self.get_resp_data(Command::Fetch(fetch_cmd)).await?;
-
-        match resp_data {
-            ResponseData::FetchedData(f) => Ok(f),
-            _ => Err("Expected fetched data response".to_owned()),
-        }
-    }
-
-    pub async fn fetch_chunk2(
+    pub async fn fetch_chunk(
         &mut self,
         fetch_cmd: Fetch,
     ) -> Result<(DataChunk, &mut Self), String> {
