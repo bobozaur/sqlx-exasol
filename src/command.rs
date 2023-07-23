@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::column::ExaColumn;
+use crate::{column::ExaColumn, responses::Attributes};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -11,7 +11,7 @@ use crate::column::ExaColumn;
 pub enum Command<'a> {
     Disconnect,
     GetAttributes,
-    SetAttributes(SetAttributes),
+    SetAttributes(SetAttributes<'a>),
     Login(LoginInfo),
     LoginToken(LoginInfo),
     GetHosts(GetHosts),
@@ -26,8 +26,14 @@ pub enum Command<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SetAttributes {
-    attributes: Option<()>,
+pub struct SetAttributes<'a> {
+    attributes: &'a Attributes,
+}
+
+impl<'a> SetAttributes<'a> {
+    pub fn new(attributes: &'a Attributes) -> Self {
+        Self { attributes }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

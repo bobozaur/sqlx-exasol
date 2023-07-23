@@ -10,7 +10,7 @@ impl TransactionManager for ExaTransactionManager {
     fn begin(
         conn: &mut <Self::Database as Database>::Connection,
     ) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
-        todo!()
+        Box::pin(async move { conn.ws.begin().await.map_err(SqlxError::Protocol) })
     }
 
     fn commit(

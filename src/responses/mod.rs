@@ -6,7 +6,7 @@ pub(crate) mod prepared_stmt;
 mod pub_key;
 pub(crate) mod result;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use self::{
     fetched::DataChunk, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
@@ -60,22 +60,22 @@ pub enum ResponseData {
 /// Note that some of these are *read-only*!
 /// See the [specification](<https://github.com/exasol/websocket-api/blob/master/docs/WebsocketAPIV1.md#attributes-session-and-database-properties>)
 /// for more details.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attributes {
-    autocommit: bool,
-    compression_enabled: bool,
-    current_schema: String,
-    date_format: String,
-    date_language: String,
-    datetime_format: String,
-    default_like_escape_character: String,
-    feedback_interval: u32,
-    numeric_characters: String,
-    open_transaction: bool,
-    query_timeout: u32,
-    snapshot_transactions_enabled: bool,
-    timestamp_utc_enabled: bool,
-    timezone: String,
-    timezone_behavior: String,
+    pub(crate) autocommit: bool,
+    pub(crate) compression_enabled: bool,
+    pub(crate) current_schema: String,
+    pub(crate) date_format: String,
+    pub(crate) date_language: String,
+    pub(crate) datetime_format: String,
+    pub(crate) default_like_escape_character: String,
+    pub(crate) feedback_interval: u32,
+    pub(crate) numeric_characters: String,
+    pub(crate) open_transaction: bool,
+    pub(crate) query_timeout: u32,
+    pub(crate) snapshot_transactions_enabled: bool,
+    pub(crate) timestamp_utc_enabled: bool,
+    pub(crate) timezone: String,
+    pub(crate) timezone_behavior: String,
 }

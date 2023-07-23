@@ -6,10 +6,10 @@ use futures_util::{Future, SinkExt, StreamExt};
 use lru::LruCache;
 
 use crate::{
-    command::{ClosePreparedStmt, CloseResultSet, Command, Fetch, SqlText},
+    command::{ClosePreparedStmt, CloseResultSet, Command, Fetch, SetAttributes, SqlText},
     responses::{
-        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult, Response,
-        ResponseData,
+        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult, Attributes,
+        Response, ResponseData,
     },
     stream::QueryResultStream,
 };
@@ -17,7 +17,10 @@ use crate::{
 pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
 
 #[derive(Debug)]
-pub struct ExaWebSocket(pub WebSocketStream<Box<dyn Socket>>);
+pub struct ExaWebSocket {
+    attributes: Attributes,
+    pub ws: WebSocketStream<Box<dyn Socket>>,
+}
 
 impl ExaWebSocket {
     pub async fn get_results_stream<'a, C, F>(
@@ -85,6 +88,27 @@ impl ExaWebSocket {
         }
     }
 
+    pub async fn set_attributes(&mut self) -> Result<(), String> {
+        let command = Command::SetAttributes(SetAttributes::new(&self.attributes));
+        let str_cmd = serde_json::to_string(&command).map_err(|e| e.to_string())?;
+        self.send_raw_cmd(str_cmd).await?;
+        Ok(())
+    }
+
+    pub async fn get_attributes(&mut self) -> Result<(), String> {
+        self.send_cmd(Command::GetAttributes).await?;
+        Ok(())
+    }
+
+    pub async fn begin(&mut self) -> Result<(), String> {
+        if self.attributes.autocommit {
+            return Err("Transaction already open!".to_owned());
+        }
+
+        self.attributes.autocommit = false;
+        self.set_attributes().await
+    }
+
     pub async fn commit(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(SqlText::new("COMMIT;")))
             .await?;
@@ -98,7 +122,7 @@ impl ExaWebSocket {
     }
 
     pub async fn ping(&mut self) -> Result<(), String> {
-        self.0
+        self.ws
             .send(Message::Ping(Vec::new()))
             .await
             .map_err(|e| e.to_string())?;
@@ -112,7 +136,7 @@ impl ExaWebSocket {
     }
 
     pub async fn close(&mut self) -> Result<(), String> {
-        self.0.close(None).await.map_err(|e| e.to_string())?;
+        self.ws.close(None).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -152,32 +176,35 @@ impl ExaWebSocket {
     }
 
     async fn send_cmd(&mut self, command: Command<'_>) -> Result<Option<ResponseData>, String> {
-        let msg_string = serde_json::to_string(&command).unwrap();
+        let str_cmd = serde_json::to_string(&command).map_err(|e| e.to_string())?;
+        self.send_raw_cmd(str_cmd).await
+    }
 
-        let response = self.send_uncompressed_cmd(msg_string).await?;
+    async fn send_raw_cmd(&mut self, str_cmd: String) -> Result<Option<ResponseData>, String> {
+        let response = self.send_uncompressed_cmd(str_cmd).await?;
 
         match response {
             Response::Ok {
                 response_data,
                 attributes,
-            } => todo!(),
+            } => Ok(attributes.map(|a| self.attributes = a).and(response_data)),
             Response::Error { exception } => Err(exception.to_string()),
         }
     }
 
-    async fn send_uncompressed_cmd(&mut self, msg_string: String) -> Result<Response, String> {
-        self.0
-            .send(Message::Text(msg_string))
+    async fn send_uncompressed_cmd(&mut self, str_cmd: String) -> Result<Response, String> {
+        self.ws
+            .send(Message::Text(str_cmd))
             .await
             .map_err(|e| e.to_string())?;
 
-        while let Some(response) = self.0.next().await {
+        while let Some(response) = self.ws.next().await {
             let msg = response.map_err(|e| e.to_string())?;
 
             return match msg {
                 Message::Text(s) => serde_json::from_str(&s).map_err(|e| e.to_string())?,
                 Message::Binary(v) => serde_json::from_slice(&v).map_err(|e| e.to_string())?,
-                Message::Close(c) => Err("Close frame received".to_owned()),
+                Message::Close(c) => Err(format!("Close frame received: {c:?}")),
                 _ => continue,
             };
         }
