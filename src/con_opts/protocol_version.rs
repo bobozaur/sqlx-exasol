@@ -1,6 +1,7 @@
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 /// Enum listing the protocol versions that can be used when
 /// establishing a websocket connection to Exasol.
@@ -12,6 +13,19 @@ pub enum ProtocolVersion {
     V1 = 1,
     V2 = 2,
     V3 = 3,
+}
+
+impl FromStr for ProtocolVersion {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(ProtocolVersion::V1),
+            "2" => Ok(ProtocolVersion::V2),
+            "3" => Ok(ProtocolVersion::V3),
+            _ => Err(format!("Invalid ProtocolVersion {s}")),
+        }
+    }
 }
 
 impl TryFrom<u8> for ProtocolVersion {

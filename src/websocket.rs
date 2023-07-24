@@ -1,12 +1,23 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Debug, io, task::Poll};
 
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{Future, SinkExt, StreamExt};
 use lru::LruCache;
+use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
+use sqlx_core::{
+    bytes::BufMut,
+    net::{Socket, WithSocket},
+};
 
 use crate::{
-    command::{ClosePreparedStmt, CloseResultSet, Command, Fetch, SetAttributes, SqlText},
+    command::{
+        ClosePreparedStmt, CloseResultSet, Command, Fetch, LoginInfo, SetAttributes, SqlText,
+    },
+    con_opts::{
+        login::{CredentialsRef, LoginRef},
+        ExaConnectOptionsRef, ProtocolVersion,
+    },
     responses::{
         fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult, Attributes,
         Response, ResponseData,
@@ -14,15 +25,33 @@ use crate::{
     stream::QueryResultStream,
 };
 
-pub trait Socket: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin {}
-
 #[derive(Debug)]
 pub struct ExaWebSocket {
     attributes: Attributes,
-    pub ws: WebSocketStream<Box<dyn Socket>>,
+    pub ws: WebSocketStream<RwSocket>,
 }
 
 impl ExaWebSocket {
+    pub(crate) async fn new(
+        host: &str,
+        socket: RwSocket,
+        opts: ExaConnectOptionsRef<'_>,
+    ) -> Result<Self, String> {
+        let (ws, _) = async_tungstenite::client_async(host, socket)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut ws = Self {
+            attributes: Default::default(),
+            ws,
+        };
+
+        ws.login(opts).await?;
+        ws.get_attributes().await?;
+
+        Ok(ws)
+    }
+
     pub async fn get_results_stream<'a, C, F>(
         &'a mut self,
         command: Command<'_>,
@@ -112,12 +141,16 @@ impl ExaWebSocket {
     pub async fn commit(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(SqlText::new("COMMIT;")))
             .await?;
+        self.attributes.autocommit = false;
+        self.set_attributes().await?;
         Ok(())
     }
 
     pub async fn rollback(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(SqlText::new("ROLLBACK;")))
             .await?;
+        self.attributes.autocommit = false;
+        self.set_attributes().await?;
         Ok(())
     }
 
@@ -167,6 +200,53 @@ impl ExaWebSocket {
         }
 
         Ok(Cow::Owned(prepared))
+    }
+
+    pub(crate) async fn login(&mut self, mut opts: ExaConnectOptionsRef<'_>) -> Result<(), String> {
+        match &mut opts.login {
+            LoginRef::Credentials(creds) => {
+                self.start_login_credentials(creds, opts.protocol_version)
+                    .await?
+            }
+            _ => self.start_login_token(opts.protocol_version).await?,
+        }
+
+        let str_cmd = serde_json::to_string(&opts).map_err(|e| e.to_string())?;
+        self.send_raw_cmd(str_cmd).await?;
+        Ok(())
+    }
+
+    async fn start_login_credentials(
+        &mut self,
+        credentials: &mut CredentialsRef<'_>,
+        protocol_version: ProtocolVersion,
+    ) -> Result<(), String> {
+        let key = self.get_pub_key(protocol_version).await?;
+        credentials
+            .encrypt_password(key)
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    async fn start_login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), String> {
+        let command = Command::LoginToken(LoginInfo::new(protocol_version));
+        self.send_cmd(command).await?;
+        Ok(())
+    }
+
+    async fn get_pub_key(
+        &mut self,
+        protocol_version: ProtocolVersion,
+    ) -> Result<RsaPublicKey, String> {
+        let command = Command::Login(LoginInfo::new(protocol_version));
+        let resp_data = self.get_resp_data(command).await?;
+
+        match resp_data {
+            ResponseData::PublicKey(key) => {
+                RsaPublicKey::from_pkcs1_pem(&key.public_key_pem).map_err(|e| e.to_string())
+            }
+            _ => Err("Expected public key response".to_owned()),
+        }
     }
 
     async fn get_resp_data(&mut self, command: Command<'_>) -> Result<ResponseData, String> {
@@ -228,4 +308,73 @@ impl ExaWebSocket {
     //         };
     //     }
     // }
+}
+pub struct WithRwSocket;
+
+impl WithSocket for WithRwSocket {
+    type Output = RwSocket;
+
+    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        RwSocket(Box::new(socket))
+    }
+}
+
+pub struct RwSocket(Box<dyn Socket>);
+
+impl Debug for RwSocket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", stringify!(RwSocket))
+    }
+}
+
+impl AsyncRead for RwSocket {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        mut buf: &mut [u8],
+    ) -> std::task::Poll<futures_io::Result<usize>> {
+        while buf.has_remaining_mut() {
+            match self.0.try_read(&mut buf) {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    let Poll::Ready(_) = self.0.poll_read_ready(cx)? else {return Poll::Pending};
+                }
+                ready => return Poll::Ready(ready),
+            }
+        }
+
+        Poll::Ready(Ok(0))
+    }
+}
+
+impl AsyncWrite for RwSocket {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<futures_io::Result<usize>> {
+        while !buf.is_empty() {
+            match self.0.try_write(buf) {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    let Poll::Ready(_) = self.0.poll_write_ready(cx)? else {return Poll::Pending};
+                }
+                ready => return Poll::Ready(ready),
+            }
+        }
+
+        Poll::Ready(Ok(0))
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<futures_io::Result<()>> {
+        self.0.poll_flush(cx)
+    }
+
+    fn poll_close(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<futures_io::Result<()>> {
+        self.0.poll_shutdown(cx)
+    }
 }

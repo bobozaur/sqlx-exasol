@@ -3,7 +3,7 @@ use std::{borrow::Cow, future, num::NonZeroUsize};
 use either::Either;
 use lru::LruCache;
 use sqlx_core::{
-    connection::Connection,
+    connection::{Connection, LogSettings},
     database::{Database, HasStatement},
     describe::Describe,
     executor::{Execute, Executor},
@@ -21,25 +21,53 @@ use crate::{
     responses::{fetched::DataChunk, prepared_stmt::PreparedStatement},
     statement::{ExaStatement, ExaStatementMetadata},
     stream::{QueryResultStream, ResultStream},
-    websocket::ExaWebSocket,
+    websocket::{ExaWebSocket, WithRwSocket},
 };
 
 #[derive(Debug)]
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
-    // use_compression: bool,
     pub(crate) last_rs_handle: Option<u16>,
     stmt_cache: LruCache<String, PreparedStatement>,
+    log_settings: LogSettings,
+    // use_compression: bool,
 }
 
 impl ExaConnection {
-    pub async fn new(ws: ExaWebSocket) -> Self {
-        Self {
-            ws,
-            // use_compression: false,
+    pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, String> {
+        let mut ws_result = Err("No hosts found".to_owned());
+
+        for host in &opts.hosts {
+            let socket_res = sqlx_core::net::connect_tcp(host, opts.port, WithRwSocket).await;
+            let socket = match socket_res {
+                Ok(socket) => socket,
+                Err(err) => {
+                    ws_result = Err(err.to_string());
+                    continue;
+                }
+            };
+
+            match ExaWebSocket::new(host, socket, opts.into()).await {
+                Ok(ws) => {
+                    ws_result = Ok(ws);
+                    break;
+                }
+                Err(err) => {
+                    ws_result = Err(err.to_string());
+                    continue;
+                }
+            }
+        }
+
+        let con = Self {
+            ws: ws_result?,
             last_rs_handle: None,
             stmt_cache: LruCache::new(NonZeroUsize::new(10).unwrap()),
-        }
+            log_settings: LogSettings::default(),
+            // use_compression: false,
+        };
+
+        Ok(con)
     }
 
     async fn execute_query<'a, C, F>(
@@ -108,9 +136,7 @@ impl Connection for ExaConnection {
     fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
             self.ws.disconnect().await.map_err(SqlxError::Protocol)?;
-
             self.ws.close().await.map_err(SqlxError::Protocol)?;
-
             Ok(())
         })
     }
@@ -118,7 +144,6 @@ impl Connection for ExaConnection {
     fn close_hard(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
             self.ws.close().await.map_err(SqlxError::Protocol)?;
-
             Ok(())
         })
     }
@@ -136,7 +161,7 @@ impl Connection for ExaConnection {
     where
         Self: Sized,
     {
-        todo!()
+        Transaction::begin(self)
     }
 
     fn shrink_buffers(&mut self) {}

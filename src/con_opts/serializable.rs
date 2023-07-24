@@ -1,21 +1,17 @@
 use serde::Serialize;
 
-use super::{ExaConnectOptions, LoginKind, ProtocolVersion};
+use super::{login::LoginRef, ExaConnectOptionsRef};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerializableConOpts<'a> {
     #[serde(flatten)]
-    login_kind: &'a LoginKind,
-    protocol_version: ProtocolVersion,
-    client_name: &'a str,
-    client_version: &'a str,
-    client_os: &'a str,
-    fetch_size: usize,
-    use_encryption: bool,
-    use_compression: bool,
-    lowercase_columns: bool,
+    login: LoginRef<'a>,
+    client_name: &'static str,
+    client_version: &'static str,
+    client_os: &'static str,
     client_runtime: &'static str,
+    use_compression: bool,
     attributes: Attributes<'a>,
 }
 
@@ -30,26 +26,25 @@ struct Attributes<'a> {
 
 impl<'a> SerializableConOpts<'a> {
     const CLIENT_RUNTIME: &str = "Rust";
+    const CLIENT_NAME: &str = "Rust Exasol";
 }
 
-impl<'a> From<&'a ExaConnectOptions> for SerializableConOpts<'a> {
-    fn from(value: &'a ExaConnectOptions) -> Self {
+impl<'a> From<ExaConnectOptionsRef<'a>> for SerializableConOpts<'a> {
+    fn from(value: ExaConnectOptionsRef<'a>) -> Self {
+        let crate_version = option_env!("CARGO_PKG_VERSION").unwrap_or("UNKNOWN");
+
         let attributes = Attributes {
-            current_schema: value.schema.as_deref(),
+            current_schema: value.schema,
             query_timeout: value.query_timeout,
-            autocommit: value.autocommit,
+            autocommit: true,
         };
 
         Self {
-            login_kind: &value.login_kind,
-            protocol_version: value.protocol_version,
-            client_name: &value.client_name,
-            client_version: &value.client_version,
-            client_os: &value.client_os,
-            fetch_size: value.fetch_size,
-            use_encryption: value.use_encryption,
-            use_compression: value.use_compression,
-            lowercase_columns: value.lowercase_columns,
+            login: value.login,
+            client_name: Self::CLIENT_NAME,
+            client_version: crate_version,
+            client_os: std::env::consts::OS,
+            use_compression: value.compression,
             client_runtime: Self::CLIENT_RUNTIME,
             attributes,
         }

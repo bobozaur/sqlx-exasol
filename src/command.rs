@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{column::ExaColumn, responses::Attributes};
+use crate::{column::ExaColumn, con_opts::ProtocolVersion, responses::Attributes};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,7 +16,6 @@ pub enum Command<'a> {
     LoginToken(LoginInfo),
     GetHosts(GetHosts),
     Execute(SqlText<'a>),
-    ExecuteBatch(SqlBatch),
     Fetch(Fetch),
     CloseResultSet(CloseResultSet),
     CreatePreparedStatement(SqlText<'a>),
@@ -39,7 +38,13 @@ impl<'a> SetAttributes<'a> {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginInfo {
-    protocol_version: Option<()>,
+    protocol_version: ProtocolVersion,
+}
+
+impl LoginInfo {
+    pub fn new(protocol_version: ProtocolVersion) -> Self {
+        Self { protocol_version }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

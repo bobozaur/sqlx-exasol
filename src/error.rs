@@ -1,5 +1,4 @@
 use async_tungstenite::tungstenite::Error as WsError;
-use crossbeam::channel::RecvError;
 use rsa;
 use serde_json;
 use serde_json::error::Error as JsonError;
@@ -123,12 +122,12 @@ pub enum HttpTransportError {
     InvalidParameter(&'static str, String),
     #[error("Could not parse chunk size")]
     ChunkSizeError(#[from] ParseIntError),
-    #[error(transparent)]
-    CSVError(#[from] csv::Error),
+    // #[error(transparent)]
+    // CSVError(#[from] csv::Error),
     #[error("Invalid chunk delimiter in HTTP stream")]
     DelimiterError,
-    #[error("Error receiving data across channel")]
-    RecvError(#[from] RecvError),
+    // #[error("Error receiving data across channel")]
+    // RecvError(#[from] RecvError),
     #[error("Error sending data across channel")]
     SendError,
     #[error("Could not join thread")]

@@ -8,5 +8,5 @@ use serde::Deserialize;
 pub struct PublicKey {
     public_key_exponent: String,
     public_key_modulus: String,
-    public_key_pem: String,
+    pub(crate) public_key_pem: String,
 }

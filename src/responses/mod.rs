@@ -60,7 +60,7 @@ pub enum ResponseData {
 /// Note that some of these are *read-only*!
 /// See the [specification](<https://github.com/exasol/websocket-api/blob/master/docs/WebsocketAPIV1.md#attributes-session-and-database-properties>)
 /// for more details.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attributes {
     pub(crate) autocommit: bool,
@@ -73,7 +73,7 @@ pub struct Attributes {
     pub(crate) feedback_interval: u32,
     pub(crate) numeric_characters: String,
     pub(crate) open_transaction: bool,
-    pub(crate) query_timeout: u32,
+    pub(crate) query_timeout: u64,
     pub(crate) snapshot_transactions_enabled: bool,
     pub(crate) timestamp_utc_enabled: bool,
     pub(crate) timezone: String,
