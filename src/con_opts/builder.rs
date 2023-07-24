@@ -150,7 +150,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 
         let (first, last) = match (hostname_iter.next(), hostname_iter.next()) {
             (Some(first), Some(last)) => (first, last),
-            _ => return Ok(vec![hostname.to_owned()]),
+            _ => return Ok(vec![format!("{scheme}://{hostname}")]),
         };
 
         let (start_range_idx, end_range_idx) = match (
@@ -158,7 +158,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             last.find(|c: char| !c.is_numeric()),
         ) {
             (Some(start), Some(end)) => (start, end),
-            _ => return Ok(vec![hostname.to_owned()]),
+            _ => return Ok(vec![format!("{scheme}://{hostname}")]),
         };
 
         let (prefix, start_range) = first.split_at(start_range_idx);

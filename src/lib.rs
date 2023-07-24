@@ -3,7 +3,7 @@ mod column;
 mod command;
 mod con_opts;
 mod connection;
-mod database;
+pub mod database;
 pub mod error;
 mod query_result;
 mod responses;

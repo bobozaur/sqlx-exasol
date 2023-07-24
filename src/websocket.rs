@@ -267,7 +267,13 @@ impl ExaWebSocket {
             Response::Ok {
                 response_data,
                 attributes,
-            } => Ok(attributes.map(|a| self.attributes = a).and(response_data)),
+            } => {
+                if let Some(attributes) = attributes {
+                    self.attributes = attributes;
+                }
+
+                Ok(response_data)
+            }
             Response::Error { exception } => Err(exception.to_string()),
         }
     }
@@ -282,8 +288,8 @@ impl ExaWebSocket {
             let msg = response.map_err(|e| e.to_string())?;
 
             return match msg {
-                Message::Text(s) => serde_json::from_str(&s).map_err(|e| e.to_string())?,
-                Message::Binary(v) => serde_json::from_slice(&v).map_err(|e| e.to_string())?,
+                Message::Text(s) => serde_json::from_str(&s).map_err(|e| format!("{s} - {e}")),
+                Message::Binary(v) => serde_json::from_slice(&v).map_err(|e| e.to_string()),
                 Message::Close(c) => Err(format!("Close frame received: {c:?}")),
                 _ => continue,
             };

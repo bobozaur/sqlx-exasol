@@ -65,16 +65,18 @@ pub enum ResponseData {
 pub struct Attributes {
     pub(crate) autocommit: bool,
     pub(crate) compression_enabled: bool,
-    pub(crate) current_schema: String,
+    pub(crate) current_schema: Option<String>,
     pub(crate) date_format: String,
     pub(crate) date_language: String,
     pub(crate) datetime_format: String,
     pub(crate) default_like_escape_character: String,
-    pub(crate) feedback_interval: u32,
+    pub(crate) feedback_interval: Option<u64>,
     pub(crate) numeric_characters: String,
-    pub(crate) open_transaction: bool,
+    pub(crate) open_transaction: u8,
     pub(crate) query_timeout: u64,
+    #[serde(default)]
     pub(crate) snapshot_transactions_enabled: bool,
+    #[serde(default)]
     pub(crate) timestamp_utc_enabled: bool,
     pub(crate) timezone: String,
     pub(crate) timezone_behavior: String,

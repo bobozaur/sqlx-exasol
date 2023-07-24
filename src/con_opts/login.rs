@@ -53,6 +53,7 @@ impl RefreshToken {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
 pub(crate) enum LoginRef<'a> {
     Credentials(CredentialsRef<'a>),
     AccessToken(&'a AccessToken),

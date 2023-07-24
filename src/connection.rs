@@ -38,7 +38,13 @@ impl ExaConnection {
         let mut ws_result = Err("No hosts found".to_owned());
 
         for host in &opts.hosts {
-            let socket_res = sqlx_core::net::connect_tcp(host, opts.port, WithRwSocket).await;
+            let (_, schemeless_host) = host
+                .split_once("://")
+                .ok_or_else(|| format!("Invalid host: {host}"))?;
+
+            let socket_res =
+                sqlx_core::net::connect_tcp(schemeless_host, opts.port, WithRwSocket).await;
+
             let socket = match socket_res {
                 Ok(socket) => socket,
                 Err(err) => {
