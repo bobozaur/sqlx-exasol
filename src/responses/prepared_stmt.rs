@@ -4,8 +4,6 @@ use serde::Deserialize;
 
 use crate::column::ExaColumn;
 
-use super::result::{QueryResult, ResultSet};
-
 /// Struct representing a prepared statement
 #[derive(Clone, Debug, Deserialize)]
 #[serde(try_from = "PreparedStatementDe")]
