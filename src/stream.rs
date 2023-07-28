@@ -27,8 +27,6 @@ use crate::{
     websocket::ExaWebSocket,
 };
 
-const NUM_BYTES: usize = 5 * 1024 * 1024;
-
 #[pin_project]
 pub struct ResultStream<'a, C, F1, F2>
 where
@@ -131,10 +129,12 @@ where
     pub fn new(
         ws: &'a mut ExaWebSocket,
         query_result: QueryResult,
-        fetch_maker: C,
+        fetcher_maker: C,
     ) -> Result<Self, String> {
         let stream = match query_result {
-            QueryResult::ResultSet { result_set } => Self::result_set(result_set, ws, fetch_maker)?,
+            QueryResult::ResultSet { result_set } => {
+                Self::result_set(result_set, ws, fetcher_maker)?
+            }
             QueryResult::RowCount { row_count } => Self::row_count(row_count),
         };
 
@@ -147,8 +147,12 @@ where
         Self::RowCount(stream)
     }
 
-    fn result_set(rs: ResultSet, ws: &'a mut ExaWebSocket, fetch_maker: C) -> Result<Self, String> {
-        let stream = ResultSetStream::new(rs, ws, fetch_maker)?;
+    fn result_set(
+        rs: ResultSet,
+        ws: &'a mut ExaWebSocket,
+        fetcher_maker: C,
+    ) -> Result<Self, String> {
+        let stream = ResultSetStream::new(rs, ws, fetcher_maker)?;
         Ok(Self::ResultSet(stream))
     }
 }
@@ -190,7 +194,7 @@ where
     C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
 {
-    fn new(rs: ResultSet, ws: &'a mut ExaWebSocket, mut fetch_maker: C) -> Result<Self, String> {
+    fn new(rs: ResultSet, ws: &'a mut ExaWebSocket, mut fetcher_maker: C) -> Result<Self, String> {
         let pos = rs.data_chunk.num_rows;
 
         let fetcher_parts = if pos < rs.total_rows_num {
@@ -198,15 +202,15 @@ where
                 .result_set_handle
                 .ok_or_else(|| "Missing result set handle".to_owned())?;
 
-            let cmd = Fetch::new(handle, pos, NUM_BYTES);
-            let future = fetch_maker(ws, cmd);
+            let cmd = Fetch::new(handle, pos, ws.attributes.fetch_size);
+            let future = fetcher_maker(ws, cmd);
             Some((handle, future))
         } else {
             None
         };
 
         let chunk_stream = ChunkStream {
-            fetch_maker,
+            fetcher_maker,
             total_rows_num: rs.total_rows_num,
             total_rows_pos: pos,
             fetcher_parts,
@@ -257,7 +261,7 @@ where
     C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
 {
-    fetch_maker: C,
+    fetcher_maker: C,
     fetcher_parts: Option<(u16, F)>,
     total_rows_num: usize,
     total_rows_pos: usize,
@@ -270,8 +274,8 @@ where
 {
     fn make_fetcher(&mut self, ws: &'a mut ExaWebSocket, handle: u16) -> Option<(u16, F)> {
         if self.total_rows_pos < self.total_rows_num {
-            let cmd = Fetch::new(handle, self.total_rows_pos, NUM_BYTES);
-            let future = (self.fetch_maker)(ws, cmd);
+            let cmd = Fetch::new(handle, self.total_rows_pos, ws.attributes.fetch_size);
+            let future = (self.fetcher_maker)(ws, cmd);
             Some((handle, future))
         } else {
             None

@@ -81,15 +81,15 @@ impl ExaConnection {
         sql: &str,
         arguments: Option<ExaArguments>,
         persist: bool,
-        fetch_maker: C,
+        fetcher_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
         C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
         match arguments {
-            Some(args) => self.execute_prepared(sql, args, persist, fetch_maker).await,
-            None => self.execute_plain(sql, fetch_maker).await,
+            Some(args) => self.execute_prepared(sql, args, persist, fetcher_maker).await,
+            None => self.execute_plain(sql, fetcher_maker).await,
         }
     }
 
@@ -98,7 +98,7 @@ impl ExaConnection {
         sql: &str,
         args: ExaArguments,
         persist: bool,
-        fetch_maker: C,
+        fetcher_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
         C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
@@ -114,14 +114,14 @@ impl ExaConnection {
         let command = Command::ExecutePreparedStatement(exec_prepared);
 
         self.ws
-            .get_results_stream(command, &mut self.last_rs_handle, fetch_maker)
+            .get_results_stream(command, &mut self.last_rs_handle, fetcher_maker)
             .await
     }
 
     async fn execute_plain<'a, C, F>(
         &'a mut self,
         sql: &str,
-        fetch_maker: C,
+        fetcher_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
         C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
@@ -129,7 +129,7 @@ impl ExaConnection {
     {
         let command = Command::Execute(SqlText::new(sql));
         self.ws
-            .get_results_stream(command, &mut self.last_rs_handle, fetch_maker)
+            .get_results_stream(command, &mut self.last_rs_handle, fetcher_maker)
             .await
     }
 }

@@ -81,4 +81,7 @@ pub struct Attributes {
     pub(crate) timestamp_utc_enabled: bool,
     pub(crate) timezone: String,
     pub(crate) timezone_behavior: String,
+    // Extra attributes specific to the driver
+    #[serde(skip)]
+    pub(crate) fetch_size: usize
 }

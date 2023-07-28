@@ -27,8 +27,8 @@ use crate::{
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    attributes: Attributes,
-    pub ws: WebSocketStream<RwSocket>,
+    pub(crate) attributes: Attributes,
+    pub(crate) ws: WebSocketStream<RwSocket>,
 }
 
 impl ExaWebSocket {
@@ -56,7 +56,7 @@ impl ExaWebSocket {
         &'a mut self,
         command: Command<'_>,
         rs_handle: &mut Option<u16>,
-        fetch_maker: C,
+        fetcher_maker: C,
     ) -> Result<QueryResultStream<'_, C, F>, String>
     where
         C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
@@ -69,7 +69,7 @@ impl ExaWebSocket {
         let query_result = self.get_results(command).await?;
         std::mem::swap(rs_handle, &mut query_result.handle());
 
-        QueryResultStream::new(self, query_result, fetch_maker)
+        QueryResultStream::new(self, query_result, fetcher_maker)
     }
 
     pub async fn get_results(&mut self, command: Command<'_>) -> Result<QueryResult, String> {
