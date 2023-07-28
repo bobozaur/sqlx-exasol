@@ -63,6 +63,7 @@ pub enum ResponseData {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attributes {
+    #[serde(default)]
     pub(crate) autocommit: bool,
     pub(crate) compression_enabled: bool,
     pub(crate) current_schema: Option<String>,

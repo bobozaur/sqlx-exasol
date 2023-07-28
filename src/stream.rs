@@ -191,7 +191,7 @@ where
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
 {
     fn new(rs: ResultSet, ws: &'a mut ExaWebSocket, mut fetch_maker: C) -> Result<Self, String> {
-        let pos = rs.data_chunk.len();
+        let pos = rs.data_chunk.num_rows;
 
         let fetcher_parts = if pos < rs.total_rows_num {
             let handle = rs
@@ -214,7 +214,7 @@ where
 
         let chunk_iter = ChunkIter {
             columns: rs.columns.into(),
-            chunk_rows_total: rs.data_chunk.chunk_rows_num,
+            chunk_rows_total: rs.data_chunk.num_rows,
             chunk_rows_pos: 0,
             data: rs.data_chunk.data.into(),
         };
@@ -293,7 +293,7 @@ where
         pin_mut!(future);
         let Poll::Ready((chunk, ws)) = future.poll(cx)? else {return Poll::Pending};
 
-        self.total_rows_pos += chunk.len();
+        self.total_rows_pos += chunk.num_rows;
         self.fetcher_parts = self.make_fetcher(ws, handle);
 
         Poll::Ready(Some(Ok(chunk)))
@@ -310,7 +310,7 @@ struct ChunkIter {
 impl ChunkIter {
     fn renew(&mut self, chunk: DataChunk) {
         self.chunk_rows_pos = 0;
-        self.chunk_rows_total = chunk.chunk_rows_num;
+        self.chunk_rows_total = chunk.num_rows;
         self.data = chunk.data.into()
     }
 }

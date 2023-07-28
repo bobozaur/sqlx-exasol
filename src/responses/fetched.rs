@@ -5,13 +5,6 @@ use serde_json::Value;
 /// from getting a result set given a statement handle
 #[derive(Debug, Deserialize)]
 pub struct DataChunk {
-    #[serde(rename = "numRows")]
-    pub chunk_rows_num: usize,
+    pub num_rows: usize,
     pub data: Vec<Vec<Value>>,
-}
-
-impl DataChunk {
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
 }

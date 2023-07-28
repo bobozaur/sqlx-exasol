@@ -1,6 +1,10 @@
 use serde::Serialize;
 use serde_json::Value;
-use sqlx_core::{arguments::Arguments, encode::Encode, types::Type};
+use sqlx_core::{
+    arguments::{Arguments},
+    encode::Encode,
+    types::Type,
+};
 
 use crate::database::Exasol;
 

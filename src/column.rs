@@ -5,7 +5,6 @@ use sqlx_core::{column::Column, database::Database};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
-#[allow(unused)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExaColumn {
     #[serde(skip)]

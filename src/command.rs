@@ -108,8 +108,10 @@ impl CloseResultSet {
 pub struct ExecutePreparedStmt<'a> {
     statement_handle: u16,
     num_columns: u8,
-    num_rows: u64,
+    num_rows: u8,
+    #[serde(skip_serializing_if = "Self::has_no_columns")]
     columns: &'a [ExaColumn],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     data: Vec<[Value; 1]>,
 }
 
@@ -118,10 +120,14 @@ impl<'a> ExecutePreparedStmt<'a> {
         Self {
             statement_handle: handle,
             num_columns: columns.len() as u8,
-            num_rows: data.len() as u64,
+            num_rows: (!data.is_empty()).into(),
             columns,
             data,
         }
+    }
+
+    fn has_no_columns(columns: &[ExaColumn]) -> bool {
+        columns.is_empty()
     }
 }
 

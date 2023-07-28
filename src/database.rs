@@ -33,7 +33,7 @@ impl Database for Exasol {
 
     const NAME: &'static str = "Exasol";
 
-    const URL_SCHEMES: &'static [&'static str] = &[];
+    const URL_SCHEMES: &'static [&'static str] = &["exa"];
 }
 
 impl<'r> HasValueRef<'r> for Exasol {

@@ -95,7 +95,9 @@ impl ExaWebSocket {
 
         match resp_data {
             ResponseData::PreparedStatement(p) => Ok(p),
-            _ => Err("Expected prepared statement response".to_owned()),
+            _ => Err(format!(
+                "Expected prepared statement response, found {resp_data:?}"
+            )),
         }
     }
 
@@ -282,7 +284,7 @@ impl ExaWebSocket {
         self.ws
             .send(Message::Text(str_cmd))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("Error sending: {e}"))?;
 
         while let Some(response) = self.ws.next().await {
             let msg = response.map_err(|e| e.to_string())?;

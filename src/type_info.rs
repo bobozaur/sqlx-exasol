@@ -8,12 +8,19 @@ use sqlx_core::type_info::TypeInfo;
 pub struct ExaTypeInfo {
     #[serde(rename = "type")]
     pub(crate) data_type: DataType,
+    #[serde(skip_serializing_if = "Option::is_none")]
     precision: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     scale: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     size: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     character_set: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     with_local_time_zone: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     fraction: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     srid: Option<usize>,
 }
 

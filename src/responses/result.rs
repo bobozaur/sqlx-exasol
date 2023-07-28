@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::column::ExaColumn;
 
@@ -41,12 +42,12 @@ impl QueryResult {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ResultSetDe {
-    #[serde(rename = "numRows")]
-    total_rows_num: usize,
+    num_rows: usize,
     result_set_handle: Option<u16>,
     columns: Vec<ExaColumn>,
-    #[serde(flatten)]
-    data_chunk: DataChunk,
+    num_rows_in_message: usize,
+    #[serde(default)]
+    data: Vec<Vec<Value>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,11 +67,16 @@ impl From<ResultSetDe> for ResultSet {
             .enumerate()
             .for_each(|(idx, c)| c.ordinal = idx);
 
+        let data_chunk = DataChunk {
+            num_rows: value.num_rows_in_message,
+            data: value.data,
+        };
+
         Self {
-            total_rows_num: value.total_rows_num,
+            total_rows_num: value.num_rows,
             result_set_handle: value.result_set_handle,
             columns: value.columns,
-            data_chunk: value.data_chunk,
+            data_chunk,
         }
     }
 }

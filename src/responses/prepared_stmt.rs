@@ -4,21 +4,23 @@ use serde::Deserialize;
 
 use crate::column::ExaColumn;
 
-use super::result::ResultSet;
+use super::result::{QueryResult, ResultSet};
 
 /// Struct representing a prepared statement
 #[derive(Clone, Debug, Deserialize)]
-#[serde(from = "PreparedStatementDe")]
+#[serde(try_from = "PreparedStatementDe")]
 pub struct PreparedStatement {
     pub(crate) statement_handle: u16,
     pub(crate) columns: Arc<[ExaColumn]>,
 }
 
-impl From<PreparedStatementDe> for PreparedStatement {
-    fn from(value: PreparedStatementDe) -> Self {
-        let mut columns = match value.parameters {
-            Parameters::ParameterData { columns } => columns,
-            Parameters::Results(res) => res.into_iter().next().unwrap().result_set.columns,
+impl TryFrom<PreparedStatementDe> for PreparedStatement {
+    type Error = String;
+
+    fn try_from(value: PreparedStatementDe) -> Result<Self, Self::Error> {
+        let mut columns = match value.parameter_data {
+            Some(Parameters { columns }) => columns,
+            None => Vec::new(),
         };
 
         columns
@@ -26,10 +28,12 @@ impl From<PreparedStatementDe> for PreparedStatement {
             .enumerate()
             .for_each(|(idx, c)| c.ordinal = idx);
 
-        Self {
+        let prepared_stmt = Self {
             statement_handle: value.statement_handle,
             columns: columns.into(),
-        }
+        };
+
+        Ok(prepared_stmt)
     }
 }
 
@@ -38,18 +42,11 @@ impl From<PreparedStatementDe> for PreparedStatement {
 #[serde(rename_all = "camelCase")]
 struct PreparedStatementDe {
     statement_handle: u16,
-    parameters: Parameters,
+    parameter_data: Option<Parameters>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum Parameters {
-    ParameterData { columns: Vec<ExaColumn> },
-    Results([ResultParams; 1]),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ResultParams {
-    result_set: ResultSet,
+struct Parameters {
+    columns: Vec<ExaColumn>,
 }
