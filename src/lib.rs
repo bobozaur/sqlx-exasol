@@ -1,15 +1,16 @@
 mod arguments;
 mod column;
 mod command;
-mod con_opts;
 mod connection;
 pub mod database;
 pub mod error;
+mod options;
 mod query_result;
 mod responses;
 mod row;
 mod statement;
 mod stream;
+mod tls;
 mod transaction;
 mod type_info;
 mod types;
@@ -30,4 +31,3 @@ impl_into_arguments_for_arguments!(ExaArguments);
 impl_acquire!(Exasol, ExaConnection);
 impl_column_index_for_row!(ExaRow);
 impl_column_index_for_statement!(ExaStatement);
-

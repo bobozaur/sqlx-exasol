@@ -63,7 +63,7 @@ pub enum ResponseData {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attributes {
-    #[serde(default)]
+    #[serde(default = "Attributes::autocommit_default")]
     pub(crate) autocommit: bool,
     pub(crate) compression_enabled: bool,
     pub(crate) current_schema: Option<String>,
@@ -81,7 +81,10 @@ pub struct Attributes {
     pub(crate) timestamp_utc_enabled: bool,
     pub(crate) timezone: String,
     pub(crate) timezone_behavior: String,
-    // Extra attributes specific to the driver
-    #[serde(skip)]
-    pub(crate) fetch_size: usize
+}
+
+impl Attributes {
+    fn autocommit_default() -> bool {
+        true
+    }
 }

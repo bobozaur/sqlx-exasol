@@ -2,31 +2,40 @@ mod builder;
 pub(crate) mod login;
 mod protocol_version;
 mod serializable;
+pub(crate) mod ssl_mode;
 
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 pub use login::{Credentials, Login};
 pub use protocol_version::ProtocolVersion;
 use serde::Serialize;
 use sqlx_core::connection::{ConnectOptions, LogSettings};
+use sqlx_core::net::tls::CertificateInput;
 use sqlx_core::Error as SqlxError;
 use url::Url;
 
 use crate::connection::ExaConnection;
 
 use self::login::LoginRef;
+use self::ssl_mode::ExaSslMode;
 use self::{builder::ExaConnectOptionsBuilder, serializable::SerializableConOpts};
 
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
     pub(crate) hosts: Vec<String>,
     pub(crate) port: u16,
+    pub(crate) ssl_mode: ExaSslMode,
+    pub(crate) ssl_ca: Option<CertificateInput>,
+    pub(crate) ssl_client_cert: Option<CertificateInput>,
+    pub(crate) ssl_client_key: Option<CertificateInput>,
+    pub(crate) statement_cache_capacity: NonZeroUsize,
     login: Login,
     schema: Option<String>,
     protocol_version: ProtocolVersion,
     fetch_size: usize,
     query_timeout: u64,
-    encryption: bool,
     compression: bool,
     log_settings: LogSettings,
 }
@@ -91,37 +100,66 @@ impl ConnectOptions for ExaConnectOptions {
         for (name, value) in url.query_pairs() {
             match name.as_ref() {
                 "access_token" => builder.access_token(value.to_string()),
+
                 "refresh_token" => builder.refresh_token(value.to_string()),
+
                 "protocol_version" => {
                     let protocol_version = value
                         .parse::<ProtocolVersion>()
                         .map_err(|e| SqlxError::Protocol(e.to_string()))?;
                     builder.protocol_version(protocol_version)
                 }
+
+                "ssl-mode" => {
+                    let ssl_mode = value
+                        .parse::<ExaSslMode>()
+                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                    builder.ssl_mode(ssl_mode)
+                }
+
+                "ssl-ca" => {
+                    let ssl_ca = CertificateInput::File(PathBuf::from(value.to_string()));
+                    builder.ssl_ca(ssl_ca)
+                }
+
+                "ssl-cert" => {
+                    let ssl_cert = CertificateInput::File(PathBuf::from(value.to_string()));
+                    builder.ssl_client_cert(ssl_cert)
+                }
+
+                "ssl-key" => {
+                    let ssl_key = CertificateInput::File(PathBuf::from(value.to_string()));
+                    builder.ssl_client_key(ssl_key)
+                }
+
+                "statement-cache-capacity" => {
+                    let capacity = value
+                        .parse::<NonZeroUsize>()
+                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                    builder.statement_cache_capacity(capacity)
+                }
+
                 "fetch_size" => {
                     let fetch_size = value
                         .parse::<usize>()
                         .map_err(|e| SqlxError::Protocol(e.to_string()))?;
                     builder.fetch_size(fetch_size)
                 }
+
                 "query_timeout" => {
                     let query_timeout = value
                         .parse::<u64>()
                         .map_err(|e| SqlxError::Protocol(e.to_string()))?;
                     builder.query_timeout(query_timeout)
                 }
-                "encryption" => {
-                    let encryption = value
-                        .parse::<bool>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
-                    builder.encryption(encryption)
-                }
+
                 "compression" => {
                     let compression = value
                         .parse::<bool>()
                         .map_err(|e| SqlxError::Protocol(e.to_string()))?;
                     builder.compression(compression)
                 }
+
                 _ => {
                     return Err(SqlxError::Protocol(format!(
                         "Unknown connection string argument: {value}"
@@ -164,11 +202,14 @@ impl ConnectOptions for ExaConnectOptions {
 pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) login: LoginRef<'a>,
     pub(crate) protocol_version: ProtocolVersion,
-    schema: Option<&'a str>,
-    fetch_size: usize,
-    query_timeout: u64,
-    encryption: bool,
-    compression: bool,
+    pub(crate) ssl_mode: ExaSslMode,
+    pub(crate) ssl_ca: Option<&'a CertificateInput>,
+    pub(crate) ssl_client_cert: Option<&'a CertificateInput>,
+    pub(crate) ssl_client_key: Option<&'a CertificateInput>,
+    pub(crate) schema: Option<&'a str>,
+    pub(crate) fetch_size: usize,
+    pub(crate) query_timeout: u64,
+    pub(crate) compression: bool,
 }
 
 impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
@@ -176,10 +217,13 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
         Self {
             login: LoginRef::from(&value.login),
             protocol_version: value.protocol_version,
+            ssl_mode: value.ssl_mode,
+            ssl_ca: value.ssl_ca.as_ref(),
+            ssl_client_cert: value.ssl_client_cert.as_ref(),
+            ssl_client_key: value.ssl_client_key.as_ref(),
             schema: value.schema.as_deref(),
             fetch_size: value.fetch_size,
             query_timeout: value.query_timeout,
-            encryption: value.encryption,
             compression: value.compression,
         }
     }

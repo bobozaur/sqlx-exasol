@@ -1,13 +1,21 @@
+use std::num::NonZeroUsize;
+
 use super::{
     login::{AccessToken, RefreshToken},
+    ssl_mode::ExaSslMode,
     Credentials, ExaConnectOptions, Login, ProtocolVersion,
 };
-use sqlx_core::connection::LogSettings;
+use sqlx_core::{connection::LogSettings, net::tls::CertificateInput};
 
 #[derive(Clone, Debug)]
 pub struct ExaConnectOptionsBuilder<'a> {
     host: Option<&'a str>,
     port: u16,
+    ssl_mode: ExaSslMode,
+    ssl_ca: Option<CertificateInput>,
+    ssl_client_cert: Option<CertificateInput>,
+    ssl_client_key: Option<CertificateInput>,
+    statement_cache_capacity: NonZeroUsize,
     username: Option<String>,
     password: Option<String>,
     access_token: Option<String>,
@@ -16,21 +24,23 @@ pub struct ExaConnectOptionsBuilder<'a> {
     protocol_version: ProtocolVersion,
     fetch_size: usize,
     query_timeout: u64,
-    encryption: bool,
     compression: bool,
 }
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
     const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
     const DEFAULT_PORT: u16 = 8563;
+    const DEFAULT_CACHE_CAPACITY: usize = 100;
 
     pub(crate) fn new() -> Self {
-        let use_encryption = cfg!(any(feature = "native-tls-basic", feature = "rustls"));
-        let use_compression = cfg!(feature = "flate2");
-
         Self {
             host: None,
             port: Self::DEFAULT_PORT,
+            ssl_mode: ExaSslMode::default(),
+            ssl_ca: None,
+            ssl_client_cert: None,
+            ssl_client_key: None,
+            statement_cache_capacity: NonZeroUsize::new(Self::DEFAULT_CACHE_CAPACITY).unwrap(),
             username: None,
             password: None,
             access_token: None,
@@ -39,22 +49,13 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             protocol_version: ProtocolVersion::V3,
             fetch_size: Self::DEFAULT_FETCH_SIZE,
             query_timeout: 0,
-            encryption: use_encryption,
-            compression: use_compression,
+            compression: false,
         }
     }
 }
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
-    const WS_SCHEME: &str = "ws";
-    const WSS_SCHEME: &str = "wss";
-
     pub fn build(self) -> Result<ExaConnectOptions, String> {
-        let scheme = match self.encryption {
-            true => Self::WSS_SCHEME,
-            false => Self::WS_SCHEME,
-        };
-
         let Some(hostname) = self.host else {return Err("No hostname provided".to_owned())};
 
         let login_kind = match (self.username, self.access_token, self.refresh_token) {
@@ -70,14 +71,18 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         };
 
         let opts = ExaConnectOptions {
-            hosts: Self::generate_hosts(scheme, hostname)?,
+            hosts: Self::generate_hosts(hostname)?,
             port: self.port,
+            ssl_mode: self.ssl_mode,
+            ssl_ca: self.ssl_ca,
+            ssl_client_cert: self.ssl_client_cert,
+            ssl_client_key: self.ssl_client_key,
+            statement_cache_capacity: self.statement_cache_capacity,
             login: login_kind,
             schema: self.schema,
             protocol_version: self.protocol_version,
             fetch_size: self.fetch_size,
             query_timeout: self.query_timeout,
-            encryption: self.encryption,
             compression: self.compression,
             log_settings: LogSettings::default(),
         };
@@ -92,6 +97,31 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 
     pub fn port(&mut self, port: u16) -> &mut Self {
         self.port = port;
+        self
+    }
+
+    pub fn ssl_mode(&mut self, ssl_mode: ExaSslMode) -> &mut Self {
+        self.ssl_mode = ssl_mode;
+        self
+    }
+
+    pub fn ssl_ca(&mut self, ssl_ca: CertificateInput) -> &mut Self {
+        self.ssl_ca = Some(ssl_ca);
+        self
+    }
+
+    pub fn ssl_client_cert(&mut self, ssl_client_cert: CertificateInput) -> &mut Self {
+        self.ssl_client_cert = Some(ssl_client_cert);
+        self
+    }
+
+    pub fn ssl_client_key(&mut self, ssl_client_key: CertificateInput) -> &mut Self {
+        self.ssl_client_key = Some(ssl_client_key);
+        self
+    }
+
+    pub fn statement_cache_capacity(&mut self, capacity: NonZeroUsize) -> &mut Self {
+        self.statement_cache_capacity = capacity;
         self
     }
 
@@ -135,22 +165,17 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         self
     }
 
-    pub fn encryption(&mut self, encryption: bool) -> &mut Self {
-        self.encryption = encryption;
-        self
-    }
-
     pub fn compression(&mut self, compression: bool) -> &mut Self {
         self.compression = compression;
         self
     }
 
-    fn generate_hosts(scheme: &str, hostname: &str) -> Result<Vec<String>, String> {
+    fn generate_hosts(hostname: &str) -> Result<Vec<String>, String> {
         let mut hostname_iter = hostname.split("..");
 
         let (first, last) = match (hostname_iter.next(), hostname_iter.next()) {
             (Some(first), Some(last)) => (first, last),
-            _ => return Ok(vec![format!("{scheme}://{hostname}")]),
+            _ => return Ok(vec![hostname.to_owned()]),
         };
 
         let (start_range_idx, end_range_idx) = match (
@@ -158,7 +183,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             last.find(|c: char| !c.is_numeric()),
         ) {
             (Some(start), Some(end)) => (start, end),
-            _ => return Ok(vec![format!("{scheme}://{hostname}")]),
+            _ => return Ok(vec![hostname.to_owned()]),
         };
 
         let (prefix, start_range) = first.split_at(start_range_idx);
@@ -168,7 +193,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         let end_range = end_range.parse::<usize>().map_err(|e| e.to_string())?;
 
         let hosts = (start_range..end_range)
-            .map(|i| format!("{scheme}://{prefix}{i}{suffix}"))
+            .map(|i| format!("{prefix}{i}{suffix}"))
             .collect();
 
         Ok(hosts)

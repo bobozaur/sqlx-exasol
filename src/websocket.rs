@@ -14,7 +14,7 @@ use crate::{
     command::{
         ClosePreparedStmt, CloseResultSet, Command, Fetch, LoginInfo, SetAttributes, SqlText,
     },
-    con_opts::{
+    options::{
         login::{CredentialsRef, LoginRef},
         ExaConnectOptionsRef, ProtocolVersion,
     },
@@ -23,30 +23,47 @@ use crate::{
         Response, ResponseData,
     },
     stream::QueryResultStream,
+    tls,
 };
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub(crate) attributes: Attributes,
     pub(crate) ws: WebSocketStream<RwSocket>,
+    pub(crate) attributes: Attributes,
+    pub(crate) fetch_size: usize,
+    pub(crate) is_tls: bool,
 }
 
 impl ExaWebSocket {
+    const WS_SCHEME: &str = "ws";
+    const WSS_SCHEME: &str = "wss";
+
     pub(crate) async fn new(
         host: &str,
         socket: RwSocket,
-        opts: ExaConnectOptionsRef<'_>,
+        options: ExaConnectOptionsRef<'_>,
     ) -> Result<Self, String> {
+        let (socket, is_tls) = tls::maybe_upgrade(socket.0, host, options.clone()).await?;
+        
+        let scheme = match is_tls {
+            true => Self::WSS_SCHEME,
+            false => Self::WS_SCHEME
+        };
+
+        let host = format!("{scheme}://{host}");
+
         let (ws, _) = async_tungstenite::client_async(host, socket)
             .await
             .map_err(|e| e.to_string())?;
 
         let mut ws = Self {
-            attributes: Default::default(),
             ws,
+            attributes: Default::default(),
+            fetch_size: options.fetch_size,
+            is_tls,
         };
 
-        ws.login(opts).await?;
+        ws.login(options).await?;
         ws.get_attributes().await?;
 
         Ok(ws)

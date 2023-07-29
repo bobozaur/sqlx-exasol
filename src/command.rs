@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{column::ExaColumn, con_opts::ProtocolVersion, responses::Attributes};
+use crate::{column::ExaColumn, options::ProtocolVersion, responses::Attributes};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, future, num::NonZeroUsize};
+use std::{borrow::Cow, future};
 
 use either::Either;
 use lru::LruCache;
@@ -16,8 +16,8 @@ use futures_util::{Future, TryStreamExt};
 use crate::{
     arguments::ExaArguments,
     command::{Command, ExecutePreparedStmt, Fetch, SqlText},
-    con_opts::ExaConnectOptions,
     database::Exasol,
+    options::ExaConnectOptions,
     responses::{fetched::DataChunk, prepared_stmt::PreparedStatement},
     statement::{ExaStatement, ExaStatementMetadata},
     stream::{QueryResultStream, ResultStream},
@@ -28,9 +28,8 @@ use crate::{
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
     pub(crate) last_rs_handle: Option<u16>,
-    stmt_cache: LruCache<String, PreparedStatement>,
+    statement_cache: LruCache<String, PreparedStatement>,
     log_settings: LogSettings,
-    // use_compression: bool,
 }
 
 impl ExaConnection {
@@ -38,12 +37,7 @@ impl ExaConnection {
         let mut ws_result = Err("No hosts found".to_owned());
 
         for host in &opts.hosts {
-            let (_, schemeless_host) = host
-                .split_once("://")
-                .ok_or_else(|| format!("Invalid host: {host}"))?;
-
-            let socket_res =
-                sqlx_core::net::connect_tcp(schemeless_host, opts.port, WithRwSocket).await;
+            let socket_res = sqlx_core::net::connect_tcp(host, opts.port, WithRwSocket).await;
 
             let socket = match socket_res {
                 Ok(socket) => socket,
@@ -68,9 +62,8 @@ impl ExaConnection {
         let con = Self {
             ws: ws_result?,
             last_rs_handle: None,
-            stmt_cache: LruCache::new(NonZeroUsize::new(10).unwrap()),
+            statement_cache: LruCache::new(opts.statement_cache_capacity),
             log_settings: LogSettings::default(),
-            // use_compression: false,
         };
 
         Ok(con)
@@ -88,7 +81,10 @@ impl ExaConnection {
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
         match arguments {
-            Some(args) => self.execute_prepared(sql, args, persist, fetcher_maker).await,
+            Some(args) => {
+                self.execute_prepared(sql, args, persist, fetcher_maker)
+                    .await
+            }
             None => self.execute_plain(sql, fetcher_maker).await,
         }
     }
@@ -106,7 +102,7 @@ impl ExaConnection {
     {
         let prepared = self
             .ws
-            .get_or_prepare(&mut self.stmt_cache, sql, persist)
+            .get_or_prepare(&mut self.statement_cache, sql, persist)
             .await?;
 
         let exec_prepared =
@@ -244,7 +240,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         Box::pin(async move {
             let prepared = self
                 .ws
-                .get_or_prepare(&mut self.stmt_cache, sql, true)
+                .get_or_prepare(&mut self.statement_cache, sql, true)
                 .await
                 .map_err(SqlxError::Protocol)?;
 

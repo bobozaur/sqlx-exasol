@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::con_opts::ProtocolVersion;
+use crate::options::ProtocolVersion;
 
 /// Struct representing database information returned
 /// after establishing a connection.
