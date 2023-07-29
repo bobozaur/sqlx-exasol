@@ -32,6 +32,7 @@ pub struct ExaWebSocket {
     pub(crate) attributes: Attributes,
     pub(crate) fetch_size: usize,
     pub(crate) is_tls: bool,
+    use_compression: bool,
 }
 
 impl ExaWebSocket {
@@ -44,10 +45,10 @@ impl ExaWebSocket {
         options: ExaConnectOptionsRef<'_>,
     ) -> Result<Self, String> {
         let (socket, is_tls) = tls::maybe_upgrade(socket.0, host, options.clone()).await?;
-        
+
         let scheme = match is_tls {
             true => Self::WSS_SCHEME,
-            false => Self::WS_SCHEME
+            false => Self::WS_SCHEME,
         };
 
         let host = format!("{scheme}://{host}");
@@ -61,9 +62,14 @@ impl ExaWebSocket {
             attributes: Default::default(),
             fetch_size: options.fetch_size,
             is_tls,
+            use_compression: false, // login must be uncompressed
         };
 
+        let compression = options.compression;
         ws.login(options).await?;
+
+        // Set compression after login finished
+        ws.use_compression = compression;
         ws.get_attributes().await?;
 
         Ok(ws)
@@ -280,21 +286,27 @@ impl ExaWebSocket {
     }
 
     async fn send_raw_cmd(&mut self, str_cmd: String) -> Result<Option<ResponseData>, String> {
-        let response = self.send_uncompressed_cmd(str_cmd).await?;
+        #[allow(unreachable_patterns)]
+        let response = match self.use_compression {
+            false => self.send_uncompressed_cmd(str_cmd).await?,
+            #[cfg(feature = "flate2")]
+            true => self.send_compressed_cmd(str_cmd).await?,
+            _ => return Err("feature 'flate2' must be enabled to use compression".to_owned()),
+        };
 
-        match response {
+        let (response_data, attributes) = match response {
             Response::Ok {
                 response_data,
                 attributes,
-            } => {
-                if let Some(attributes) = attributes {
-                    self.attributes = attributes;
-                }
+            } => (response_data, attributes),
+            Response::Error { exception } => return Err(exception.to_string()),
+        };
 
-                Ok(response_data)
-            }
-            Response::Error { exception } => Err(exception.to_string()),
+        if let Some(attributes) = attributes {
+            self.attributes = attributes;
         }
+
+        Ok(response_data)
     }
 
     async fn send_uncompressed_cmd(&mut self, str_cmd: String) -> Result<Response, String> {
@@ -317,22 +329,39 @@ impl ExaWebSocket {
         Err("No message received".to_owned())
     }
 
-    // #[cfg(feature = "flate2")]
-    // async fn send_compressed_cmd(&mut self, msg_string: String) {
-    //     let msg = msg_string.as_bytes();
-    //     let mut buf = Vec::new();
-    //     ZlibEncoder::new(msg, Compression::default()).read_to_end(&mut buf);
-    //     self.ws.send(Message::Binary(buf)).await.unwrap();
+    #[cfg(feature = "flate2")]
+    async fn send_compressed_cmd(&mut self, msg_string: String) -> Result<Response, String> {
+        use std::io::Write;
 
-    //     while let Some(response) = self.ws.next().await {
-    //         return match response.unwrap() {
-    //             Message::Text(s) => serde_json::from_reader(ZlibDecoder::new(s.as_bytes())),
-    //             Message::Binary(v) => serde_json::from_reader(ZlibDecoder::new(v.as_slice())),
-    //             Message::Close(c) => (),
-    //             _ => continue,
-    //         };
-    //     }
-    // }
+        use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+
+        let msg = msg_string.as_bytes();
+        let mut buf = Vec::new();
+        let mut enc = ZlibEncoder::new(&mut buf, Compression::default());
+
+        enc.write_all(msg)
+            .and_then(|_| enc.finish())
+            .map_err(|e| e.to_string())?;
+
+        self.ws
+            .send(Message::Binary(buf))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        while let Some(response) = self.ws.next().await {
+            let bytes = match response.map_err(|e| e.to_string())? {
+                Message::Text(s) => s.into_bytes(),
+                Message::Binary(v) => v,
+                Message::Close(c) => return Err(format!("Close frame received: {c:?}")),
+                _ => continue,
+            };
+
+            let dec = ZlibDecoder::new(bytes.as_slice());
+            return serde_json::from_reader(dec).map_err(|e| e.to_string());
+        }
+
+        Err("No message received".to_owned())
+    }
 }
 pub struct WithRwSocket;
 
