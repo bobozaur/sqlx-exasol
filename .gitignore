@@ -4,3 +4,4 @@ Cargo.lock
 env_setup.ps1
 test_data.csv
 .env
+.vscode
