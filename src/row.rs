@@ -54,25 +54,19 @@ impl Row for ExaRow {
         I: ColumnIndex<Self>,
     {
         let col_idx = index.index(self)?;
+        let err_fn = || SqlxError::ColumnIndexOutOfBounds {
+            index: col_idx,
+            len: self.columns.len(),
+        };
+
         let value = self
             .data
             .get(col_idx)
-            .ok_or(SqlxError::ColumnIndexOutOfBounds {
-                index: col_idx,
-                len: self.columns.len(),
-            })?
+            .ok_or_else(err_fn)?
             .get(self.row_offset)
             .ok_or_else(|| SqlxError::RowNotFound)?;
 
-        let type_info = &self
-            .columns
-            .get(col_idx)
-            .ok_or(SqlxError::ColumnIndexOutOfBounds {
-                index: col_idx,
-                len: self.columns.len(),
-            })?
-            .datatype;
-
+        let type_info = &self.columns.get(col_idx).ok_or_else(err_fn)?.datatype;
         let val = ExaValueRef { value, type_info };
 
         Ok(val)

@@ -11,7 +11,11 @@ impl Type<Exasol> for f32 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_) | ExaTypeInfo::Double)
+        match ty {
+            ExaTypeInfo::Double => true,
+            ExaTypeInfo::Decimal(d) if d.scale() > 0 => true,
+            _ => false,
+        }
     }
 }
 
@@ -21,7 +25,11 @@ impl Type<Exasol> for f64 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_) | ExaTypeInfo::Double)
+        match ty {
+            ExaTypeInfo::Double => true,
+            ExaTypeInfo::Decimal(d) if d.scale() > 0 => true,
+            _ => false,
+        }
     }
 }
 

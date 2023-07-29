@@ -65,7 +65,9 @@ where
         match state {
             ResultStreamStateProj::Stream(stream) => stream.poll_next(cx),
             ResultStreamStateProj::Initial(fut) => {
-                let Poll::Ready(stream) = fut.poll(cx)? else {return Poll::Pending};
+                let Poll::Ready(stream) = fut.poll(cx)? else {
+                    return Poll::Pending;
+                };
                 this.state.set(ResultStreamState::Stream(stream));
 
                 cx.waker().wake_by_ref();
@@ -88,8 +90,12 @@ where
             return Poll::Ready(None);
         }
 
-        let Poll::Ready(opt) = self.as_mut().poll_next_impl(cx) else { return Poll::Pending };
-        let Some(res) = opt else { return Poll::Ready(None) };
+        let Poll::Ready(opt) = self.as_mut().poll_next_impl(cx) else {
+            return Poll::Pending;
+        };
+        let Some(res) = opt else {
+            return Poll::Ready(None);
+        };
 
         let this = self.project();
 
@@ -257,8 +263,12 @@ where
             return Poll::Ready(Some(Ok(row)));
         }
 
-        let Poll::Ready(opt) = this.chunk_stream.poll_next(cx)? else {return Poll::Pending};
-        let Some(chunk) = opt else {return Poll::Ready(None)};
+        let Poll::Ready(opt) = this.chunk_stream.poll_next(cx)? else {
+            return Poll::Pending;
+        };
+        let Some(chunk) = opt else {
+            return Poll::Ready(None);
+        };
 
         self.chunk_iter.renew(chunk);
         cx.waker().wake_by_ref();
@@ -303,10 +313,14 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.as_mut().project();
-        let Some((handle, future)) = this.fetcher_parts.take() else {return Poll::Ready(None)};
+        let Some((handle, future)) = this.fetcher_parts.take() else {
+            return Poll::Ready(None);
+        };
 
         pin_mut!(future);
-        let Poll::Ready((chunk, ws)) = future.poll(cx)? else {return Poll::Pending};
+        let Poll::Ready((chunk, ws)) = future.poll(cx)? else {
+            return Poll::Pending;
+        };
 
         self.total_rows_pos += chunk.num_rows;
         self.fetcher_parts = self.make_fetcher(ws, handle);

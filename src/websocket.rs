@@ -390,7 +390,9 @@ impl AsyncRead for RwSocket {
         while buf.has_remaining_mut() {
             match self.0.try_read(&mut buf) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    let Poll::Ready(_) = self.0.poll_read_ready(cx)? else {return Poll::Pending};
+                    let Poll::Ready(_) = self.0.poll_read_ready(cx)? else {
+                        return Poll::Pending;
+                    };
                 }
                 ready => return Poll::Ready(ready),
             }
@@ -409,7 +411,9 @@ impl AsyncWrite for RwSocket {
         while !buf.is_empty() {
             match self.0.try_write(buf) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    let Poll::Ready(_) = self.0.poll_write_ready(cx)? else {return Poll::Pending};
+                    let Poll::Ready(_) = self.0.poll_write_ready(cx)? else {
+                        return Poll::Pending;
+                    };
                 }
                 ready => return Poll::Ready(ready),
             }

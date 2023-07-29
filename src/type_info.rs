@@ -27,12 +27,14 @@ pub enum ExaTypeInfo {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StringLike {
+    size: u32,
     character_set: String,
 }
 
 impl Default for StringLike {
     fn default() -> Self {
         Self {
+            size: Default::default(),
             character_set: Self::DEFAULT_CHARSET.to_owned(),
         }
     }
@@ -41,8 +43,15 @@ impl Default for StringLike {
 impl StringLike {
     const DEFAULT_CHARSET: &str = "UTF8";
 
-    pub fn new(character_set: String) -> Self {
-        Self { character_set }
+    pub fn new(size: u32, character_set: String) -> Self {
+        Self {
+            size,
+            character_set,
+        }
+    }
+
+    pub fn size(&self) -> u32 {
+        self.size
     }
 
     pub fn character_set(&self) -> &str {
@@ -179,117 +188,3 @@ impl Display for ExaTypeInfo {
 }
 
 impl Eq for ExaTypeInfo {}
-
-#[cfg(test)]
-#[test]
-fn test() {
-    let input = r#"{
-        "status": "ok",
-        "responseData": {
-          "results": [
-            {
-              "resultType": "resultSet",
-              "resultSet": {
-                "numColumns": 12,
-                "numRows": 0,
-                "numRowsInMessage": 0,
-                "columns": [
-                  {
-                    "name": "BOOLEAN_COLUMN",
-                    "dataType": {
-                      "type": "BOOLEAN"
-                    }
-                  },
-                  {
-                    "name": "CHAR_COLUMN",
-                    "dataType": {
-                      "type": "CHAR",
-                      "size": 100,
-                      "characterSet": "UTF8"
-                    }
-                  },
-                  {
-                    "name": "DATE_COLUMN",
-                    "dataType": {
-                      "type": "DATE",
-                      "size": 4
-                    }
-                  },
-                  {
-                    "name": "DECIMAL_COLUMN",
-                    "dataType": {
-                      "type": "DECIMAL",
-                      "precision": 10,
-                      "scale": 5
-                    }
-                  },
-                  {
-                    "name": "FLOAT_COLUMN",
-                    "dataType": {
-                      "type": "DOUBLE"
-                    }
-                  },
-                  {
-                    "name": "GEOMETRY_COLUMN",
-                    "dataType": {
-                      "type": "GEOMETRY",
-                      "size": 2000000,
-                      "srid": 0
-                    }
-                  },
-                  {
-                    "name": "INTERVAL_DAY_COLUMN",
-                    "dataType": {
-                      "type": "INTERVAL DAY TO SECOND",
-                      "size": 16,
-                      "precision": 2,
-                      "fraction": 3
-                    }
-                  },
-                  {
-                    "name": "INTERVAL_YEAR_COLUMN",
-                    "dataType": {
-                      "type": "INTERVAL YEAR TO MONTH",
-                      "size": 6,
-                      "precision": 2
-                    }
-                  },
-                  {
-                    "name": "TIMESTAMP_COLUMN",
-                    "dataType": {
-                      "type": "TIMESTAMP",
-                      "withLocalTimeZone": false,
-                      "size": 8
-                    }
-                  },
-                  {
-                    "name": "TIMESTAMP_WITH_TZ_COLUMN",
-                    "dataType": {
-                      "type": "TIMESTAMP WITH LOCAL TIME ZONE",
-                      "withLocalTimeZone": true,
-                      "size": 8
-                    }
-                  },
-                  {
-                    "name": "VARCHAR_COLUMN",
-                    "dataType": {
-                      "type": "VARCHAR",
-                      "size": 200,
-                      "characterSet": "UTF8"
-                    }
-                  },
-                  {
-                    "name": "HASHTYPE_COLUMN",
-                    "dataType": {
-                      "type": "HASHTYPE",
-                      "size": 32
-                    }
-                  }
-                ]
-              }
-            }
-          ],
-          "numResults": 1
-        }
-      }"#;
-}

@@ -56,7 +56,9 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
     pub fn build(self) -> Result<ExaConnectOptions, String> {
-        let Some(hostname) = self.host else {return Err("No hostname provided".to_owned())};
+        let Some(hostname) = self.host else {
+            return Err("No hostname provided".to_owned());
+        };
 
         let login_kind = match (self.username, self.access_token, self.refresh_token) {
             (Some(username), None, None) => Login::Credentials(Credentials::new(
