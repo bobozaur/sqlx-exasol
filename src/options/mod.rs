@@ -162,7 +162,7 @@ impl ConnectOptions for ExaConnectOptions {
 
                 _ => {
                     return Err(SqlxError::Protocol(format!(
-                        "Unknown connection string argument: {value}"
+                        "Unknown connection string parameter: {value}"
                     )))
                 }
             };
