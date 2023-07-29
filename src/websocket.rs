@@ -31,7 +31,7 @@ pub struct ExaWebSocket {
     pub(crate) ws: WebSocketStream<RwSocket>,
     pub(crate) attributes: Attributes,
     pub(crate) fetch_size: usize,
-    pub(crate) is_tls: bool,
+    is_tls: bool,
     use_compression: bool,
 }
 

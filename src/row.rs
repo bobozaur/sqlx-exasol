@@ -6,7 +6,7 @@ use serde_json::Value;
 use sqlx_core::column::ColumnIndex;
 use sqlx_core::database::{Database, HasValueRef};
 use sqlx_core::row::Row;
-use sqlx_core::Error as SqlxError;
+use sqlx_core::{Error as SqlxError, HashMap};
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -17,14 +17,21 @@ use std::sync::Arc;
 /// and take out values based on the `row_offset`.
 #[derive(Debug)]
 pub struct ExaRow {
+    column_names: Arc<HashMap<Arc<str>, usize>>,
     columns: Arc<[ExaColumn]>,
     data: Arc<[Vec<Value>]>,
     row_offset: usize,
 }
 
 impl ExaRow {
-    pub fn new(data: Arc<[Vec<Value>]>, columns: Arc<[ExaColumn]>, row_offset: usize) -> Self {
+    pub fn new(
+        data: Arc<[Vec<Value>]>,
+        columns: Arc<[ExaColumn]>,
+        column_names: Arc<HashMap<Arc<str>, usize>>,
+        row_offset: usize,
+    ) -> Self {
         Self {
+            column_names,
             columns,
             data,
             row_offset,
@@ -74,12 +81,10 @@ impl Row for ExaRow {
 
 impl ColumnIndex<ExaRow> for &'_ str {
     fn index(&self, container: &ExaRow) -> Result<usize, SqlxError> {
-        for (idx, column) in container.columns.iter().enumerate() {
-            if *self == column.name.as_ref() {
-                return Ok(idx);
-            }
-        }
-
-        Err(SqlxError::ColumnNotFound(self.to_string()))
+        container
+            .column_names
+            .get(*self)
+            .copied()
+            .ok_or_else(|| SqlxError::ColumnNotFound(self.to_string()))
     }
 }

@@ -14,6 +14,7 @@ use futures_util::{
 use pin_project::pin_project;
 
 use serde_json::Value;
+use sqlx_core::HashMap;
 
 use crate::{
     column::ExaColumn,
@@ -216,8 +217,16 @@ where
             fetcher_parts,
         };
 
+        let column_names = rs
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.name.clone(), i))
+            .collect();
+
         let chunk_iter = ChunkIter {
-            columns: rs.columns.into(),
+            column_names: Arc::new(column_names),
+            columns: rs.columns,
             chunk_rows_total: rs.data_chunk.num_rows,
             chunk_rows_pos: 0,
             data: rs.data_chunk.data.into(),
@@ -305,6 +314,7 @@ where
 }
 
 struct ChunkIter {
+    column_names: Arc<HashMap<Arc<str>, usize>>,
     columns: Arc<[ExaColumn]>,
     chunk_rows_total: usize,
     chunk_rows_pos: usize,
@@ -327,7 +337,13 @@ impl Iterator for ChunkIter {
             return None;
         }
 
-        let row = ExaRow::new(self.data.clone(), self.columns.clone(), self.chunk_rows_pos);
+        let row = ExaRow::new(
+            self.data.clone(),
+            self.columns.clone(),
+            self.column_names.clone(),
+            self.chunk_rows_pos,
+        );
+
         self.chunk_rows_pos += 1;
         Some(row)
     }

@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::column::ExaColumn;
+use crate::column::{ExaColumn, ExaColumns};
 
 use super::fetched::DataChunk;
 
@@ -44,7 +46,7 @@ impl QueryResult {
 struct ResultSetDe {
     num_rows: usize,
     result_set_handle: Option<u16>,
-    columns: Vec<ExaColumn>,
+    columns: ExaColumns,
     num_rows_in_message: usize,
     #[serde(default)]
     data: Vec<Vec<Value>>,
@@ -55,18 +57,12 @@ struct ResultSetDe {
 pub struct ResultSet {
     pub(crate) total_rows_num: usize,
     pub(crate) result_set_handle: Option<u16>,
-    pub(crate) columns: Vec<ExaColumn>,
+    pub(crate) columns: Arc<[ExaColumn]>,
     pub(crate) data_chunk: DataChunk,
 }
 
 impl From<ResultSetDe> for ResultSet {
-    fn from(mut value: ResultSetDe) -> Self {
-        value
-            .columns
-            .iter_mut()
-            .enumerate()
-            .for_each(|(idx, c)| c.ordinal = idx);
-
+    fn from(value: ResultSetDe) -> Self {
         let data_chunk = DataChunk {
             num_rows: value.num_rows_in_message,
             data: value.data,
@@ -75,7 +71,7 @@ impl From<ResultSetDe> for ResultSet {
         Self {
             total_rows_num: value.num_rows,
             result_set_handle: value.result_set_handle,
-            columns: value.columns,
+            columns: value.columns.0,
             data_chunk,
         }
     }

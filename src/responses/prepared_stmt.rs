@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use crate::column::ExaColumn;
+use crate::column::{ExaColumn, ExaColumns};
 
 /// Struct representing a prepared statement
 #[derive(Clone, Debug, Deserialize)]
@@ -16,19 +16,14 @@ impl TryFrom<PreparedStatementDe> for PreparedStatement {
     type Error = String;
 
     fn try_from(value: PreparedStatementDe) -> Result<Self, Self::Error> {
-        let mut columns = match value.parameter_data {
-            Some(Parameters { columns }) => columns,
-            None => Vec::new(),
+        let columns = match value.parameter_data {
+            Some(Parameters { columns }) => columns.0,
+            None => Vec::new().into(),
         };
-
-        columns
-            .iter_mut()
-            .enumerate()
-            .for_each(|(idx, c)| c.ordinal = idx);
 
         let prepared_stmt = Self {
             statement_handle: value.statement_handle,
-            columns: columns.into(),
+            columns,
         };
 
         Ok(prepared_stmt)
@@ -46,5 +41,5 @@ struct PreparedStatementDe {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Parameters {
-    columns: Vec<ExaColumn>,
+    columns: ExaColumns,
 }
