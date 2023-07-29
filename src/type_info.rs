@@ -3,107 +3,293 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExaTypeInfo {
-    #[serde(rename = "type")]
-    pub(crate) data_type: DataType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    precision: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scale: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    size: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    character_set: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    with_local_time_zone: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fraction: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    srid: Option<usize>,
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+#[serde(tag = "type")]
+pub enum ExaTypeInfo {
+    Boolean,
+    Char(StringLike),
+    Date,
+    Decimal(Decimal),
+    Double,
+    Geometry(Geometry),
+    #[serde(rename = "INTERVAL DAY TO SECOND")]
+    IntervalDayToSecond(IntervalDayToSecond),
+    #[serde(rename = "INTERVAL YEAR TO MONTH")]
+    IntervalYearToMonth(IntervalYearToMonth),
+    Timestamp,
+    #[serde(rename = "TIMESTAMP WITH LOCAL TIME ZONE")]
+    TimestampWithLocalTimeZone,
+    Varchar(StringLike),
+    Hashtype(Hashtype),
 }
 
-impl ExaTypeInfo {
-    pub fn new(data_type: DataType) -> Self {
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StringLike {
+    character_set: String,
+}
+
+impl Default for StringLike {
+    fn default() -> Self {
         Self {
-            data_type,
-            precision: None,
-            scale: None,
-            size: None,
-            character_set: None,
-            with_local_time_zone: None,
-            fraction: None,
-            srid: None,
+            character_set: Self::DEFAULT_CHARSET.to_owned(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum DataType {
-    Null,
-    Boolean,
-    Char,
-    Date,
-    Decimal,
-    DoublePrecision,
-    Geometry,
-    IntervalDay,
-    IntervalYear,
-    Timestamp,
-    TimestampWithLocalTimeZone,
-    Varchar,
-    Hashtype,
+impl StringLike {
+    const DEFAULT_CHARSET: &str = "UTF8";
+
+    pub fn new(character_set: String) -> Self {
+        Self { character_set }
+    }
+
+    pub fn character_set(&self) -> &str {
+        &self.character_set
+    }
 }
 
-impl AsRef<str> for DataType {
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Decimal {
+    precision: u8,
+    scale: u8,
+}
+
+impl Decimal {
+    pub fn new(precision: u8, scale: u8) -> Self {
+        Self { precision, scale }
+    }
+
+    pub fn precision(&self) -> u8 {
+        self.precision
+    }
+
+    pub fn scale(&self) -> u8 {
+        self.scale
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Geometry {
+    srid: u16,
+}
+
+impl Geometry {
+    pub fn new(srid: u16) -> Self {
+        Self { srid }
+    }
+
+    pub fn srid(&self) -> u16 {
+        self.srid
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct IntervalDayToSecond {
+    precision: u8,
+    fraction: u8,
+}
+
+impl IntervalDayToSecond {
+    pub fn new(precision: u8, fraction: u8) -> Self {
+        Self {
+            precision,
+            fraction,
+        }
+    }
+
+    pub fn precision(&self) -> u8 {
+        self.precision
+    }
+
+    pub fn fraction(&self) -> u8 {
+        self.fraction
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct IntervalYearToMonth {
+    precision: u8,
+}
+
+impl IntervalYearToMonth {
+    pub fn new(precision: u8) -> Self {
+        Self { precision }
+    }
+
+    pub fn precision(&self) -> u8 {
+        self.precision
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Hashtype {
+    size: u16,
+}
+
+impl Hashtype {
+    pub fn new(size: u16) -> Self {
+        Self { size }
+    }
+
+    pub fn size(&self) -> u16 {
+        self.size
+    }
+}
+
+impl AsRef<str> for ExaTypeInfo {
     fn as_ref(&self) -> &str {
         match self {
-            DataType::Null => "NULL",
-            DataType::Boolean => "BOOLEAN",
-            DataType::Char => "CHAR",
-            DataType::Date => "DATE",
-            DataType::Decimal => "DECIMAL",
-            DataType::DoublePrecision => "DOUBLE PRECISION",
-            DataType::Geometry => todo!(),
-            DataType::IntervalDay => todo!(),
-            DataType::IntervalYear => todo!(),
-            DataType::Timestamp => "TIMESTAMP",
-            DataType::TimestampWithLocalTimeZone => todo!(),
-            DataType::Varchar => "VARCHAR",
-            DataType::Hashtype => todo!(),
+            ExaTypeInfo::Boolean => "BOOLEAN",
+            ExaTypeInfo::Char(_) => "CHAR",
+            ExaTypeInfo::Date => "DATE",
+            ExaTypeInfo::Decimal(_) => "DECIMAL",
+            ExaTypeInfo::Double => "DOUBLE PRECISION",
+            ExaTypeInfo::Geometry(_) => "GEOMETRY",
+            ExaTypeInfo::IntervalDayToSecond(_) => "INTERVAL DAY TO SECOND",
+            ExaTypeInfo::IntervalYearToMonth(_) => "INTERVAL YEAR TO MONTH",
+            ExaTypeInfo::Timestamp => "TIMESTAMP",
+            ExaTypeInfo::TimestampWithLocalTimeZone => "TIMESTAMP WITH LOCAL TIME ZONE",
+            ExaTypeInfo::Varchar(_) => "VARCHAR",
+            ExaTypeInfo::Hashtype(_) => "HASHTYPE",
         }
     }
 }
 
 impl TypeInfo for ExaTypeInfo {
     fn is_null(&self) -> bool {
-        matches!(self.data_type, DataType::Null)
+        false
     }
 
     fn name(&self) -> &str {
-        self.data_type.as_ref()
+        self.as_ref()
     }
 }
 
 impl Display for ExaTypeInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.data_type.as_ref())
-    }
-}
-
-impl PartialEq<ExaTypeInfo> for ExaTypeInfo {
-    fn eq(&self, other: &ExaTypeInfo) -> bool {
-        self.data_type == other.data_type
-            && self.precision == other.precision
-            && self.scale == other.scale
-            && self.size == other.size
-            && self.character_set == other.character_set
-            && self.with_local_time_zone == other.with_local_time_zone
-            && self.fraction == other.fraction
-            && self.srid == other.srid
+        write!(f, "{}", self.as_ref())
     }
 }
 
 impl Eq for ExaTypeInfo {}
+
+#[cfg(test)]
+#[test]
+fn test() {
+    let input = r#"{
+        "status": "ok",
+        "responseData": {
+          "results": [
+            {
+              "resultType": "resultSet",
+              "resultSet": {
+                "numColumns": 12,
+                "numRows": 0,
+                "numRowsInMessage": 0,
+                "columns": [
+                  {
+                    "name": "BOOLEAN_COLUMN",
+                    "dataType": {
+                      "type": "BOOLEAN"
+                    }
+                  },
+                  {
+                    "name": "CHAR_COLUMN",
+                    "dataType": {
+                      "type": "CHAR",
+                      "size": 100,
+                      "characterSet": "UTF8"
+                    }
+                  },
+                  {
+                    "name": "DATE_COLUMN",
+                    "dataType": {
+                      "type": "DATE",
+                      "size": 4
+                    }
+                  },
+                  {
+                    "name": "DECIMAL_COLUMN",
+                    "dataType": {
+                      "type": "DECIMAL",
+                      "precision": 10,
+                      "scale": 5
+                    }
+                  },
+                  {
+                    "name": "FLOAT_COLUMN",
+                    "dataType": {
+                      "type": "DOUBLE"
+                    }
+                  },
+                  {
+                    "name": "GEOMETRY_COLUMN",
+                    "dataType": {
+                      "type": "GEOMETRY",
+                      "size": 2000000,
+                      "srid": 0
+                    }
+                  },
+                  {
+                    "name": "INTERVAL_DAY_COLUMN",
+                    "dataType": {
+                      "type": "INTERVAL DAY TO SECOND",
+                      "size": 16,
+                      "precision": 2,
+                      "fraction": 3
+                    }
+                  },
+                  {
+                    "name": "INTERVAL_YEAR_COLUMN",
+                    "dataType": {
+                      "type": "INTERVAL YEAR TO MONTH",
+                      "size": 6,
+                      "precision": 2
+                    }
+                  },
+                  {
+                    "name": "TIMESTAMP_COLUMN",
+                    "dataType": {
+                      "type": "TIMESTAMP",
+                      "withLocalTimeZone": false,
+                      "size": 8
+                    }
+                  },
+                  {
+                    "name": "TIMESTAMP_WITH_TZ_COLUMN",
+                    "dataType": {
+                      "type": "TIMESTAMP WITH LOCAL TIME ZONE",
+                      "withLocalTimeZone": true,
+                      "size": 8
+                    }
+                  },
+                  {
+                    "name": "VARCHAR_COLUMN",
+                    "dataType": {
+                      "type": "VARCHAR",
+                      "size": 200,
+                      "characterSet": "UTF8"
+                    }
+                  },
+                  {
+                    "name": "HASHTYPE_COLUMN",
+                    "dataType": {
+                      "type": "HASHTYPE",
+                      "size": 32
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "numResults": 1
+        }
+      }"#;
+}

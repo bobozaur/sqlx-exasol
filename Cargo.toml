@@ -18,7 +18,6 @@ thiserror = "1.0.30"
 url = "2.2.2"
 rsa = "0.9.2"
 sha2 = "0.10.2"
-flate2 = { version = "1.0.22", optional = true }
 rcgen = { version = "0.11.1", features = ["pem"], optional = true }
 async-tungstenite = "0.22.2"
 futures-io = "0.3.28"
@@ -33,5 +32,12 @@ sqlx-core = "=0.7.1"
 sqlx-macros-core = "=0.7.1"
 tracing = "0.1.37"
 
+# Feature flagged optional dependencies
+flate2 = { version = "1.0.22", optional = true }
+uuid = { version = "1.4.1", features = ["serde"], optional = true }
+chrono = { version = "0.4.26", optional = true }
+rust_decimal = { version = "1.30.0", optional = true }
+
 [features]
 flate2 = ["dep:flate2"]
+uuid = ["dep:uuid"]

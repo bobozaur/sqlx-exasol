@@ -9,28 +9,27 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{
-    database::Exasol,
-    type_info::{DataType, ExaTypeInfo},
-    value::ExaValueRef,
-};
+use crate::{database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::new(DataType::Varchar)
+        ExaTypeInfo::Varchar(Default::default())
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty.data_type, DataType::Varchar | DataType::Char)
+        matches!(ty, ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_))
     }
 }
 
 impl Encode<'_, Exasol> for &'_ str {
-    fn encode_by_ref(&self, args: &mut Vec<[Value; 1]>) -> IsNull {
-        let arg = json!(self);
-        args.push([arg]);
-
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        if self.is_empty() {
+            buf.push([Value::Null]);
+            IsNull::Yes
+        } else {
+            buf.push([json!(self)]);
+            IsNull::No
+        }
     }
 }
 

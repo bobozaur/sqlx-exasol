@@ -7,22 +7,17 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{
-    database::Exasol,
-    type_info::{DataType, ExaTypeInfo},
-    value::ExaValueRef,
-};
+use crate::{database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
 
 impl Type<Exasol> for bool {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::new(DataType::Boolean)
+        ExaTypeInfo::Boolean
     }
 }
 
 impl<'q> Encode<'q, Exasol> for bool {
-    fn encode_by_ref(&self, args: &mut Vec<[Value; 1]>) -> IsNull {
-        let arg = json!(self);
-        args.push([arg]);
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        buf.push([json!(self)]);
         IsNull::No
     }
 }
