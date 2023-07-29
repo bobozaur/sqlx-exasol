@@ -21,7 +21,6 @@ pub(crate) async fn maybe_upgrade<S: Socket>(
 
         ExaSslMode::Preferred => {
             if !tls::available() {
-                // Client doesn't support TLS
                 tracing::debug!("not performing TLS upgrade: TLS support not compiled in");
                 let socket = WithRwSocket::with_socket(WithRwSocket, socket);
                 return Ok((socket, false));
