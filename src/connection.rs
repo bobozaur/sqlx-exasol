@@ -7,6 +7,7 @@ use sqlx_core::{
     database::{Database, HasStatement},
     describe::Describe,
     executor::{Execute, Executor},
+    logger::QueryLogger,
     transaction::Transaction,
     Error as SqlxError,
 };
@@ -198,8 +199,9 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         let arguments = query.take_arguments();
         let persistent = query.persistent();
 
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
         let future = self.execute_query(sql, arguments, persistent, ExaWebSocket::fetch_chunk);
-        Box::pin(ResultStream::new(future).map_err(SqlxError::Protocol))
+        Box::pin(ResultStream::new(future, logger).map_err(SqlxError::Protocol))
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(

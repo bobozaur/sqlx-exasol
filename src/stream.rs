@@ -14,7 +14,7 @@ use futures_util::{
 use pin_project::pin_project;
 
 use serde_json::Value;
-use sqlx_core::HashMap;
+use sqlx_core::{logger::QueryLogger, HashMap};
 
 use crate::{
     column::ExaColumn,
@@ -35,9 +35,10 @@ where
     F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, String>>,
 {
-    had_err: bool,
     #[pin]
     state: ResultStreamState<'a, C, F1, F2>,
+    logger: QueryLogger<'a>,
+    had_err: bool,
 }
 
 impl<'a, C, F1, F2> ResultStream<'a, C, F1, F2>
@@ -46,15 +47,12 @@ where
     F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, String>>,
 {
-    pub fn new(future: F2) -> Self {
+    pub fn new(future: F2, logger: QueryLogger<'a>) -> Self {
         Self {
             state: ResultStreamState::Initial(future),
             had_err: false,
+            logger,
         }
-    }
-
-    fn from_parts(state: ResultStreamState<'a, C, F1, F2>, had_err: bool) -> Self {
-        Self { state, had_err }
     }
 
     fn poll_next_impl(
@@ -68,9 +66,7 @@ where
             ResultStreamStateProj::Stream(stream) => stream.poll_next(cx),
             ResultStreamStateProj::Initial(fut) => {
                 let Poll::Ready(stream) = fut.poll(cx)? else {return Poll::Pending};
-                let state = ResultStreamState::Stream(stream);
-
-                self.set(Self::from_parts(state, self.had_err));
+                this.state.set(ResultStreamState::Stream(stream));
 
                 cx.waker().wake_by_ref();
                 Poll::Pending
@@ -95,7 +91,13 @@ where
         let Poll::Ready(opt) = self.as_mut().poll_next_impl(cx) else { return Poll::Pending };
         let Some(res) = opt else { return Poll::Ready(None) };
 
-        *self.project().had_err = res.is_err();
+        let this = self.project();
+
+        match &res {
+            Ok(Either::Left(q)) => this.logger.increase_rows_affected(q.rows_affected()),
+            Ok(Either::Right(_)) => this.logger.increment_rows_returned(),
+            Err(_) => *this.had_err = true,
+        }
 
         Poll::Ready(Some(res))
     }
