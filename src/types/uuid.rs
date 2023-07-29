@@ -1,18 +1,12 @@
-use serde::Deserialize;
-use serde_json::{json, Value};
-use sqlx_core::{
-    decode::Decode,
-    encode::{Encode, IsNull},
-    error::BoxDynError,
-    types::Type,
-};
+use sqlx_core::types::Type;
 use uuid::Uuid;
 
 use crate::{
     database::Exasol,
     type_info::{ExaTypeInfo, Hashtype},
-    value::ExaValueRef,
 };
+
+use super::impl_encode_decode;
 
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
@@ -28,15 +22,4 @@ impl Type<Exasol> for Uuid {
     }
 }
 
-impl Encode<'_, Exasol> for Uuid {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
-        IsNull::No
-    }
-}
-
-impl Decode<'_, Exasol> for Uuid {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        Uuid::deserialize(value.value).map_err(From::from)
-    }
-}
+impl_encode_decode!(Uuid);

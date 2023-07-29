@@ -1,13 +1,9 @@
-use serde_json::{json, Value};
-use sqlx_core::decode::Decode;
-use sqlx_core::encode::{Encode, IsNull};
-use sqlx_core::error::BoxDynError;
 use sqlx_core::types::Type;
 
 use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
-use crate::value::ExaValueRef;
-use serde::Deserialize;
+
+use super::impl_encode_decode;
 
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {
@@ -49,54 +45,7 @@ impl Type<Exasol> for i64 {
     }
 }
 
-impl Encode<'_, Exasol> for i8 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
-        IsNull::No
-    }
-}
-
-impl Encode<'_, Exasol> for i16 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
-        IsNull::No
-    }
-}
-
-impl Encode<'_, Exasol> for i32 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
-        IsNull::No
-    }
-}
-
-impl Encode<'_, Exasol> for i64 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
-        IsNull::No
-    }
-}
-
-impl Decode<'_, Exasol> for i8 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        i8::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Decode<'_, Exasol> for i16 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        i16::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Decode<'_, Exasol> for i32 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        i32::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Decode<'_, Exasol> for i64 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        i64::deserialize(value.value).map_err(From::from)
-    }
-}
+impl_encode_decode!(i8);
+impl_encode_decode!(i16);
+impl_encode_decode!(i32);
+impl_encode_decode!(i64);
