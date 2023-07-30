@@ -109,7 +109,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         r#"
         CREATE TABLE IF NOT EXISTS _sqlx_test_databases (
             db_id BIGINT IDENTITY,
-            test_path VARCHAR(2000000) NOT NULL,
+            test_path CLOB NOT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
     "#,

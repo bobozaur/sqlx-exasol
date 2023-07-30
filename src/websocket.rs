@@ -155,18 +155,18 @@ impl ExaWebSocket {
     }
 
     pub async fn begin(&mut self) -> Result<(), String> {
-        if self.attributes.autocommit {
+        if self.attributes.open_transaction.unwrap_or_default() {
             return Err("Transaction already open!".to_owned());
         }
 
-        self.attributes.autocommit = false;
+        self.attributes.autocommit = Some(false);
         self.set_attributes().await
     }
 
     pub async fn commit(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(SqlText::new("COMMIT;")))
             .await?;
-        self.attributes.autocommit = false;
+        self.attributes.autocommit = Some(true);
         self.set_attributes().await?;
         Ok(())
     }
@@ -174,7 +174,7 @@ impl ExaWebSocket {
     pub async fn rollback(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(SqlText::new("ROLLBACK;")))
             .await?;
-        self.attributes.autocommit = false;
+        self.attributes.autocommit = Some(true);
         self.set_attributes().await?;
         Ok(())
     }
@@ -288,9 +288,9 @@ impl ExaWebSocket {
     async fn send_raw_cmd(&mut self, str_cmd: String) -> Result<Option<ResponseData>, String> {
         #[allow(unreachable_patterns)]
         let response = match self.use_compression {
-            false => self.send_uncompressed_cmd(str_cmd).await?,
+            false => self.send_uncompressed_cmd(str_cmd.clone()).await?,
             #[cfg(feature = "flate2")]
-            true => self.send_compressed_cmd(str_cmd).await?,
+            true => self.send_compressed_cmd(str_cmd.clone()).await?,
             _ => return Err("feature 'flate2' must be enabled to use compression".to_owned()),
         };
 
@@ -299,11 +299,11 @@ impl ExaWebSocket {
                 response_data,
                 attributes,
             } => (response_data, attributes),
-            Response::Error { exception } => return Err(exception.to_string()),
+            Response::Error { exception } => return Err(format!("{str_cmd}-{exception}")),
         };
 
         if let Some(attributes) = attributes {
-            self.attributes = attributes;
+            self.attributes.update(attributes)
         }
 
         Ok(response_data)

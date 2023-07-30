@@ -19,7 +19,10 @@ impl Type<Exasol> for str {
     fn compatible(ty: &ExaTypeInfo) -> bool {
         matches!(
             ty,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Geometry(_)
+            ExaTypeInfo::Varchar(_)
+                | ExaTypeInfo::Char(_)
+                | ExaTypeInfo::Geometry(_)
+                | ExaTypeInfo::Hashtype(_)
         )
     }
 }

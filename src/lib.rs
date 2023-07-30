@@ -12,6 +12,8 @@ mod statement;
 mod stream;
 #[cfg(feature = "migrate")]
 mod testing;
+#[cfg(feature = "migrate")]
+mod migrate;
 mod tls;
 mod transaction;
 mod type_info;
