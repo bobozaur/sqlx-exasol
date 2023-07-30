@@ -19,7 +19,7 @@ use crate::{
     command::{Command, ExecutePreparedStmt, Fetch, Sql},
     database::Exasol,
     options::ExaConnectOptions,
-    responses::{fetched::DataChunk, prepared_stmt::PreparedStatement},
+    responses::{fetched::DataChunk, prepared_stmt::PreparedStatement, ExaAttributes},
     statement::{ExaStatement, ExaStatementMetadata},
     stream::{QueryResultStream, ResultStream},
     websocket::{ExaWebSocket, WithRwSocket},
@@ -34,6 +34,10 @@ pub struct ExaConnection {
 }
 
 impl ExaConnection {
+    pub fn attributes(&self) -> &ExaAttributes {
+        &self.ws.attributes
+    }
+
     pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, String> {
         let mut ws_result = Err("No hosts found".to_owned());
 
@@ -78,11 +82,6 @@ impl ExaConnection {
     #[cfg(feature = "migrate")]
     pub(crate) async fn rollback_transaction(&mut self) -> Result<(), String> {
         self.ws.rollback().await
-    }
-
-    #[cfg(feature = "migrate")]
-    pub(crate) async fn commit_transaction(&mut self) -> Result<(), String> {
-        self.ws.commit().await
     }
 
     #[cfg(feature = "migrate")]

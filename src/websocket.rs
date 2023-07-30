@@ -17,7 +17,7 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion,
     },
     responses::{
-        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult, Attributes,
+        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult, ExaAttributes,
         Response, ResponseData,
     },
     stream::QueryResultStream,
@@ -27,10 +27,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ExaWebSocket {
     pub(crate) ws: WebSocketStream<BufReader<RwSocket>>,
-    pub(crate) attributes: Attributes,
-    pub(crate) fetch_size: usize,
-    is_tls: bool,
-    use_compression: bool,
+    pub(crate) attributes: ExaAttributes,
 }
 
 impl ExaWebSocket {
@@ -58,16 +55,13 @@ impl ExaWebSocket {
         let mut ws = Self {
             ws,
             attributes: Default::default(),
-            fetch_size: options.fetch_size,
-            is_tls,
-            use_compression: false, // login must be uncompressed
         };
 
-        let compression = options.compression;
-        ws.login(options).await?;
+        ws.attributes.encryption_enabled = is_tls;
+        ws.attributes.fetch_size = options.fetch_size;
+        ws.attributes.statement_cache_capacity = options.statement_cache_capacity;
 
-        // Set compression after login finished
-        ws.use_compression = compression;
+        ws.login(options).await?;
         ws.get_attributes().await?;
 
         Ok(ws)
@@ -139,17 +133,17 @@ impl ExaWebSocket {
     }
 
     pub async fn begin(&mut self) -> Result<(), String> {
-        if self.attributes.open_transaction.unwrap_or_default() {
+        if self.attributes.open_transaction {
             return Err("Transaction already open!".to_owned());
         }
 
-        self.attributes.autocommit = Some(false);
+        self.attributes.autocommit = false;
         self.set_attributes().await
     }
 
     pub async fn commit(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(Sql::new("COMMIT;"))).await?;
-        self.attributes.autocommit = Some(true);
+        self.attributes.autocommit = true;
         self.set_attributes().await?;
         Ok(())
     }
@@ -157,7 +151,7 @@ impl ExaWebSocket {
     pub async fn rollback(&mut self) -> Result<(), String> {
         self.send_cmd(Command::Execute(Sql::new("ROLLBACK;")))
             .await?;
-        self.attributes.autocommit = Some(true);
+        self.attributes.autocommit = true;
         self.set_attributes().await?;
         Ok(())
     }
@@ -210,10 +204,6 @@ impl ExaWebSocket {
         Ok(Cow::Owned(prepared))
     }
 
-    pub(crate) async fn get_hosts(&mut self) -> Result<Vec<String>, String> {
-        todo!()
-    }
-
     pub(crate) async fn login(&mut self, mut opts: ExaConnectOptionsRef<'_>) -> Result<(), String> {
         match &mut opts.login {
             LoginRef::Credentials(creds) => {
@@ -241,7 +231,7 @@ impl ExaWebSocket {
             return Ok(());
         }
 
-        let mut result = Ok(());
+        let result = Ok(());
         let mut position = 0;
         let mut sql_start = 0;
 
@@ -250,7 +240,7 @@ impl ExaWebSocket {
             let command = Sql::new(sql);
             let command = Command::Execute(command);
 
-            if let Err(e) = self.send_cmd(command).await {
+            if let Err(_e) = self.send_cmd(command).await {
                 position = sql.len();
                 // TODO: match on e after proper error handling
             } else {
@@ -302,7 +292,7 @@ impl ExaWebSocket {
 
     async fn send_raw_cmd(&mut self, str_cmd: String) -> Result<Option<ResponseData>, String> {
         #[allow(unreachable_patterns)]
-        let response = match self.use_compression {
+        let response = match self.attributes.compression_enabled {
             false => self.send_uncompressed_cmd(str_cmd.clone()).await?,
             #[cfg(feature = "flate2")]
             true => self.send_compressed_cmd(str_cmd.clone()).await?,

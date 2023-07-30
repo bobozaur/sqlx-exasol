@@ -22,6 +22,10 @@ use self::login::LoginRef;
 use self::ssl_mode::ExaSslMode;
 use self::{builder::ExaConnectOptionsBuilder, serializable::SerializableConOpts};
 
+pub(crate) const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
+pub(crate) const DEFAULT_PORT: u16 = 8563;
+pub(crate) const DEFAULT_CACHE_CAPACITY: usize = 100;
+
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
     pub(crate) hosts: Vec<String>,
@@ -219,6 +223,7 @@ pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) query_timeout: u64,
     pub(crate) compression: bool,
     pub(crate) feedback_interval: u8,
+    pub(crate) statement_cache_capacity: NonZeroUsize,
 }
 
 impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
@@ -235,6 +240,7 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
             query_timeout: value.query_timeout,
             compression: value.compression,
             feedback_interval: value.feedback_interval,
+            statement_cache_capacity: value.statement_cache_capacity,
         }
     }
 }

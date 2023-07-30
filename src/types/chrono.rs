@@ -3,7 +3,7 @@ use std::{
     ops::{Add, Sub},
 };
 
-use chrono::{DateTime, Datelike, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx_core::{
@@ -261,7 +261,7 @@ impl<'r> Decode<'r, Exasol> for Months {
 
         let years = years.parse::<i32>().map_err(Box::new)?;
         let months = months.parse::<i32>().map_err(Box::new)?;
-        
+
         let total_months = match years.is_negative() {
             true => years * 12 - months,
             false => years * 12 + months,

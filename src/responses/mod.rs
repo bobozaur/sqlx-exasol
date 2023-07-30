@@ -4,11 +4,16 @@ mod login_info;
 pub(crate) mod prepared_stmt;
 pub(crate) mod result;
 
+use std::num::NonZeroUsize;
+
 use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::{column::ExaColumns, options::ProtocolVersion};
+use crate::{
+    column::ExaColumns,
+    options::{ProtocolVersion, DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE},
+};
 
 use self::{
     fetched::DataChunk, login_info::LoginInfo, prepared_stmt::PreparedStatement,
@@ -181,6 +186,98 @@ pub struct Parameters {
     pub(crate) columns: ExaColumns,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExaAttributes {
+    // Database read-write attributes
+    pub(crate) autocommit: bool,
+    pub(crate) current_schema: Option<String>,
+    pub(crate) feedback_interval: u64,
+    pub(crate) numeric_characters: String,
+    pub(crate) query_timeout: u64,
+    pub(crate) snapshot_transactions_enabled: bool,
+    pub(crate) timestamp_utc_enabled: bool,
+    // Database read-only attributes
+    #[serde(skip_serializing)]
+    pub(crate) compression_enabled: bool,
+    #[serde(skip_serializing)]
+    pub(crate) date_format: String,
+    #[serde(skip_serializing)]
+    pub(crate) date_language: String,
+    #[serde(skip_serializing)]
+    pub(crate) datetime_format: String,
+    #[serde(skip_serializing)]
+    pub(crate) default_like_escape_character: String,
+    #[serde(skip_serializing)]
+    pub(crate) open_transaction: bool,
+    #[serde(skip_serializing)]
+    pub(crate) timezone: String,
+    #[serde(skip_serializing)]
+    pub(crate) timezone_behavior: String,
+    // Driver specific attributes
+    #[serde(skip_serializing)]
+    pub(crate) fetch_size: usize,
+    #[serde(skip_serializing)]
+    pub(crate) encryption_enabled: bool,
+    #[serde(skip_serializing)]
+    pub(crate) statement_cache_capacity: NonZeroUsize,
+}
+
+impl Default for ExaAttributes {
+    fn default() -> Self {
+        Self {
+            autocommit: true,
+            current_schema: None,
+            feedback_interval: 1,
+            numeric_characters: ".,".to_owned(),
+            query_timeout: 0,
+            snapshot_transactions_enabled: false,
+            timestamp_utc_enabled: false,
+            compression_enabled: false,
+            date_format: "YYYY-MM-DD".to_owned(),
+            date_language: "ENG".to_owned(),
+            datetime_format: "YYYY-MM-DD HH24:MI:SS.FF6".to_owned(),
+            default_like_escape_character: "\\".to_owned(),
+            open_transaction: false,
+            timezone: "UNIVERSAL".to_owned(),
+            timezone_behavior: "INVALID SHIFT AMBIGUOUS ST".to_owned(),
+            fetch_size: DEFAULT_FETCH_SIZE,
+            encryption_enabled: true,
+            statement_cache_capacity: NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
+        }
+    }
+}
+
+impl ExaAttributes {
+    pub fn update(&mut self, other: Attributes) {
+        macro_rules! other_or_prev {
+            ($field:tt) => {
+                if let Some(new) = other.$field {
+                    self.$field = new;
+                }
+            };
+        }
+
+        if let Some(schema) = other.current_schema {
+            self.current_schema = Some(schema);
+        }
+
+        other_or_prev!(autocommit);
+        other_or_prev!(feedback_interval);
+        other_or_prev!(numeric_characters);
+        other_or_prev!(query_timeout);
+        other_or_prev!(snapshot_transactions_enabled);
+        other_or_prev!(timestamp_utc_enabled);
+        other_or_prev!(compression_enabled);
+        other_or_prev!(date_format);
+        other_or_prev!(date_language);
+        other_or_prev!(datetime_format);
+        other_or_prev!(default_like_escape_character);
+        other_or_prev!(open_transaction);
+        other_or_prev!(timezone);
+        other_or_prev!(timezone_behavior);
+    }
+}
 /// Struct representing attributes returned from Exasol.
 /// These can either be returned by an explicit `getAttributes` call
 /// or as part of any response.
@@ -228,32 +325,6 @@ pub struct Attributes {
 }
 
 impl Attributes {
-    pub fn update(&mut self, other: Self) {
-        macro_rules! other_or_prev {
-            ($field:tt) => {
-                if let Some(new) = other.$field {
-                    self.$field = Some(new);
-                }
-            };
-        }
-
-        other_or_prev!(autocommit);
-        other_or_prev!(current_schema);
-        other_or_prev!(feedback_interval);
-        other_or_prev!(numeric_characters);
-        other_or_prev!(query_timeout);
-        other_or_prev!(snapshot_transactions_enabled);
-        other_or_prev!(timestamp_utc_enabled);
-        other_or_prev!(compression_enabled);
-        other_or_prev!(date_format);
-        other_or_prev!(date_language);
-        other_or_prev!(datetime_format);
-        other_or_prev!(default_like_escape_character);
-        other_or_prev!(open_transaction);
-        other_or_prev!(timezone);
-        other_or_prev!(timezone_behavior);
-    }
-
     fn deserialize_open_transaction<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
     where
         D: Deserializer<'de>,

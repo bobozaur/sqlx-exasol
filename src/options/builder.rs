@@ -3,7 +3,8 @@ use std::num::NonZeroUsize;
 use super::{
     login::{AccessToken, RefreshToken},
     ssl_mode::ExaSslMode,
-    Credentials, ExaConnectOptions, Login, ProtocolVersion,
+    Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
+    DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
 use sqlx_core::{connection::LogSettings, net::tls::CertificateInput};
 
@@ -29,26 +30,22 @@ pub struct ExaConnectOptionsBuilder<'a> {
 }
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
-    const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
-    const DEFAULT_PORT: u16 = 8563;
-    const DEFAULT_CACHE_CAPACITY: usize = 100;
-
     pub(crate) fn new() -> Self {
         Self {
             host: None,
-            port: Self::DEFAULT_PORT,
+            port: DEFAULT_PORT,
             ssl_mode: ExaSslMode::default(),
             ssl_ca: None,
             ssl_client_cert: None,
             ssl_client_key: None,
-            statement_cache_capacity: NonZeroUsize::new(Self::DEFAULT_CACHE_CAPACITY).unwrap(),
+            statement_cache_capacity: NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
             username: None,
             password: None,
             access_token: None,
             refresh_token: None,
             schema: None,
             protocol_version: ProtocolVersion::V3,
-            fetch_size: Self::DEFAULT_FETCH_SIZE,
+            fetch_size: DEFAULT_FETCH_SIZE,
             query_timeout: 0,
             compression: false,
             feedback_interval: 1,

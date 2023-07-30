@@ -211,7 +211,7 @@ where
                 .result_set_handle
                 .ok_or_else(|| "Missing result set handle".to_owned())?;
 
-            let cmd = Fetch::new(handle, pos, ws.fetch_size);
+            let cmd = Fetch::new(handle, pos, ws.attributes.fetch_size);
             let future = fetcher_maker(ws, cmd);
             Some((handle, future))
         } else {
@@ -295,7 +295,7 @@ where
 {
     fn make_fetcher(&mut self, ws: &'a mut ExaWebSocket, handle: u16) -> Option<(u16, F)> {
         if self.total_rows_pos < self.total_rows_num {
-            let cmd = Fetch::new(handle, self.total_rows_pos, ws.fetch_size);
+            let cmd = Fetch::new(handle, self.total_rows_pos, ws.attributes.fetch_size);
             let future = (self.fetcher_maker)(ws, cmd);
             Some((handle, future))
         } else {
