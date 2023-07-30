@@ -16,7 +16,7 @@ use futures_util::{Future, TryStreamExt};
 
 use crate::{
     arguments::ExaArguments,
-    command::{BatchSql, Command, ExecutePreparedStmt, Fetch, Sql},
+    command::{Command, ExecutePreparedStmt, Fetch, Sql},
     database::Exasol,
     options::ExaConnectOptions,
     responses::{fetched::DataChunk, prepared_stmt::PreparedStatement},
@@ -87,12 +87,7 @@ impl ExaConnection {
 
     #[cfg(feature = "migrate")]
     pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), String> {
-        let sql = sql.trim_end();
-        let sql = sql.strip_suffix(';').unwrap_or(sql);
-
-        let command = BatchSql::new(sql.split(';').collect());
-
-        todo!()
+        self.ws.execute_batch(sql).await
     }
 
     async fn execute_query<'a, C, F>(

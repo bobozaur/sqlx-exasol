@@ -224,6 +224,40 @@ impl ExaWebSocket {
         Ok(())
     }
 
+    #[cfg(feature = "migrate")]
+    pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), String> {
+        use crate::command::BatchSql;
+
+        let sql = sql.trim_end();
+        let sql = sql.strip_suffix(';').unwrap_or(sql);
+
+        let command = BatchSql::new(sql.split(';').collect());
+
+        if self.send_cmd(Command::ExecuteBatch(command)).await.is_ok() {
+            return Ok(());
+        }
+
+        let mut result = Ok(());
+        let mut position = 0;
+        let mut sql_start = 0;
+
+        while let Some(sql_end) = sql[position..].find(';') {
+            let sql = &sql[sql_start..sql_end];
+            let command = Sql::new(sql);
+            let command = Command::Execute(command);
+
+            if let Err(e) = self.send_cmd(command).await {
+                position = sql.len();
+                // TODO: match on e after proper error handling
+            } else {
+                position = sql.len();
+                sql_start = position;
+            }
+        }
+
+        result
+    }
+
     async fn start_login_credentials(
         &mut self,
         credentials: &mut CredentialsRef<'_>,

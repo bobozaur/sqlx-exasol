@@ -167,7 +167,10 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            let _ = tx.execute(&*migration.sql).await?;
+            tx.execute_batch(&migration.sql)
+                .await
+                .map_err(From::from)
+                .map_err(MigrateError::Source)?;
             let checksum = hex::encode(&*migration.checksum);
 
             let _ = query(
@@ -204,7 +207,10 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            let _ = tx.execute(&*migration.sql).await?;
+            tx.execute_batch(&migration.sql)
+                .await
+                .map_err(From::from)
+                .map_err(MigrateError::Source)?;
 
             let _ = query(r#"DELETE FROM _sqlx_migrations WHERE version = ?"#)
                 .bind(migration.version)
@@ -218,10 +224,4 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             Ok(elapsed)
         })
     }
-}
-
-async fn current_database(conn: &mut ExaConnection) -> Result<String, MigrateError> {
-    Ok(query_scalar("SELECT CURRENT_SCHEMA")
-        .fetch_one(conn)
-        .await?)
 }

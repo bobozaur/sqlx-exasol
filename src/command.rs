@@ -16,12 +16,13 @@ pub enum Command<'a> {
     LoginToken(LoginInfo),
     GetHosts(GetHosts),
     Execute(Sql<'a>),
-    ExecuteBatch(BatchSql<'a>),
     Fetch(Fetch),
     CloseResultSet(CloseResultSet),
     CreatePreparedStatement(Sql<'a>),
     ExecutePreparedStatement(ExecutePreparedStmt<'a>),
     ClosePreparedStatement(ClosePreparedStmt),
+    #[cfg(feature = "migrate")]
+    ExecuteBatch(BatchSql<'a>),
 }
 
 #[derive(Clone, Debug, Serialize)]
