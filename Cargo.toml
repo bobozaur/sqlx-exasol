@@ -30,7 +30,7 @@ pin-project = "1.1.2"
 lru = "0.11.0"
 sqlx-core = "=0.7.1"
 sqlx-macros-core = "=0.7.1"
-tracing = "0.1.37"
+tracing = { version = "0.1.37", features = ["log"] }
 
 # Feature flagged optional dependencies
 flate2 = { version = "1.0.22", optional = true }

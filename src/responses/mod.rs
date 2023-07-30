@@ -90,6 +90,7 @@ pub struct Attributes {
     #[serde(skip_serializing)]
     pub(crate) default_like_escape_character: Option<String>,
     #[serde(skip_serializing)]
+    #[serde(default)]
     #[serde(deserialize_with = "Attributes::deserialize_open_transaction")]
     pub(crate) open_transaction: Option<bool>,
     #[serde(skip_serializing)]
@@ -99,7 +100,7 @@ pub struct Attributes {
 }
 
 impl Attributes {
-    pub fn update(&mut self, other: Self){
+    pub fn update(&mut self, other: Self) {
         macro_rules! other_or_prev {
             ($field:tt) => {
                 if let Some(new) = other.$field {
@@ -129,7 +130,7 @@ impl Attributes {
     where
         D: Deserializer<'de>,
     {
-        let Some(value) = Option::<u8>::deserialize(deserializer)? else {return Ok(None)};
+        let Some(value) = Option::deserialize(deserializer)? else {return Ok(None)};
 
         match value {
             0 => Ok(Some(false)),
