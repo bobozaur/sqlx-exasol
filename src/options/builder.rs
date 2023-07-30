@@ -25,6 +25,7 @@ pub struct ExaConnectOptionsBuilder<'a> {
     fetch_size: usize,
     query_timeout: u64,
     compression: bool,
+    feedback_interval: u8,
 }
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
@@ -50,6 +51,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             fetch_size: Self::DEFAULT_FETCH_SIZE,
             query_timeout: 0,
             compression: false,
+            feedback_interval: 1,
         }
     }
 }
@@ -86,6 +88,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             fetch_size: self.fetch_size,
             query_timeout: self.query_timeout,
             compression: self.compression,
+            feedback_interval: self.feedback_interval,
             log_settings: LogSettings::default(),
         };
 
@@ -169,6 +172,11 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 
     pub fn compression(&mut self, compression: bool) -> &mut Self {
         self.compression = compression;
+        self
+    }
+
+    pub fn feedback_interval(&mut self, feedback_interval: u8) -> &mut Self {
+        self.feedback_interval = feedback_interval;
         self
     }
 

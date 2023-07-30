@@ -22,6 +22,7 @@ struct Attributes<'a> {
     current_schema: Option<&'a str>,
     query_timeout: u64,
     autocommit: bool,
+    feedback_interval: u8,
 }
 
 impl<'a> SerializableConOpts<'a> {
@@ -37,6 +38,7 @@ impl<'a> From<ExaConnectOptionsRef<'a>> for SerializableConOpts<'a> {
             current_schema: value.schema,
             query_timeout: value.query_timeout,
             autocommit: true,
+            feedback_interval: value.feedback_interval,
         };
 
         Self {

@@ -37,6 +37,7 @@ pub struct ExaConnectOptions {
     fetch_size: usize,
     query_timeout: u64,
     compression: bool,
+    feedback_interval: u8,
     log_settings: LogSettings,
 }
 
@@ -160,6 +161,13 @@ impl ConnectOptions for ExaConnectOptions {
                     builder.compression(compression)
                 }
 
+                "feedback_interval" => {
+                    let feedback_interval = value
+                        .parse::<u8>()
+                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                    builder.feedback_interval(feedback_interval)
+                }
+
                 _ => {
                     return Err(SqlxError::Protocol(format!(
                         "Unknown connection string parameter: {value}"
@@ -210,6 +218,7 @@ pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) fetch_size: usize,
     pub(crate) query_timeout: u64,
     pub(crate) compression: bool,
+    pub(crate) feedback_interval: u8,
 }
 
 impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
@@ -225,6 +234,7 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
             fetch_size: value.fetch_size,
             query_timeout: value.query_timeout,
             compression: value.compression,
+            feedback_interval: value.feedback_interval,
         }
     }
 }
