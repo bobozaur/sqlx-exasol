@@ -10,6 +10,8 @@ mod responses;
 mod row;
 mod statement;
 mod stream;
+#[cfg(feature = "migrate")]
+mod testing;
 mod tls;
 mod transaction;
 mod type_info;
