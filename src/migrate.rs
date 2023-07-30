@@ -137,11 +137,26 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
     }
 
     fn lock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
-        Box::pin(async move { Ok(()) })
+        Box::pin(async move {
+            self.begin_transaction()
+                .await
+                .map_err(From::from)
+                .map_err(MigrateError::Source)?;
+
+            self.execute("DELETE FROM _sqlx_migrations WHERE 1 = 2")
+                .await?;
+
+            Ok(())
+        })
     }
 
     fn unlock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
-        Box::pin(async move { Ok(()) })
+        Box::pin(async move {
+            self.rollback_transaction()
+                .await
+                .map_err(From::from)
+                .map_err(MigrateError::Source)
+        })
     }
 
     fn apply<'e: 'm, 'm>(

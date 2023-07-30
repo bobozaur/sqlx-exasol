@@ -70,6 +70,14 @@ impl ExaConnection {
         Ok(con)
     }
 
+    pub(crate) async fn begin_transaction(&mut self) -> Result<(), String> {
+        self.ws.begin().await
+    }
+
+    pub(crate) async fn rollback_transaction(&mut self) -> Result<(), String> {
+        self.ws.rollback().await
+    }
+
     async fn execute_query<'a, C, F>(
         &'a mut self,
         sql: &str,
