@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt::Debug, io, task::Poll};
 
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{Future, SinkExt, StreamExt};
+use futures_util::{io::BufReader, Future, SinkExt, StreamExt};
 use lru::LruCache;
 use rsa::RsaPublicKey;
 use sqlx_core::{
@@ -26,7 +26,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub(crate) ws: WebSocketStream<RwSocket>,
+    pub(crate) ws: WebSocketStream<BufReader<RwSocket>>,
     pub(crate) attributes: Attributes,
     pub(crate) fetch_size: usize,
     is_tls: bool,
@@ -51,7 +51,7 @@ impl ExaWebSocket {
 
         let host = format!("{scheme}://{host}");
 
-        let (ws, _) = async_tungstenite::client_async(host, socket)
+        let (ws, _) = async_tungstenite::client_async(host, BufReader::new(socket))
             .await
             .map_err(|e| e.to_string())?;
 
