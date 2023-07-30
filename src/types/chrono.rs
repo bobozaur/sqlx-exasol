@@ -153,16 +153,20 @@ impl Months {
     }
 }
 
+impl From<Months> for chrono::Months {
+    fn from(value: Months) -> Self {
+        chrono::Months::new(value.0 as u32)
+    }
+}
+
 impl<Tz: TimeZone> Add<Months> for DateTime<Tz> {
     type Output = DateTime<Tz>;
 
     fn add(self, rhs: Months) -> Self::Output {
-        let months = chrono::Months::new(rhs.0 as u32);
-
         if rhs.0.is_negative() {
-            self.checked_sub_months(months).unwrap()
+            self.checked_sub_months(rhs.into()).unwrap()
         } else {
-            self.checked_add_months(months).unwrap()
+            self.checked_add_months(rhs.into()).unwrap()
         }
     }
 }
@@ -171,12 +175,10 @@ impl Add<Months> for NaiveDate {
     type Output = NaiveDate;
 
     fn add(self, rhs: Months) -> Self::Output {
-        let months = chrono::Months::new(rhs.0 as u32);
-
         if rhs.0.is_negative() {
-            self.checked_sub_months(months).unwrap()
+            self.checked_sub_months(rhs.into()).unwrap()
         } else {
-            self.checked_add_months(months).unwrap()
+            self.checked_add_months(rhs.into()).unwrap()
         }
     }
 }
@@ -185,12 +187,10 @@ impl Add<Months> for NaiveDateTime {
     type Output = NaiveDateTime;
 
     fn add(self, rhs: Months) -> Self::Output {
-        let months = chrono::Months::new(rhs.0 as u32);
-
         if rhs.0.is_negative() {
-            self.checked_sub_months(months).unwrap()
+            self.checked_sub_months(rhs.into()).unwrap()
         } else {
-            self.checked_add_months(months).unwrap()
+            self.checked_add_months(rhs.into()).unwrap()
         }
     }
 }
@@ -199,12 +199,10 @@ impl<Tz: TimeZone> Sub<Months> for DateTime<Tz> {
     type Output = DateTime<Tz>;
 
     fn sub(self, rhs: Months) -> Self::Output {
-        let months = chrono::Months::new(rhs.0 as u32);
-
         if rhs.0.is_negative() {
-            self.checked_add_months(months).unwrap()
+            self.checked_add_months(rhs.into()).unwrap()
         } else {
-            self.checked_sub_months(months).unwrap()
+            self.checked_sub_months(rhs.into()).unwrap()
         }
     }
 }
@@ -213,12 +211,10 @@ impl Sub<Months> for NaiveDate {
     type Output = NaiveDate;
 
     fn sub(self, rhs: Months) -> Self::Output {
-        let months = chrono::Months::new(rhs.0 as u32);
-
         if rhs.0.is_negative() {
-            self.checked_add_months(months).unwrap()
+            self.checked_add_months(rhs.into()).unwrap()
         } else {
-            self.checked_sub_months(months).unwrap()
+            self.checked_sub_months(rhs.into()).unwrap()
         }
     }
 }
@@ -227,12 +223,10 @@ impl Sub<Months> for NaiveDateTime {
     type Output = NaiveDateTime;
 
     fn sub(self, rhs: Months) -> Self::Output {
-        let months = chrono::Months::new(rhs.0 as u32);
-
         if rhs.0.is_negative() {
-            self.checked_add_months(months).unwrap()
+            self.checked_add_months(rhs.into()).unwrap()
         } else {
-            self.checked_sub_months(months).unwrap()
+            self.checked_sub_months(rhs.into()).unwrap()
         }
     }
 }
@@ -251,9 +245,12 @@ impl Encode<'_, Exasol> for Months {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         let date = NaiveDate::default();
         let date_with_months = NaiveDate::default() + *self;
+
         let years = date_with_months.year() - date.year();
         let months = date_with_months.month() - date.month();
+
         buf.push([json!(format_args!("{}-{}", years, months))]);
+        
         IsNull::No
     }
 }

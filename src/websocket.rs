@@ -210,6 +210,10 @@ impl ExaWebSocket {
         Ok(Cow::Owned(prepared))
     }
 
+    pub(crate) async fn get_hosts(&mut self) -> Result<Vec<String>, String> {
+        todo!()
+    }
+
     pub(crate) async fn login(&mut self, mut opts: ExaConnectOptionsRef<'_>) -> Result<(), String> {
         match &mut opts.login {
             LoginRef::Credentials(creds) => {
