@@ -155,7 +155,7 @@ impl Months {
 
 impl From<Months> for chrono::Months {
     fn from(value: Months) -> Self {
-        chrono::Months::new(value.0 as u32)
+        chrono::Months::new(value.0.unsigned_abs())
     }
 }
 
@@ -243,14 +243,11 @@ impl Type<Exasol> for Months {
 
 impl Encode<'_, Exasol> for Months {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let date = NaiveDate::default();
-        let date_with_months = NaiveDate::default() + *self;
-
-        let years = date_with_months.year() - date.year();
-        let months = date_with_months.month() - date.month();
+        let years = self.0 / 12;
+        let months = self.0 % 12;
 
         buf.push([json!(format_args!("{}-{}", years, months))]);
-        
+
         IsNull::No
     }
 }
@@ -264,7 +261,7 @@ impl<'r> Decode<'r, Exasol> for Months {
 
         let years = years.parse::<i32>().map_err(Box::new)?;
         let months = months.parse::<i32>().map_err(Box::new)?;
-
+        
         let total_months = match years.is_negative() {
             true => years * 12 - months,
             false => years * 12 + months,
