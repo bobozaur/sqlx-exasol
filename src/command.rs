@@ -15,10 +15,11 @@ pub enum Command<'a> {
     Login(LoginInfo),
     LoginToken(LoginInfo),
     GetHosts(GetHosts),
-    Execute(SqlText<'a>),
+    Execute(Sql<'a>),
+    ExecuteBatch(BatchSql<'a>),
     Fetch(Fetch),
     CloseResultSet(CloseResultSet),
-    CreatePreparedStatement(SqlText<'a>),
+    CreatePreparedStatement(Sql<'a>),
     ExecutePreparedStatement(ExecutePreparedStmt<'a>),
     ClosePreparedStatement(ClosePreparedStmt),
 }
@@ -55,13 +56,25 @@ pub struct GetHosts {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SqlText<'a> {
+pub struct Sql<'a> {
     sql_text: &'a str,
 }
 
-impl<'a> SqlText<'a> {
+impl<'a> Sql<'a> {
     pub fn new(sql: &'a str) -> Self {
         Self { sql_text: sql }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchSql<'a> {
+    sql_texts: Vec<&'a str>,
+}
+
+impl<'a> BatchSql<'a> {
+    pub fn new(sql: Vec<&'a str>) -> Self {
+        Self { sql_texts: sql }
     }
 }
 

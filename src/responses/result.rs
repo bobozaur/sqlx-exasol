@@ -8,16 +8,6 @@ use crate::column::{ExaColumn, ExaColumns};
 use super::fetched::DataChunk;
 
 /// Struct used for deserialization of the JSON
-/// returned after executing one or more queries
-/// Represents the collection of results from all queries.
-#[allow(unused)]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StmtResult {
-    pub(crate) results: [QueryResult; 1],
-}
-
-/// Struct used for deserialization of the JSON
 /// returned sending queries to the database.
 /// Represents the result of one query.
 #[allow(non_snake_case)]

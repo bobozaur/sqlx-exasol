@@ -167,15 +167,9 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            // Use a single transaction for the actual migration script and the essential bookeeping so we never
-            // execute migrations twice. See https://github.com/launchbadge/sqlx/issues/1966.
-            // The `execution_time` however can only be measured for the whole transaction. This value _only_ exists for
-            // data lineage and debugging reasons, so it is not super important if it is lost. So we initialize it to -1
-            // and update it once the actual transaction completed.
             let _ = tx.execute(&*migration.sql).await?;
             let checksum = hex::encode(&*migration.checksum);
 
-            // language=SQL
             let _ = query(
                 r#"
     INSERT INTO _sqlx_migrations ( version, description, success, checksum, execution_time )
@@ -189,10 +183,6 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             .await?;
 
             tx.commit().await?;
-
-            // Update `elapsed_time`.
-            // NOTE: The process may disconnect/die at this point, so the elapsed time value might be lost. We accept
-            //       this small risk since this value is not super important.
 
             let elapsed = start.elapsed();
 
@@ -211,8 +201,6 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
         migration: &'m Migration,
     ) -> BoxFuture<'m, Result<Duration, MigrateError>> {
         Box::pin(async move {
-            // Use a single transaction for the actual migration script and the essential bookeeping so we never
-            // execute migrations twice. See https://github.com/launchbadge/sqlx/issues/1966.
             let mut tx = self.begin().await?;
             let start = Instant::now();
 

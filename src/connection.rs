@@ -16,7 +16,7 @@ use futures_util::{Future, TryStreamExt};
 
 use crate::{
     arguments::ExaArguments,
-    command::{Command, ExecutePreparedStmt, Fetch, SqlText},
+    command::{BatchSql, Command, ExecutePreparedStmt, Fetch, Sql},
     database::Exasol,
     options::ExaConnectOptions,
     responses::{fetched::DataChunk, prepared_stmt::PreparedStatement},
@@ -70,12 +70,29 @@ impl ExaConnection {
         Ok(con)
     }
 
+    #[cfg(feature = "migrate")]
     pub(crate) async fn begin_transaction(&mut self) -> Result<(), String> {
         self.ws.begin().await
     }
 
+    #[cfg(feature = "migrate")]
     pub(crate) async fn rollback_transaction(&mut self) -> Result<(), String> {
         self.ws.rollback().await
+    }
+
+    #[cfg(feature = "migrate")]
+    pub(crate) async fn commit_transaction(&mut self) -> Result<(), String> {
+        self.ws.commit().await
+    }
+
+    #[cfg(feature = "migrate")]
+    pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), String> {
+        let sql = sql.trim_end();
+        let sql = sql.strip_suffix(';').unwrap_or(sql);
+
+        let command = BatchSql::new(sql.split(';').collect());
+
+        todo!()
     }
 
     async fn execute_query<'a, C, F>(
@@ -132,7 +149,7 @@ impl ExaConnection {
         C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
-        let command = Command::Execute(SqlText::new(sql));
+        let command = Command::Execute(Sql::new(sql));
         self.ws
             .get_results_stream(command, &mut self.last_rs_handle, fetcher_maker)
             .await
@@ -269,7 +286,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
     {
         Box::pin(async move {
-            let command = SqlText::new(sql);
+            let command = Sql::new(sql);
             let PreparedStatement {
                 statement_handle,
                 columns,

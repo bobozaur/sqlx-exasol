@@ -8,15 +8,15 @@ use crate::options::ProtocolVersion;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginInfo {
-    protocol_version: ProtocolVersion,
-    session_id: u64,
-    release_version: String,
-    database_name: String,
-    product_name: String,
-    max_data_message_size: u64,
-    max_identifier_length: u64,
-    max_varchar_length: u64,
-    identifier_quote_string: String,
-    time_zone: String,
-    time_zone_behavior: String,
+    pub protocol_version: ProtocolVersion,
+    pub session_id: u64,
+    pub release_version: String,
+    pub database_name: String,
+    pub product_name: String,
+    pub max_data_message_size: u64,
+    pub max_identifier_length: u64,
+    pub max_varchar_length: u64,
+    pub identifier_quote_string: String,
+    pub time_zone: String,
+    pub time_zone_behavior: String,
 }

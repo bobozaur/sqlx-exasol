@@ -1,16 +1,18 @@
 mod error;
 pub(crate) mod fetched;
-mod hosts;
 mod login_info;
 pub(crate) mod prepared_stmt;
-mod pub_key;
 pub(crate) mod result;
 
+use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde_json::Value;
+
+use crate::{column::ExaColumns, options::ProtocolVersion};
 
 use self::{
-    fetched::DataChunk, hosts::Hosts, login_info::LoginInfo, prepared_stmt::PreparedStatement,
-    pub_key::PublicKey, result::StmtResult,
+    fetched::DataChunk, login_info::LoginInfo, prepared_stmt::PreparedStatement,
+    result::QueryResult,
 };
 
 pub use error::DatabaseError;
@@ -35,22 +37,148 @@ pub enum Response {
     },
 }
 
-/// This is the `responseData` field of the JSON response.
-/// Because all `ok` responses are returned through this
-/// with no specific identifier between them
-/// we have to use untagged deserialization.
-///
-/// As a result, the order of the enum variants matters,
-/// as deserialization has to be non-overlapping yet exhaustive.
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
-pub enum ResponseData {
-    PreparedStatement(PreparedStatement),
-    Results(StmtResult),
-    FetchedData(DataChunk),
-    Hosts(Hosts),
-    LoginInfo(LoginInfo),
-    PublicKey(PublicKey),
+#[serde(rename_all = "camelCase")]
+pub struct ResponseData {
+    statement_handle: Option<u16>,
+    parameter_data: Option<Parameters>,
+    results: Option<[QueryResult; 1]>,
+    num_rows: Option<usize>,
+    data: Option<Vec<Vec<Value>>>,
+    nodes: Option<Vec<String>>,
+    protocol_version: Option<ProtocolVersion>,
+    session_id: Option<u64>,
+    release_version: Option<String>,
+    database_name: Option<String>,
+    product_name: Option<String>,
+    max_data_message_size: Option<u64>,
+    max_identifier_length: Option<u64>,
+    max_varchar_length: Option<u64>,
+    identifier_quote_string: Option<String>,
+    time_zone: Option<String>,
+    time_zone_behavior: Option<String>,
+    public_key_pem: Option<String>,
+}
+
+impl TryFrom<ResponseData> for PreparedStatement {
+    type Error = String;
+
+    fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
+        match (value.statement_handle, value.parameter_data) {
+            (Some(statement_handle), parameter_data) => {
+                let columns = match parameter_data {
+                    Some(Parameters { columns }) => columns.0,
+                    None => Vec::new().into(),
+                };
+
+                let prepared_stmt = Self {
+                    statement_handle,
+                    columns,
+                };
+
+                Ok(prepared_stmt)
+            }
+            _ => Err("can't convert to prepared statement".to_owned()),
+        }
+    }
+}
+
+impl TryFrom<ResponseData> for QueryResult {
+    type Error = String;
+
+    fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
+        value
+            .results
+            .map(|i| i.into_iter().next().unwrap())
+            .ok_or_else(|| "can't convert to query result".to_owned())
+    }
+}
+
+impl TryFrom<ResponseData> for DataChunk {
+    type Error = String;
+
+    fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
+        match (value.num_rows, value.data) {
+            (Some(num_rows), Some(data)) => Ok(DataChunk { num_rows, data }),
+            _ => Err("can't convert to data chunk".to_owned()),
+        }
+    }
+}
+
+impl TryFrom<ResponseData> for Vec<String> {
+    type Error = String;
+
+    fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
+        value
+            .nodes
+            .ok_or_else(|| "can't convert to hosts".to_owned())
+    }
+}
+
+impl TryFrom<ResponseData> for LoginInfo {
+    type Error = String;
+
+    fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
+        match (
+            value.protocol_version,
+            value.session_id,
+            value.release_version,
+            value.database_name,
+            value.product_name,
+            value.max_data_message_size,
+            value.max_identifier_length,
+            value.max_varchar_length,
+            value.identifier_quote_string,
+            value.time_zone,
+            value.time_zone_behavior,
+        ) {
+            (
+                Some(protocol_version),
+                Some(session_id),
+                Some(release_version),
+                Some(database_name),
+                Some(product_name),
+                Some(max_data_message_size),
+                Some(max_identifier_length),
+                Some(max_varchar_length),
+                Some(identifier_quote_string),
+                Some(time_zone),
+                Some(time_zone_behavior),
+            ) => Ok(LoginInfo {
+                protocol_version,
+                session_id,
+                release_version,
+                database_name,
+                product_name,
+                max_data_message_size,
+                max_identifier_length,
+                max_varchar_length,
+                identifier_quote_string,
+                time_zone,
+                time_zone_behavior,
+            }),
+            _ => Err("can't conver to login info".to_owned()),
+        }
+    }
+}
+
+impl TryFrom<ResponseData> for RsaPublicKey {
+    type Error = String;
+
+    fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
+        let public_key = value
+            .public_key_pem
+            .as_ref()
+            .ok_or_else(|| "can't convert to public key".to_owned())?;
+
+        RsaPublicKey::from_pkcs1_pem(public_key).map_err(|e| e.to_string())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Parameters {
+    pub(crate) columns: ExaColumns,
 }
 
 /// Struct representing attributes returned from Exasol.

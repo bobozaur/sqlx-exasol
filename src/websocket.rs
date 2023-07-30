@@ -4,16 +4,14 @@ use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{Future, SinkExt, StreamExt};
 use lru::LruCache;
-use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
+use rsa::RsaPublicKey;
 use sqlx_core::{
     bytes::BufMut,
     net::{Socket, WithSocket},
 };
 
 use crate::{
-    command::{
-        ClosePreparedStmt, CloseResultSet, Command, Fetch, LoginInfo, SetAttributes, SqlText,
-    },
+    command::{ClosePreparedStmt, CloseResultSet, Command, Fetch, LoginInfo, SetAttributes, Sql},
     options::{
         login::{CredentialsRef, LoginRef},
         ExaConnectOptionsRef, ProtocolVersion,
@@ -97,11 +95,7 @@ impl ExaWebSocket {
 
     pub async fn get_results(&mut self, command: Command<'_>) -> Result<QueryResult, String> {
         let resp_data = self.get_resp_data(command).await?;
-
-        match resp_data {
-            ResponseData::Results(r) => Ok(r.results.into_iter().next().unwrap()),
-            _ => Err("Expected results response".to_owned()),
-        }
+        QueryResult::try_from(resp_data)
     }
 
     pub async fn close_result_set(&mut self, handle: u16) -> Result<(), String> {
@@ -115,13 +109,7 @@ impl ExaWebSocket {
         command: Command<'_>,
     ) -> Result<PreparedStatement, String> {
         let resp_data = self.get_resp_data(command).await?;
-
-        match resp_data {
-            ResponseData::PreparedStatement(p) => Ok(p),
-            _ => Err(format!(
-                "Expected prepared statement response, found {resp_data:?}"
-            )),
-        }
+        PreparedStatement::try_from(resp_data)
     }
 
     pub async fn close_prepared(&mut self, handle: u16) -> Result<(), String> {
@@ -135,11 +123,7 @@ impl ExaWebSocket {
         fetch_cmd: Fetch,
     ) -> Result<(DataChunk, &mut Self), String> {
         let resp_data = self.get_resp_data(Command::Fetch(fetch_cmd)).await?;
-
-        match resp_data {
-            ResponseData::FetchedData(f) => Ok((f, self)),
-            _ => Err("Expected fetched data response".to_owned()),
-        }
+        DataChunk::try_from(resp_data).map(|c| (c, self))
     }
 
     pub async fn set_attributes(&mut self) -> Result<(), String> {
@@ -164,15 +148,14 @@ impl ExaWebSocket {
     }
 
     pub async fn commit(&mut self) -> Result<(), String> {
-        self.send_cmd(Command::Execute(SqlText::new("COMMIT;")))
-            .await?;
+        self.send_cmd(Command::Execute(Sql::new("COMMIT;"))).await?;
         self.attributes.autocommit = Some(true);
         self.set_attributes().await?;
         Ok(())
     }
 
     pub async fn rollback(&mut self) -> Result<(), String> {
-        self.send_cmd(Command::Execute(SqlText::new("ROLLBACK;")))
+        self.send_cmd(Command::Execute(Sql::new("ROLLBACK;")))
             .await?;
         self.attributes.autocommit = Some(true);
         self.set_attributes().await?;
@@ -211,7 +194,7 @@ impl ExaWebSocket {
             return Ok(Cow::Borrowed(cache.get(sql).unwrap()));
         }
 
-        let command = SqlText::new(sql);
+        let command = Sql::new(sql);
         let prepared = self
             .create_prepared(Command::CreatePreparedStatement(command))
             .await?;
@@ -265,13 +248,7 @@ impl ExaWebSocket {
     ) -> Result<RsaPublicKey, String> {
         let command = Command::Login(LoginInfo::new(protocol_version));
         let resp_data = self.get_resp_data(command).await?;
-
-        match resp_data {
-            ResponseData::PublicKey(key) => {
-                RsaPublicKey::from_pkcs1_pem(&key.public_key_pem).map_err(|e| e.to_string())
-            }
-            _ => Err("Expected public key response".to_owned()),
-        }
+        RsaPublicKey::try_from(resp_data)
     }
 
     async fn get_resp_data(&mut self, command: Command<'_>) -> Result<ResponseData, String> {
