@@ -3,12 +3,16 @@ use std::net::IpAddr;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{column::ExaColumn, options::ProtocolVersion, responses::ExaAttributes};
+use crate::{
+    column::ExaColumn,
+    options::{ExaConnectOptionsRef, ProtocolVersion},
+    responses::ExaAttributes,
+};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "command")]
-pub enum Command<'a> {
+pub(crate) enum ExaCommand<'a> {
     Disconnect,
     GetAttributes,
     SetAttributes(SetAttributes<'a>),
@@ -25,103 +29,169 @@ pub enum Command<'a> {
     ExecuteBatch(BatchSql<'a>),
 }
 
+impl<'a> ExaCommand<'a> {
+    pub fn new_set_attributes(attributes: &'a ExaAttributes) -> Self {
+        Self::SetAttributes(SetAttributes { attributes })
+    }
+
+    pub fn new_login(protocol_version: ProtocolVersion) -> Self {
+        Self::Login(LoginInfo { protocol_version })
+    }
+
+    pub fn new_login_token(protocol_version: ProtocolVersion) -> Self {
+        Self::LoginToken(LoginInfo { protocol_version })
+    }
+
+    pub fn new_get_hosts(host_ip: IpAddr) -> Self {
+        Self::GetHosts(GetHosts { host_ip })
+    }
+
+    pub fn new_execute(sql: &'a str, attributes: &'a ExaAttributes) -> Self {
+        Self::Execute(Sql {
+            attributes: Some(attributes),
+            sql_text: sql,
+        })
+    }
+
+    pub fn new_fetch(result_set_handle: u16, start_position: usize, num_bytes: usize) -> Self {
+        Self::Fetch(Fetch {
+            result_set_handle,
+            start_position,
+            num_bytes,
+        })
+    }
+
+    pub fn new_close_result(handle: u16) -> Self {
+        Self::CloseResultSet(CloseResultSet {
+            result_set_handles: [handle],
+        })
+    }
+
+    pub fn new_create_prepared(sql: &'a str) -> Self {
+        Self::CreatePreparedStatement(Sql {
+            attributes: None,
+            sql_text: sql,
+        })
+    }
+
+    pub fn new_execute_prepared(
+        handle: u16,
+        columns: &'a [ExaColumn],
+        data: Vec<[Value; 1]>,
+        attributes: &'a ExaAttributes,
+    ) -> Self {
+        Self::ExecutePreparedStatement(ExecutePreparedStmt::new(handle, columns, data, attributes))
+    }
+
+    pub fn new_close_prepared(handle: u16) -> Self {
+        Self::ClosePreparedStatement(ClosePreparedStmt {
+            statement_handle: handle,
+        })
+    }
+
+    #[cfg(feature = "migrate")]
+    pub fn new_execute_batch(sql_batch: Vec<&'a str>, attributes: &'a ExaAttributes) -> Self {
+        Self::ExecuteBatch(BatchSql {
+            attributes,
+            sql_texts: sql_batch,
+        })
+    }
+}
+
+/// Represents a serialized command, ready to be sent to the server.
+// We use this wrapper so that we can serialize the command (which would happen anyway) 
+// and get rid of lifetimes and borrow checker conflicts sooner.
+//
+// The wrapper ensures that the only ways of creating a command
+// is through the implemented conversions.
+#[derive(Debug)]
+pub struct Command(String);
+
+impl Command {
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl<'a> TryFrom<ExaCommand<'a>> for Command {
+    type Error = String;
+
+    fn try_from(value: ExaCommand<'a>) -> Result<Self, Self::Error> {
+        serde_json::to_string(&value)
+            .map_err(|e| e.to_string())
+            .map(Self)
+    }
+}
+
+impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for Command {
+    type Error = String;
+
+    fn try_from(value: &'a ExaConnectOptionsRef<'a>) -> Result<Self, Self::Error> {
+        serde_json::to_string(value)
+            .map_err(|e| e.to_string())
+            .map(Self)
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SetAttributes<'a> {
+pub(crate) struct SetAttributes<'a> {
     attributes: &'a ExaAttributes,
 }
 
-impl<'a> SetAttributes<'a> {
-    pub fn new(attributes: &'a ExaAttributes) -> Self {
-        Self { attributes }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LoginInfo {
+pub(crate) struct LoginInfo {
     protocol_version: ProtocolVersion,
 }
 
-impl LoginInfo {
-    pub fn new(protocol_version: ProtocolVersion) -> Self {
-        Self { protocol_version }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetHosts {
+pub(crate) struct GetHosts {
     host_ip: IpAddr,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Sql<'a> {
+pub(crate) struct Sql<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attributes: Option<&'a ExaAttributes>,
     sql_text: &'a str,
 }
 
-impl<'a> Sql<'a> {
-    pub fn new(sql: &'a str) -> Self {
-        Self { sql_text: sql }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BatchSql<'a> {
+pub(crate) struct BatchSql<'a> {
+    attributes: &'a ExaAttributes,
     sql_texts: Vec<&'a str>,
 }
 
-impl<'a> BatchSql<'a> {
-    pub fn new(sql: Vec<&'a str>) -> Self {
-        Self { sql_texts: sql }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SqlBatch {
+pub(crate) struct SqlBatch {
     sql_texts: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Fetch {
+pub(crate) struct Fetch {
     result_set_handle: u16,
     start_position: usize,
     num_bytes: usize,
 }
 
-impl Fetch {
-    pub fn new(result_set_handle: u16, start_position: usize, num_bytes: usize) -> Self {
-        Self {
-            result_set_handle,
-            start_position,
-            num_bytes,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CloseResultSet {
+pub(crate) struct CloseResultSet {
     result_set_handles: [u16; 1],
 }
 
-impl CloseResultSet {
-    pub fn new(handle: u16) -> Self {
-        Self {
-            result_set_handles: [handle],
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExecutePreparedStmt<'a> {
+pub(crate) struct ExecutePreparedStmt<'a> {
+    attributes: &'a ExaAttributes,
     statement_handle: u16,
-    num_columns: u8,
+    num_columns: usize,
     num_rows: u8,
     #[serde(skip_serializing_if = "Self::has_no_columns")]
     columns: &'a [ExaColumn],
@@ -130,10 +200,16 @@ pub struct ExecutePreparedStmt<'a> {
 }
 
 impl<'a> ExecutePreparedStmt<'a> {
-    pub fn new(handle: u16, columns: &'a [ExaColumn], data: Vec<[Value; 1]>) -> Self {
+    fn new(
+        handle: u16,
+        columns: &'a [ExaColumn],
+        data: Vec<[Value; 1]>,
+        attributes: &'a ExaAttributes,
+    ) -> Self {
         Self {
+            attributes,
             statement_handle: handle,
-            num_columns: columns.len() as u8,
+            num_columns: columns.len(),
             num_rows: (!data.is_empty()).into(),
             columns,
             data,
@@ -147,14 +223,6 @@ impl<'a> ExecutePreparedStmt<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClosePreparedStmt {
+pub(crate) struct ClosePreparedStmt {
     statement_handle: u16,
-}
-
-impl ClosePreparedStmt {
-    pub fn new(handle: u16) -> Self {
-        Self {
-            statement_handle: handle,
-        }
-    }
 }

@@ -16,7 +16,7 @@ use futures_util::{Future, TryStreamExt};
 
 use crate::{
     arguments::ExaArguments,
-    command::{Command, ExecutePreparedStmt, Fetch, Sql},
+    command::{Command, ExaCommand},
     database::Exasol,
     options::ExaConnectOptions,
     responses::{fetched::DataChunk, prepared_stmt::PreparedStatement, ExaAttributes},
@@ -97,7 +97,7 @@ impl ExaConnection {
         fetcher_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
-        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        C: FnMut(&'a mut ExaWebSocket, Command) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
         match arguments {
@@ -117,7 +117,7 @@ impl ExaConnection {
         fetcher_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
-        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        C: FnMut(&'a mut ExaWebSocket, Command) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
         let prepared = self
@@ -125,12 +125,16 @@ impl ExaConnection {
             .get_or_prepare(&mut self.statement_cache, sql, persist)
             .await?;
 
-        let exec_prepared =
-            ExecutePreparedStmt::new(prepared.statement_handle, &prepared.columns, args.0);
-        let command = Command::ExecutePreparedStatement(exec_prepared);
+        let cmd = ExaCommand::new_execute_prepared(
+            prepared.statement_handle,
+            &prepared.columns,
+            args.0,
+            &self.ws.attributes,
+        )
+        .try_into()?;
 
         self.ws
-            .get_results_stream(command, &mut self.last_rs_handle, fetcher_maker)
+            .get_results_stream(cmd, &mut self.last_rs_handle, fetcher_maker)
             .await
     }
 
@@ -140,12 +144,12 @@ impl ExaConnection {
         fetcher_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, String>
     where
-        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        C: FnMut(&'a mut ExaWebSocket, Command) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
-        let command = Command::Execute(Sql::new(sql));
+        let cmd = ExaCommand::new_execute(sql, &self.ws.attributes).try_into()?;
         self.ws
-            .get_results_stream(command, &mut self.last_rs_handle, fetcher_maker)
+            .get_results_stream(cmd, &mut self.last_rs_handle, fetcher_maker)
             .await
     }
 }
@@ -280,13 +284,16 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
     {
         Box::pin(async move {
-            let command = Sql::new(sql);
+            let cmd = ExaCommand::new_create_prepared(sql)
+                .try_into()
+                .map_err(SqlxError::Protocol)?;
+
             let PreparedStatement {
                 statement_handle,
                 columns,
             } = self
                 .ws
-                .create_prepared(Command::CreatePreparedStatement(command))
+                .create_prepared(cmd)
                 .await
                 .map_err(SqlxError::Protocol)?;
 

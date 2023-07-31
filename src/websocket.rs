@@ -11,7 +11,7 @@ use sqlx_core::{
 };
 
 use crate::{
-    command::{ClosePreparedStmt, CloseResultSet, Command, Fetch, LoginInfo, SetAttributes, Sql},
+    command::{Command, ExaCommand},
     options::{
         login::{CredentialsRef, LoginRef},
         ExaConnectOptionsRef, ProtocolVersion,
@@ -67,96 +67,108 @@ impl ExaWebSocket {
         Ok(ws)
     }
 
-    pub async fn get_results_stream<'a, C, F>(
+    pub(crate) async fn get_results_stream<'a, C, F>(
         &'a mut self,
-        command: Command<'_>,
+        cmd: Command,
         rs_handle: &mut Option<u16>,
         fetcher_maker: C,
     ) -> Result<QueryResultStream<'_, C, F>, String>
     where
-        C: FnMut(&'a mut ExaWebSocket, Fetch) -> F,
+        C: FnMut(&'a mut ExaWebSocket, Command) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
     {
         if let Some(handle) = rs_handle {
             self.close_result_set(*handle).await?;
         }
 
-        let query_result = self.get_results(command).await?;
+        let query_result = self.get_results(cmd).await?;
         std::mem::swap(rs_handle, &mut query_result.handle());
 
         QueryResultStream::new(self, query_result, fetcher_maker)
     }
 
-    pub async fn get_results(&mut self, command: Command<'_>) -> Result<QueryResult, String> {
-        let resp_data = self.get_resp_data(command).await?;
+    pub(crate) async fn get_results(&mut self, cmd: Command) -> Result<QueryResult, String> {
+        let resp_data = self.get_resp_data(cmd).await?;
         QueryResult::try_from(resp_data)
     }
 
-    pub async fn close_result_set(&mut self, handle: u16) -> Result<(), String> {
-        let command = Command::CloseResultSet(CloseResultSet::new(handle));
-        self.send_cmd(command).await?;
+    pub(crate) async fn close_result_set(&mut self, handle: u16) -> Result<(), String> {
+        let cmd = ExaCommand::new_close_result(handle).try_into()?;
+        self.send_cmd(cmd).await?;
         Ok(())
     }
 
-    pub async fn create_prepared(
+    pub(crate) async fn create_prepared(
         &mut self,
-        command: Command<'_>,
+        cmd: Command,
     ) -> Result<PreparedStatement, String> {
-        let resp_data = self.get_resp_data(command).await?;
+        let resp_data = self.get_resp_data(cmd).await?;
         PreparedStatement::try_from(resp_data)
     }
 
-    pub async fn close_prepared(&mut self, handle: u16) -> Result<(), String> {
-        let command = Command::ClosePreparedStatement(ClosePreparedStmt::new(handle));
-        self.send_cmd(command).await?;
+    pub(crate) async fn close_prepared(&mut self, handle: u16) -> Result<(), String> {
+        let cmd = ExaCommand::new_close_prepared(handle).try_into()?;
+        self.send_cmd(cmd).await?;
         Ok(())
     }
 
-    pub async fn fetch_chunk(
+    pub(crate) async fn fetch_chunk(
         &mut self,
-        fetch_cmd: Fetch,
+        cmd: Command,
     ) -> Result<(DataChunk, &mut Self), String> {
-        let resp_data = self.get_resp_data(Command::Fetch(fetch_cmd)).await?;
+        let resp_data = self.get_resp_data(cmd).await?;
         DataChunk::try_from(resp_data).map(|c| (c, self))
     }
 
-    pub async fn set_attributes(&mut self) -> Result<(), String> {
-        let command = Command::SetAttributes(SetAttributes::new(&self.attributes));
-        let str_cmd = serde_json::to_string(&command).map_err(|e| e.to_string())?;
-        self.send_raw_cmd(str_cmd).await?;
+    #[allow(dead_code)]
+    pub(crate) async fn set_attributes(&mut self) -> Result<(), String> {
+        let cmd = ExaCommand::new_set_attributes(&self.attributes).try_into()?;
+        self.send_cmd(cmd).await?;
+
         Ok(())
     }
 
-    pub async fn get_attributes(&mut self) -> Result<(), String> {
-        self.send_cmd(Command::GetAttributes).await?;
+    pub(crate) async fn get_attributes(&mut self) -> Result<(), String> {
+        let cmd = ExaCommand::GetAttributes.try_into()?;
+        self.send_cmd(cmd).await?;
         Ok(())
     }
 
-    pub async fn begin(&mut self) -> Result<(), String> {
+    pub(crate) async fn begin(&mut self) -> Result<(), String> {
+        // Exasol does not have nested transactions.
         if self.attributes.open_transaction {
             return Err("Transaction already open!".to_owned());
         }
 
+        // The next time a query is executed, the transaction will be started.
+        // We could eagerly start it as well, but that implies one more
+        // round-trip to the server and back with no benefit.
         self.attributes.autocommit = false;
-        self.set_attributes().await
-    }
-
-    pub async fn commit(&mut self) -> Result<(), String> {
-        self.send_cmd(Command::Execute(Sql::new("COMMIT;"))).await?;
-        self.attributes.autocommit = true;
-        self.set_attributes().await?;
         Ok(())
     }
 
-    pub async fn rollback(&mut self) -> Result<(), String> {
-        self.send_cmd(Command::Execute(Sql::new("ROLLBACK;")))
-            .await?;
+    pub(crate) async fn commit(&mut self) -> Result<(), String> {
         self.attributes.autocommit = true;
-        self.set_attributes().await?;
+
+        // Just changing `autocommit` attribute implies a COMMIT,
+        // but we would still have to send a command to the server
+        // to update it, so we might as well be explicit.
+        let cmd = ExaCommand::new_execute("COMMIT;", &self.attributes).try_into()?;
+        self.send_cmd(cmd).await?;
+
         Ok(())
     }
 
-    pub async fn ping(&mut self) -> Result<(), String> {
+    pub(crate) async fn rollback(&mut self) -> Result<(), String> {
+        self.attributes.autocommit = true;
+
+        let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
+        self.send_cmd(cmd).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn ping(&mut self) -> Result<(), String> {
         self.ws
             .send(Message::Ping(Vec::new()))
             .await
@@ -165,17 +177,18 @@ impl ExaWebSocket {
         Ok(())
     }
 
-    pub async fn disconnect(&mut self) -> Result<(), String> {
-        self.send_cmd(Command::Disconnect).await?;
+    pub(crate) async fn disconnect(&mut self) -> Result<(), String> {
+        let cmd = ExaCommand::Disconnect.try_into()?;
+        self.send_cmd(cmd).await?;
         Ok(())
     }
 
-    pub async fn close(&mut self) -> Result<(), String> {
+    pub(crate) async fn close(&mut self) -> Result<(), String> {
         self.ws.close(None).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    pub async fn get_or_prepare<'a>(
+    pub(crate) async fn get_or_prepare<'a>(
         &mut self,
         cache: &'a mut LruCache<String, PreparedStatement>,
         sql: &str,
@@ -188,10 +201,8 @@ impl ExaWebSocket {
             return Ok(Cow::Borrowed(cache.get(sql).unwrap()));
         }
 
-        let command = Sql::new(sql);
-        let prepared = self
-            .create_prepared(Command::CreatePreparedStatement(command))
-            .await?;
+        let cmd = ExaCommand::new_create_prepared(sql).try_into()?;
+        let prepared = self.create_prepared(cmd).await?;
 
         if persist {
             if let Some(old) = cache.put(sql.to_owned(), prepared) {
@@ -213,21 +224,20 @@ impl ExaWebSocket {
             _ => self.start_login_token(opts.protocol_version).await?,
         }
 
-        let str_cmd = serde_json::to_string(&opts).map_err(|e| e.to_string())?;
-        self.send_raw_cmd(str_cmd).await?;
+        let cmd = (&opts).try_into()?;
+        self.send_cmd(cmd).await?;
         Ok(())
     }
 
     #[cfg(feature = "migrate")]
     pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), String> {
-        use crate::command::BatchSql;
-
         let sql = sql.trim_end();
         let sql = sql.strip_suffix(';').unwrap_or(sql);
 
-        let command = BatchSql::new(sql.split(';').collect());
+        let sql_batch = sql.split(';').collect();
+        let cmd = ExaCommand::new_execute_batch(sql_batch, &self.attributes).try_into()?;
 
-        if self.send_cmd(Command::ExecuteBatch(command)).await.is_ok() {
+        if self.send_cmd(cmd).await.is_ok() {
             return Ok(());
         }
 
@@ -237,10 +247,9 @@ impl ExaWebSocket {
 
         while let Some(sql_end) = sql[position..].find(';') {
             let sql = &sql[sql_start..sql_end];
-            let command = Sql::new(sql);
-            let command = Command::Execute(command);
+            let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
 
-            if let Err(_e) = self.send_cmd(command).await {
+            if let Err(_e) = self.send_cmd(cmd).await {
                 position = sql.len();
                 // TODO: match on e after proper error handling
             } else {
@@ -265,8 +274,8 @@ impl ExaWebSocket {
     }
 
     async fn start_login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), String> {
-        let command = Command::LoginToken(LoginInfo::new(protocol_version));
-        self.send_cmd(command).await?;
+        let cmd = ExaCommand::new_login_token(protocol_version).try_into()?;
+        self.send_cmd(cmd).await?;
         Ok(())
     }
 
@@ -274,28 +283,26 @@ impl ExaWebSocket {
         &mut self,
         protocol_version: ProtocolVersion,
     ) -> Result<RsaPublicKey, String> {
-        let command = Command::Login(LoginInfo::new(protocol_version));
-        let resp_data = self.get_resp_data(command).await?;
+        let cmd = ExaCommand::new_login(protocol_version).try_into()?;
+        let resp_data = self.get_resp_data(cmd).await?;
         RsaPublicKey::try_from(resp_data)
     }
 
-    async fn get_resp_data(&mut self, command: Command<'_>) -> Result<ResponseData, String> {
-        self.send_cmd(command)
+    async fn get_resp_data(&mut self, cmd: Command) -> Result<ResponseData, String> {
+        self.send_cmd(cmd)
             .await?
             .ok_or_else(|| "No response data received".to_owned())
     }
 
-    async fn send_cmd(&mut self, command: Command<'_>) -> Result<Option<ResponseData>, String> {
-        let str_cmd = serde_json::to_string(&command).map_err(|e| e.to_string())?;
-        self.send_raw_cmd(str_cmd).await
-    }
+    async fn send_cmd(&mut self, cmd: Command) -> Result<Option<ResponseData>, String> {
+        let cmd = cmd.into_inner();
+        tracing::trace!("Sending command to database: {cmd}");
 
-    async fn send_raw_cmd(&mut self, str_cmd: String) -> Result<Option<ResponseData>, String> {
         #[allow(unreachable_patterns)]
         let response = match self.attributes.compression_enabled {
-            false => self.send_uncompressed_cmd(str_cmd.clone()).await?,
+            false => self.send_uncompressed_cmd(cmd).await?,
             #[cfg(feature = "flate2")]
-            true => self.send_compressed_cmd(str_cmd.clone()).await?,
+            true => self.send_compressed_cmd(cmd).await?,
             _ => return Err("feature 'flate2' must be enabled to use compression".to_owned()),
         };
 
@@ -304,19 +311,20 @@ impl ExaWebSocket {
                 response_data,
                 attributes,
             } => (response_data, attributes),
-            Response::Error { exception } => return Err(format!("{str_cmd}-{exception}")),
+            Response::Error { exception } => return Err(exception.to_string()),
         };
 
         if let Some(attributes) = attributes {
+            tracing::trace!("Updating connection attributes using: {attributes:?}");
             self.attributes.update(attributes)
         }
 
         Ok(response_data)
     }
 
-    async fn send_uncompressed_cmd(&mut self, str_cmd: String) -> Result<Response, String> {
+    async fn send_uncompressed_cmd(&mut self, cmd: String) -> Result<Response, String> {
         self.ws
-            .send(Message::Text(str_cmd))
+            .send(Message::Text(cmd))
             .await
             .map_err(|e| format!("Error sending: {e}"))?;
 
@@ -335,21 +343,21 @@ impl ExaWebSocket {
     }
 
     #[cfg(feature = "flate2")]
-    async fn send_compressed_cmd(&mut self, msg_string: String) -> Result<Response, String> {
+    async fn send_compressed_cmd(&mut self, cmd: String) -> Result<Response, String> {
         use std::io::Write;
 
         use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
 
-        let msg = msg_string.as_bytes();
-        let mut buf = Vec::new();
-        let mut enc = ZlibEncoder::new(&mut buf, Compression::default());
+        let byte_cmd = cmd.as_bytes();
+        let mut compressed_cmd = Vec::new();
+        let mut enc = ZlibEncoder::new(&mut compressed_cmd, Compression::default());
 
-        enc.write_all(msg)
+        enc.write_all(byte_cmd)
             .and_then(|_| enc.finish())
             .map_err(|e| e.to_string())?;
 
         self.ws
-            .send(Message::Binary(buf))
+            .send(Message::Binary(compressed_cmd))
             .await
             .map_err(|e| e.to_string())?;
 

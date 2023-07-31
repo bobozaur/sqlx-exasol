@@ -249,7 +249,7 @@ impl Default for ExaAttributes {
 }
 
 impl ExaAttributes {
-    pub fn update(&mut self, other: Attributes) {
+    pub(crate) fn update(&mut self, other: Attributes) {
         macro_rules! other_or_prev {
             ($field:tt) => {
                 if let Some(new) = other.$field {
