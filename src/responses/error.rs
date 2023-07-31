@@ -42,6 +42,11 @@ impl error::DatabaseError for ExaDatabaseError {
     }
 
     fn kind(&self) -> ErrorKind {
-        ErrorKind::Other
+        match self.code.as_str() {
+            "27001" => ErrorKind::NotNullViolation,
+            "27002" => ErrorKind::UniqueViolation,
+            "27003" => ErrorKind::ForeignKeyViolation,
+            _ => ErrorKind::Other,
+        }
     }
 }
