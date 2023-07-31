@@ -19,7 +19,10 @@ use crate::{
     command::{Command, ExaCommand},
     database::Exasol,
     options::ExaConnectOptions,
-    responses::{fetched::DataChunk, prepared_stmt::PreparedStatement, ExaAttributes},
+    responses::{
+        fetched::DataChunk, prepared_stmt::PreparedStatement, session_info::SessionInfo,
+        ExaAttributes,
+    },
     statement::{ExaStatement, ExaStatementMetadata},
     stream::{QueryResultStream, ResultStream},
     websocket::{ExaWebSocket, WithRwSocket},
@@ -29,6 +32,7 @@ use crate::{
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
     pub(crate) last_rs_handle: Option<u16>,
+    session_info: SessionInfo,
     statement_cache: LruCache<String, PreparedStatement>,
     log_settings: LogSettings,
 }
@@ -36,6 +40,10 @@ pub struct ExaConnection {
 impl ExaConnection {
     pub fn attributes(&self) -> &ExaAttributes {
         &self.ws.attributes
+    }
+
+    pub fn session_info(&self) -> &SessionInfo {
+        &self.session_info
     }
 
     pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, String> {
@@ -63,12 +71,13 @@ impl ExaConnection {
                 }
             }
         }
-
+        let (ws, session_info) = ws_result?;
         let con = Self {
-            ws: ws_result?,
+            ws,
             last_rs_handle: None,
             statement_cache: LruCache::new(opts.statement_cache_capacity),
             log_settings: LogSettings::default(),
+            session_info,
         };
 
         Ok(con)

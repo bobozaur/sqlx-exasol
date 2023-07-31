@@ -17,8 +17,8 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion,
     },
     responses::{
-        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult, ExaAttributes,
-        Response, ResponseData,
+        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult,
+        session_info::SessionInfo, ExaAttributes, Response, ResponseData,
     },
     stream::QueryResultStream,
     tls,
@@ -38,7 +38,7 @@ impl ExaWebSocket {
         host: &str,
         socket: RwSocket,
         options: ExaConnectOptionsRef<'_>,
-    ) -> Result<Self, String> {
+    ) -> Result<(Self, SessionInfo), String> {
         let (socket, is_tls) = tls::maybe_upgrade(socket.0, host, options.clone()).await?;
 
         let scheme = match is_tls {
@@ -61,10 +61,10 @@ impl ExaWebSocket {
         ws.attributes.fetch_size = options.fetch_size;
         ws.attributes.statement_cache_capacity = options.statement_cache_capacity;
 
-        ws.login(options).await?;
+        let session_info = ws.login(options).await?;
         ws.get_attributes().await?;
 
-        Ok(ws)
+        Ok((ws, session_info))
     }
 
     pub(crate) async fn get_results_stream<'a, C, F>(
@@ -215,7 +215,10 @@ impl ExaWebSocket {
         Ok(Cow::Owned(prepared))
     }
 
-    pub(crate) async fn login(&mut self, mut opts: ExaConnectOptionsRef<'_>) -> Result<(), String> {
+    pub(crate) async fn login(
+        &mut self,
+        mut opts: ExaConnectOptionsRef<'_>,
+    ) -> Result<SessionInfo, String> {
         match &mut opts.login {
             LoginRef::Credentials(creds) => {
                 self.start_login_credentials(creds, opts.protocol_version)
@@ -225,8 +228,7 @@ impl ExaWebSocket {
         }
 
         let cmd = (&opts).try_into()?;
-        self.send_cmd(cmd).await?;
-        Ok(())
+        self.get_session_info(cmd).await
     }
 
     #[cfg(feature = "migrate")]
@@ -286,6 +288,11 @@ impl ExaWebSocket {
         let cmd = ExaCommand::new_login(protocol_version).try_into()?;
         let resp_data = self.get_resp_data(cmd).await?;
         RsaPublicKey::try_from(resp_data)
+    }
+
+    async fn get_session_info(&mut self, cmd: Command) -> Result<SessionInfo, String> {
+        let resp_data = self.get_resp_data(cmd).await?;
+        SessionInfo::try_from(resp_data)
     }
 
     async fn get_resp_data(&mut self, cmd: Command) -> Result<ResponseData, String> {

@@ -1,6 +1,6 @@
 mod error;
 pub(crate) mod fetched;
-mod login_info;
+pub(crate) mod session_info;
 pub(crate) mod prepared_stmt;
 pub(crate) mod result;
 
@@ -16,7 +16,7 @@ use crate::{
 };
 
 use self::{
-    fetched::DataChunk, login_info::LoginInfo, prepared_stmt::PreparedStatement,
+    fetched::DataChunk, session_info::SessionInfo, prepared_stmt::PreparedStatement,
     result::QueryResult,
 };
 
@@ -120,7 +120,7 @@ impl TryFrom<ResponseData> for Vec<String> {
     }
 }
 
-impl TryFrom<ResponseData> for LoginInfo {
+impl TryFrom<ResponseData> for SessionInfo {
     type Error = String;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
@@ -149,7 +149,7 @@ impl TryFrom<ResponseData> for LoginInfo {
                 Some(identifier_quote_string),
                 Some(time_zone),
                 Some(time_zone_behavior),
-            ) => Ok(LoginInfo {
+            ) => Ok(SessionInfo {
                 protocol_version,
                 session_id,
                 release_version,
