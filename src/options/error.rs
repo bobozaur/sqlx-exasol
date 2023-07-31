@@ -1,23 +1,24 @@
 use std::num::ParseIntError;
 
-use sqlx_core::Error;
+use crate::options::URL_SCHEME;
+use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
 #[derive(Debug, Clone, ThisError)]
 pub enum ExaConfigError {
-    #[error("No host provided")]
+    #[error("no host provided")]
     MissingHost,
-    #[error("Multiple authentication methods provided")]
+    #[error("multiple authentication methods provided")]
     MultipleAuthMethods,
-    #[error("Error parsing host range: {0}")]
+    #[error("error parsing host range: {0}")]
     InvalidHostRange(#[from] ParseIntError),
-    #[error("Invalid URL scheme: {0}")]
+    #[error("invalid URL scheme: {0}, expected: {}", URL_SCHEME)]
     InvalidUrlScheme(String),
-    #[error("Invalid connection parameter: {0}")]
+    #[error("invalid connection parameter: {0}")]
     InvalidParameter(&'static str),
 }
 
-impl From<ExaConfigError> for Error {
+impl From<ExaConfigError> for SqlxError {
     fn from(value: ExaConfigError) -> Self {
         Self::Configuration(value.into())
     }

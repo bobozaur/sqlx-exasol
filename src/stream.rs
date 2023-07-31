@@ -14,11 +14,12 @@ use futures_util::{
 use pin_project::pin_project;
 
 use serde_json::Value;
-use sqlx_core::{logger::QueryLogger, HashMap};
+use sqlx_core::{logger::QueryLogger, Error as SqlxError, HashMap};
 
 use crate::{
     column::ExaColumn,
     command::{Command, ExaCommand},
+    error::ExaProtocolError,
     query_result::ExaQueryResult,
     responses::{
         fetched::DataChunk,
@@ -32,8 +33,8 @@ use crate::{
 pub struct ResultStream<'a, C, F1, F2>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
-    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
-    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, String>>,
+    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
     #[pin]
     state: ResultStreamState<'a, C, F1, F2>,
@@ -44,8 +45,8 @@ where
 impl<'a, C, F1, F2> ResultStream<'a, C, F1, F2>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
-    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
-    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, String>>,
+    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
     pub fn new(future: F2, logger: QueryLogger<'a>) -> Self {
         Self {
@@ -80,10 +81,10 @@ where
 impl<'a, C, F1, F2> Stream for ResultStream<'a, C, F1, F2>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
-    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
-    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, String>>,
+    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
-    type Item = Result<Either<ExaQueryResult, ExaRow>, String>;
+    type Item = Result<Either<ExaQueryResult, ExaRow>, SqlxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.had_err {
@@ -113,8 +114,8 @@ where
 enum ResultStreamState<'a, C, F1, F2>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
-    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
-    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, String>>,
+    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
     Initial(#[pin] F2),
     Stream(#[pin] QueryResultStream<'a, C, F1>),
@@ -124,22 +125,22 @@ where
 pub enum QueryResultStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     ResultSet(#[pin] ResultSetStream<'a, C, F>),
-    RowCount(#[pin] Once<Ready<Result<ExaQueryResult, String>>>),
+    RowCount(#[pin] Once<Ready<Result<ExaQueryResult, SqlxError>>>),
 }
 
 impl<'a, C, F> QueryResultStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     pub fn new(
         ws: &'a mut ExaWebSocket,
         query_result: QueryResult,
         fetcher_maker: C,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, SqlxError> {
         let stream = match query_result {
             QueryResult::ResultSet { result_set } => {
                 Self::result_set(result_set, ws, fetcher_maker)?
@@ -160,7 +161,7 @@ where
         rs: ResultSet,
         ws: &'a mut ExaWebSocket,
         fetcher_maker: C,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, SqlxError> {
         let stream = ResultSetStream::new(rs, ws, fetcher_maker)?;
         Ok(Self::ResultSet(stream))
     }
@@ -169,9 +170,9 @@ where
 impl<'a, C, F> Stream for QueryResultStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    type Item = Result<Either<ExaQueryResult, ExaRow>, String>;
+    type Item = Result<Either<ExaQueryResult, ExaRow>, SqlxError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         macro_rules! poll_map {
@@ -191,7 +192,7 @@ where
 pub struct ResultSetStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     chunk_iter: ChunkIter,
     #[pin]
@@ -201,15 +202,19 @@ where
 impl<'a, C, F> ResultSetStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    fn new(rs: ResultSet, ws: &'a mut ExaWebSocket, mut fetcher_maker: C) -> Result<Self, String> {
+    fn new(
+        rs: ResultSet,
+        ws: &'a mut ExaWebSocket,
+        mut fetcher_maker: C,
+    ) -> Result<Self, SqlxError> {
         let pos = rs.data_chunk.num_rows;
 
         let fetcher_parts = if pos < rs.total_rows_num {
             let handle = rs
                 .result_set_handle
-                .ok_or_else(|| "Missing result set handle".to_owned())?;
+                .ok_or(ExaProtocolError::MissingResultHandle)?;
 
             let cmd = ExaCommand::new_fetch(handle, pos, ws.attributes.fetch_size).try_into()?;
             let future = fetcher_maker(ws, cmd);
@@ -252,9 +257,9 @@ where
 impl<'a, C, F> Stream for ResultSetStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    type Item = Result<ExaRow, String>;
+    type Item = Result<ExaRow, SqlxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.as_mut().project();
@@ -280,7 +285,7 @@ where
 struct ChunkStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     fetcher_maker: C,
     fetcher_parts: Option<(u16, F)>,
@@ -291,13 +296,13 @@ where
 impl<'a, C, F> ChunkStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     fn make_fetcher(
         &mut self,
         ws: &'a mut ExaWebSocket,
         handle: u16,
-    ) -> Result<Option<(u16, F)>, String> {
+    ) -> Result<Option<(u16, F)>, SqlxError> {
         if self.total_rows_pos < self.total_rows_num {
             let cmd = ExaCommand::new_fetch(handle, self.total_rows_pos, ws.attributes.fetch_size)
                 .try_into()?;
@@ -312,9 +317,9 @@ where
 impl<'a, C, F> Stream for ChunkStream<'a, C, F>
 where
     C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    type Item = Result<DataChunk, String>;
+    type Item = Result<DataChunk, SqlxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.as_mut().project();

@@ -2,8 +2,7 @@ use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rand::rngs::OsRng;
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 use serde::Serialize;
-
-use crate::error::ConResult;
+use sqlx_core::Error as SqlxError;
 
 /// Login type.
 /// The variant chosen dictates which login process is called.
@@ -88,11 +87,16 @@ impl<'a> From<&'a Credentials> for CredentialsRef<'a> {
 
 impl<'a> CredentialsRef<'a> {
     /// Encrypts the password with the provided key
-    pub(crate) fn encrypt_password(&mut self, key: RsaPublicKey) -> ConResult<()> {
+    pub(crate) fn encrypt_password(&mut self, key: RsaPublicKey) -> Result<(), SqlxError> {
         let mut rng = OsRng;
+
         let padding = Pkcs1v15Encrypt;
         let pass_bytes = self.password.as_bytes();
-        let enc_pass = key.encrypt(&mut rng, padding, pass_bytes)?;
+
+        let enc_pass = key
+            .encrypt(&mut rng, padding, pass_bytes)
+            .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+
         self.password = STD_BASE64_ENGINE.encode(enc_pass);
         Ok(())
     }

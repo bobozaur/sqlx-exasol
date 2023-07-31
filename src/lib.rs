@@ -4,6 +4,8 @@ mod command;
 mod connection;
 pub mod database;
 pub mod error;
+#[cfg(feature = "migrate")]
+mod migrate;
 mod options;
 mod query_result;
 mod responses;
@@ -12,8 +14,6 @@ mod statement;
 mod stream;
 #[cfg(feature = "migrate")]
 mod testing;
-#[cfg(feature = "migrate")]
-mod migrate;
 mod tls;
 mod transaction;
 mod type_info;

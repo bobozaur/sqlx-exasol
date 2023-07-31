@@ -46,8 +46,8 @@ impl ExaConnection {
         &self.session_info
     }
 
-    pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, String> {
-        let mut ws_result = Err("No hosts found".to_owned());
+    pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, SqlxError> {
+        let mut ws_result = Err(SqlxError::Configuration("No hosts found".into()));
 
         for host in &opts.hosts {
             let socket_res = sqlx_core::net::connect_tcp(host, opts.port, WithRwSocket).await;
@@ -55,7 +55,7 @@ impl ExaConnection {
             let socket = match socket_res {
                 Ok(socket) => socket,
                 Err(err) => {
-                    ws_result = Err(err.to_string());
+                    ws_result = Err(err);
                     continue;
                 }
             };
@@ -66,7 +66,7 @@ impl ExaConnection {
                     break;
                 }
                 Err(err) => {
-                    ws_result = Err(err.to_string());
+                    ws_result = Err(err);
                     continue;
                 }
             }
@@ -84,17 +84,17 @@ impl ExaConnection {
     }
 
     #[cfg(feature = "migrate")]
-    pub(crate) async fn begin_transaction(&mut self) -> Result<(), String> {
+    pub(crate) async fn begin_transaction(&mut self) -> Result<(), SqlxError> {
         self.ws.begin().await
     }
 
     #[cfg(feature = "migrate")]
-    pub(crate) async fn rollback_transaction(&mut self) -> Result<(), String> {
+    pub(crate) async fn rollback_transaction(&mut self) -> Result<(), SqlxError> {
         self.ws.rollback().await
     }
 
     #[cfg(feature = "migrate")]
-    pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), String> {
+    pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), SqlxError> {
         self.ws.execute_batch(sql).await
     }
 
@@ -104,10 +104,10 @@ impl ExaConnection {
         arguments: Option<ExaArguments>,
         persist: bool,
         fetcher_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, String>
+    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
         C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         match arguments {
             Some(args) => {
@@ -124,10 +124,10 @@ impl ExaConnection {
         args: ExaArguments,
         persist: bool,
         fetcher_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, String>
+    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
         C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         let prepared = self
             .ws
@@ -151,10 +151,10 @@ impl ExaConnection {
         &'a mut self,
         sql: &str,
         fetcher_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, String>
+    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
         C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), String>> + 'a,
+        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         let cmd = ExaCommand::new_execute(sql, &self.ws.attributes).try_into()?;
         self.ws
@@ -170,22 +170,22 @@ impl Connection for ExaConnection {
 
     fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.ws.disconnect().await.map_err(SqlxError::Protocol)?;
-            self.ws.close().await.map_err(SqlxError::Protocol)?;
+            self.ws.disconnect().await?;
+            self.ws.close().await?;
             Ok(())
         })
     }
 
     fn close_hard(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.ws.close().await.map_err(SqlxError::Protocol)?;
+            self.ws.close().await?;
             Ok(())
         })
     }
 
     fn ping(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.ws.ping().await.map_err(SqlxError::Protocol)?;
+            self.ws.ping().await?;
             Ok(())
         })
     }
@@ -233,7 +233,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
         let future = self.execute_query(sql, arguments, persistent, ExaWebSocket::fetch_chunk);
-        Box::pin(ResultStream::new(future, logger).map_err(SqlxError::Protocol))
+        Box::pin(ResultStream::new(future, logger))
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(
@@ -275,8 +275,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
             let prepared = self
                 .ws
                 .get_or_prepare(&mut self.statement_cache, sql, true)
-                .await
-                .map_err(SqlxError::Protocol)?;
+                .await?;
 
             Ok(ExaStatement {
                 sql: Cow::Borrowed(sql),
@@ -293,23 +292,14 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
     {
         Box::pin(async move {
-            let cmd = ExaCommand::new_create_prepared(sql)
-                .try_into()
-                .map_err(SqlxError::Protocol)?;
+            let cmd = ExaCommand::new_create_prepared(sql).try_into()?;
 
             let PreparedStatement {
                 statement_handle,
                 columns,
-            } = self
-                .ws
-                .create_prepared(cmd)
-                .await
-                .map_err(SqlxError::Protocol)?;
+            } = self.ws.create_prepared(cmd).await?;
 
-            self.ws
-                .close_prepared(statement_handle)
-                .await
-                .map_err(SqlxError::Protocol)?;
+            self.ws.close_prepared(statement_handle).await?;
 
             let mut nullable = Vec::with_capacity(columns.len());
             let mut parameters = Vec::with_capacity(columns.len());

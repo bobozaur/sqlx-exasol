@@ -24,6 +24,8 @@ use self::login::LoginRef;
 use self::ssl_mode::ExaSslMode;
 use self::{builder::ExaConnectOptionsBuilder, serializable::SerializableConOpts};
 
+pub(crate) const URL_SCHEME: &str = "exa";
+
 pub(crate) const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
 pub(crate) const DEFAULT_PORT: u16 = 8563;
 pub(crate) const DEFAULT_CACHE_CAPACITY: usize = 100;
@@ -62,8 +64,6 @@ pub struct ExaConnectOptions {
 
 /// Connection options
 impl ExaConnectOptions {
-    const URL_SCHEME: &str = "exa";
-
     pub fn builder<'a>() -> ExaConnectOptionsBuilder<'a> {
         ExaConnectOptionsBuilder::new()
     }
@@ -86,7 +86,7 @@ impl ConnectOptions for ExaConnectOptions {
     fn from_url(url: &url::Url) -> Result<Self, SqlxError> {
         let scheme = url.scheme();
 
-        if Self::URL_SCHEME != scheme {
+        if URL_SCHEME != scheme {
             return Err(ExaConfigError::InvalidUrlScheme(scheme.to_owned()).into());
         }
 
@@ -196,11 +196,7 @@ impl ConnectOptions for ExaConnectOptions {
     where
         Self::Connection: Sized,
     {
-        Box::pin(async move {
-            ExaConnection::establish(self)
-                .await
-                .map_err(SqlxError::Protocol)
-        })
+        Box::pin(async move { ExaConnection::establish(self).await })
     }
 
     fn log_statements(mut self, level: log::LevelFilter) -> Self {

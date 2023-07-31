@@ -1,26 +1,31 @@
 mod error;
 pub(crate) mod fetched;
-pub(crate) mod session_info;
 pub(crate) mod prepared_stmt;
 pub(crate) mod result;
+pub(crate) mod session_info;
 
 use std::num::NonZeroUsize;
 
+use rsa::errors::Error as RsaError;
 use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
+use crate::error::ExaResultExt;
 use crate::{
     column::ExaColumns,
+    error::ExaProtocolError,
     options::{ProtocolVersion, DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE},
 };
 
 use self::{
-    fetched::DataChunk, session_info::SessionInfo, prepared_stmt::PreparedStatement,
-    result::QueryResult,
+    fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult,
+    session_info::SessionInfo,
 };
 
-pub use error::DatabaseError;
+use sqlx_core::Error as SqlxError;
+
+pub use error::ExaDatabaseError;
 
 /// Generic response received from the Exasol server
 /// This is the first deserialization step
@@ -38,7 +43,7 @@ pub enum Response {
         attributes: Option<Attributes>,
     },
     Error {
-        exception: DatabaseError,
+        exception: ExaDatabaseError,
     },
 }
 
@@ -66,7 +71,7 @@ pub struct ResponseData {
 }
 
 impl TryFrom<ResponseData> for PreparedStatement {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
         match (value.statement_handle, value.parameter_data) {
@@ -83,45 +88,47 @@ impl TryFrom<ResponseData> for PreparedStatement {
 
                 Ok(prepared_stmt)
             }
-            _ => Err("can't convert to prepared statement".to_owned()),
+            _ => Err(ExaProtocolError::UnexpectedResponse("prepared statement"))?,
         }
     }
 }
 
 impl TryFrom<ResponseData> for QueryResult {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
         value
             .results
             .map(|i| i.into_iter().next().unwrap())
-            .ok_or_else(|| "can't convert to query result".to_owned())
+            .ok_or(ExaProtocolError::UnexpectedResponse("query result"))
+            .map_err(From::from)
     }
 }
 
 impl TryFrom<ResponseData> for DataChunk {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
         match (value.num_rows, value.data) {
             (Some(num_rows), Some(data)) => Ok(DataChunk { num_rows, data }),
-            _ => Err("can't convert to data chunk".to_owned()),
+            _ => Err(ExaProtocolError::UnexpectedResponse("data chunk"))?,
         }
     }
 }
 
 impl TryFrom<ResponseData> for Vec<String> {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
         value
             .nodes
-            .ok_or_else(|| "can't convert to hosts".to_owned())
+            .ok_or(ExaProtocolError::UnexpectedResponse("hosts"))
+            .map_err(From::from)
     }
 }
 
 impl TryFrom<ResponseData> for SessionInfo {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
         match (
@@ -162,21 +169,23 @@ impl TryFrom<ResponseData> for SessionInfo {
                 time_zone,
                 time_zone_behavior,
             }),
-            _ => Err("can't conver to login info".to_owned()),
+            _ => Err(ExaProtocolError::UnexpectedResponse("session info"))?,
         }
     }
 }
 
 impl TryFrom<ResponseData> for RsaPublicKey {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ResponseData) -> Result<Self, Self::Error> {
         let public_key = value
             .public_key_pem
             .as_ref()
-            .ok_or_else(|| "can't convert to public key".to_owned())?;
+            .ok_or(ExaProtocolError::UnexpectedResponse("public key"))?;
 
-        RsaPublicKey::from_pkcs1_pem(public_key).map_err(|e| e.to_string())
+        RsaPublicKey::from_pkcs1_pem(public_key)
+            .map_err(RsaError::from)
+            .to_sqlx_err()
     }
 }
 

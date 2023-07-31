@@ -2,6 +2,7 @@ use std::net::IpAddr;
 
 use serde::Serialize;
 use serde_json::Value;
+use sqlx_core::Error as SqlxError;
 
 use crate::{
     column::ExaColumn,
@@ -99,7 +100,7 @@ impl<'a> ExaCommand<'a> {
 }
 
 /// Represents a serialized command, ready to be sent to the server.
-// We use this wrapper so that we can serialize the command (which would happen anyway) 
+// We use this wrapper so that we can serialize the command (which would happen anyway)
 // and get rid of lifetimes and borrow checker conflicts sooner.
 //
 // The wrapper ensures that the only ways of creating a command
@@ -114,21 +115,21 @@ impl Command {
 }
 
 impl<'a> TryFrom<ExaCommand<'a>> for Command {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: ExaCommand<'a>) -> Result<Self, Self::Error> {
         serde_json::to_string(&value)
-            .map_err(|e| e.to_string())
+            .map_err(|e| SqlxError::Protocol(e.to_string()))
             .map(Self)
     }
 }
 
 impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for Command {
-    type Error = String;
+    type Error = SqlxError;
 
     fn try_from(value: &'a ExaConnectOptionsRef<'a>) -> Result<Self, Self::Error> {
         serde_json::to_string(value)
-            .map_err(|e| e.to_string())
+            .map_err(|e| SqlxError::Protocol(e.to_string()))
             .map(Self)
     }
 }

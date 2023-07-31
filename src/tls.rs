@@ -1,6 +1,9 @@
-use sqlx_core::net::{
-    tls::{self, TlsConfig},
-    Socket, WithSocket,
+use sqlx_core::{
+    net::{
+        tls::{self, TlsConfig},
+        Socket, WithSocket,
+    },
+    Error as SqlxError,
 };
 
 use crate::{
@@ -12,7 +15,7 @@ pub(crate) async fn maybe_upgrade<S: Socket>(
     socket: S,
     host: &str,
     options: ExaConnectOptionsRef<'_>,
-) -> Result<(RwSocket, bool), String> {
+) -> Result<(RwSocket, bool), SqlxError> {
     match options.ssl_mode {
         ExaSslMode::Disabled => {
             let socket = WithRwSocket::with_socket(WithRwSocket, socket);
@@ -28,7 +31,7 @@ pub(crate) async fn maybe_upgrade<S: Socket>(
         }
 
         ExaSslMode::Required | ExaSslMode::VerifyIdentity | ExaSslMode::VerifyCa => {
-            tls::error_if_unavailable().map_err(|e| e.to_string())?;
+            tls::error_if_unavailable()?;
         }
     }
 
@@ -47,5 +50,4 @@ pub(crate) async fn maybe_upgrade<S: Socket>(
     tls::handshake(socket, tls_config, WithRwSocket)
         .await
         .map(|s| (s, true))
-        .map_err(|e| e.to_string())
 }

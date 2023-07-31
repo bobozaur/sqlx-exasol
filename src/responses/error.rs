@@ -1,28 +1,32 @@
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
 use serde::Deserialize;
 use sqlx_core::error::{self, ErrorKind};
 
 /// Type representing an error directly issued by the Exasol database.
 #[derive(Debug, Deserialize)]
-pub struct DatabaseError {
+pub struct ExaDatabaseError {
     text: String,
     #[serde(rename = "sqlCode")]
     code: String,
 }
 
-impl Display for DatabaseError {
+impl Display for ExaDatabaseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Exasol Error {}: {}", self.code, self.text)
+        write!(f, "Exasol error {}: {}", self.code, self.text)
     }
 }
 
-impl std::error::Error for DatabaseError {}
-impl std::error::Error for &mut DatabaseError {}
+impl std::error::Error for ExaDatabaseError {}
+impl std::error::Error for &mut ExaDatabaseError {}
 
-impl error::DatabaseError for DatabaseError {
+impl error::DatabaseError for ExaDatabaseError {
     fn message(&self) -> &str {
         &self.text
+    }
+
+    fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+        Some(Cow::Borrowed(&self.code))
     }
 
     fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {

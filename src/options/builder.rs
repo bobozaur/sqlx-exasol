@@ -7,7 +7,7 @@ use super::{
     Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
     DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
-use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error};
+use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
 
 #[derive(Clone, Debug)]
 pub struct ExaConnectOptionsBuilder<'a> {
@@ -55,7 +55,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 }
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
-    pub fn build(self) -> Result<ExaConnectOptions, Error> {
+    pub fn build(self) -> Result<ExaConnectOptions, SqlxError> {
         let hostname = self.host.ok_or(ExaConfigError::MissingHost)?;
         let password = self.password.unwrap_or_default();
 
@@ -172,7 +172,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         self
     }
 
-    fn generate_hosts(hostname: &str) -> Result<Vec<String>, Error> {
+    fn generate_hosts(hostname: &str) -> Result<Vec<String>, SqlxError> {
         let mut hostname_iter = hostname.split("..");
 
         let (first, last) = match (hostname_iter.next(), hostname_iter.next()) {
