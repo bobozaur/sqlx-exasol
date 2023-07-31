@@ -1,9 +1,9 @@
 [package]
 name = "exasol"
-version = "0.3.2"
+version = "0.7.1"
 edition = "2021"
 authors = ["bobozaur"]
-description = "Exasol client library implemented in Rust."
+description = "Exasol driver for the SQLx framework."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/bobozaur/rust-exasol"
 keywords = ["database", "sql", "exasol", "rust"]
