@@ -1,4 +1,5 @@
 mod builder;
+mod error;
 pub(crate) mod login;
 mod protocol_version;
 mod serializable;
@@ -18,6 +19,7 @@ use url::Url;
 
 use crate::connection::ExaConnection;
 
+use self::error::ExaConfigError;
 use self::login::LoginRef;
 use self::ssl_mode::ExaSslMode;
 use self::{builder::ExaConnectOptionsBuilder, serializable::SerializableConOpts};
@@ -25,6 +27,19 @@ use self::{builder::ExaConnectOptionsBuilder, serializable::SerializableConOpts}
 pub(crate) const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
 pub(crate) const DEFAULT_PORT: u16 = 8563;
 pub(crate) const DEFAULT_CACHE_CAPACITY: usize = 100;
+
+pub(crate) const PARAM_ACCESS_TOKEN: &str = "access-token";
+pub(crate) const PARAM_REFRESH_TOKEN: &str = "refresh-token";
+pub(crate) const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
+pub(crate) const PARAM_SSL_MODE: &str = "ssl-mode";
+pub(crate) const PARAM_SSL_CA: &str = "ssl-ca";
+pub(crate) const PARAM_SSL_CERT: &str = "ssl-cert";
+pub(crate) const PARAM_SSL_KEY: &str = "ssl-key";
+pub(crate) const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
+pub(crate) const PARAM_FETCH_SIZE: &str = "fetch-size";
+pub(crate) const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
+pub(crate) const PARAM_COMPRESSION: &str = "compression";
+pub(crate) const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
@@ -58,7 +73,9 @@ impl FromStr for ExaConnectOptions {
     type Err = SqlxError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = Url::parse(s).map_err(|e| SqlxError::Configuration(e.into()))?;
+        let url = Url::parse(s)
+            .map_err(From::from)
+            .map_err(SqlxError::Configuration)?;
         Self::from_url(&url)
     }
 }
@@ -70,11 +87,7 @@ impl ConnectOptions for ExaConnectOptions {
         let scheme = url.scheme();
 
         if Self::URL_SCHEME != scheme {
-            let msg = format!(
-                "Invalid URL scheme: {scheme}, expected: {}",
-                Self::URL_SCHEME
-            );
-            return Err(SqlxError::Configuration(msg.into()));
+            return Err(ExaConfigError::InvalidUrlScheme(scheme.to_owned()).into());
         }
 
         let mut builder = Self::builder();
@@ -104,71 +117,67 @@ impl ConnectOptions for ExaConnectOptions {
 
         for (name, value) in url.query_pairs() {
             match name.as_ref() {
-                "access_token" => builder.access_token(value.to_string()),
+                PARAM_ACCESS_TOKEN => builder.access_token(value.to_string()),
 
-                "refresh_token" => builder.refresh_token(value.to_string()),
+                PARAM_REFRESH_TOKEN => builder.refresh_token(value.to_string()),
 
-                "protocol_version" => {
-                    let protocol_version = value
-                        .parse::<ProtocolVersion>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                PARAM_PROTOCOL_VERSION => {
+                    let protocol_version = value.parse::<ProtocolVersion>()?;
                     builder.protocol_version(protocol_version)
                 }
 
-                "ssl-mode" => {
-                    let ssl_mode = value
-                        .parse::<ExaSslMode>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                PARAM_SSL_MODE => {
+                    let ssl_mode = value.parse::<ExaSslMode>()?;
                     builder.ssl_mode(ssl_mode)
                 }
 
-                "ssl-ca" => {
+                PARAM_SSL_CA => {
                     let ssl_ca = CertificateInput::File(PathBuf::from(value.to_string()));
                     builder.ssl_ca(ssl_ca)
                 }
 
-                "ssl-cert" => {
+                PARAM_SSL_CERT => {
                     let ssl_cert = CertificateInput::File(PathBuf::from(value.to_string()));
                     builder.ssl_client_cert(ssl_cert)
                 }
 
-                "ssl-key" => {
+                PARAM_SSL_KEY => {
                     let ssl_key = CertificateInput::File(PathBuf::from(value.to_string()));
                     builder.ssl_client_key(ssl_key)
                 }
 
-                "statement-cache-capacity" => {
+                PARAM_CACHE_CAP => {
                     let capacity = value
                         .parse::<NonZeroUsize>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_CACHE_CAP))?;
                     builder.statement_cache_capacity(capacity)
                 }
 
-                "fetch_size" => {
+                PARAM_FETCH_SIZE => {
                     let fetch_size = value
                         .parse::<usize>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FETCH_SIZE))?;
                     builder.fetch_size(fetch_size)
                 }
 
-                "query_timeout" => {
+                PARAM_QUERY_TIMEOUT => {
                     let query_timeout = value
                         .parse::<u64>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_QUERY_TIMEOUT))?;
                     builder.query_timeout(query_timeout)
                 }
 
-                "compression" => {
+                PARAM_COMPRESSION => {
                     let compression = value
                         .parse::<bool>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_COMPRESSION))?;
                     builder.compression(compression)
                 }
 
-                "feedback_interval" => {
+                PARAM_FEEDBACK_INTERVAL => {
                     let feedback_interval = value
                         .parse::<u8>()
-                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FEEDBACK_INTERVAL))?;
                     builder.feedback_interval(feedback_interval)
                 }
 
@@ -180,7 +189,7 @@ impl ConnectOptions for ExaConnectOptions {
             };
         }
 
-        builder.build().map_err(SqlxError::Protocol)
+        builder.build()
     }
 
     fn connect(&self) -> futures_util::future::BoxFuture<'_, Result<Self::Connection, SqlxError>>

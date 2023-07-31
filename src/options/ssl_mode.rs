@@ -1,9 +1,10 @@
-use sqlx_core::Error as SqlxError;
 use std::str::FromStr;
 
-/// Options for controlling the desired security state of the connection to the MySQL server.
+use super::{error::ExaConfigError, PARAM_SSL_MODE};
+
+/// Options for controlling the desired security state of the connection to the Exasol server.
 ///
-/// It is used by the [`ssl_mode`](super::MySqlConnectOptions::ssl_mode) method.
+/// It is used by the `ssl_mode` method of [`crate::options::builder::ExaConnectOptionsBuilder`].
 #[derive(Debug, Clone, Copy, Default)]
 pub enum ExaSslMode {
     /// Establish an unencrypted connection.
@@ -32,9 +33,9 @@ pub enum ExaSslMode {
 }
 
 impl FromStr for ExaSslMode {
-    type Err = SqlxError;
+    type Err = ExaConfigError;
 
-    fn from_str(s: &str) -> Result<Self, SqlxError> {
+    fn from_str(s: &str) -> Result<Self, ExaConfigError> {
         Ok(match &*s.to_ascii_lowercase() {
             "disabled" => ExaSslMode::Disabled,
             "preferred" => ExaSslMode::Preferred,
@@ -43,9 +44,7 @@ impl FromStr for ExaSslMode {
             "verify_identity" => ExaSslMode::VerifyIdentity,
 
             _ => {
-                return Err(SqlxError::Configuration(
-                    format!("unknown value {:?} for `ssl_mode`", s).into(),
-                ));
+                return Err(ExaConfigError::InvalidParameter(PARAM_SSL_MODE));
             }
         })
     }

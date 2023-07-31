@@ -3,6 +3,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use super::error::ExaConfigError;
+use super::PARAM_PROTOCOL_VERSION;
+
 /// Enum listing the protocol versions that can be used when
 /// establishing a websocket connection to Exasol.
 /// Defaults to the highest defined protocol version and
@@ -16,27 +19,27 @@ pub enum ProtocolVersion {
 }
 
 impl FromStr for ProtocolVersion {
-    type Err = String;
+    type Err = ExaConfigError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "1" => Ok(ProtocolVersion::V1),
             "2" => Ok(ProtocolVersion::V2),
             "3" => Ok(ProtocolVersion::V3),
-            _ => Err(format!("Invalid ProtocolVersion {s}")),
+            _ => Err(ExaConfigError::InvalidParameter(PARAM_PROTOCOL_VERSION)),
         }
     }
 }
 
 impl TryFrom<u8> for ProtocolVersion {
-    type Error = &'static str;
+    type Error = ExaConfigError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             1 => Ok(Self::V1),
             2 => Ok(Self::V2),
             3 => Ok(Self::V3),
-            _ => Err("Unknown ProtocolVersion"),
+            _ => Err(ExaConfigError::InvalidParameter(PARAM_PROTOCOL_VERSION)),
         }
     }
 }

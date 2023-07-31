@@ -1,12 +1,13 @@
 use std::num::NonZeroUsize;
 
 use super::{
+    error::ExaConfigError,
     login::{AccessToken, RefreshToken},
     ssl_mode::ExaSslMode,
     Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
     DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
-use sqlx_core::{connection::LogSettings, net::tls::CertificateInput};
+use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error};
 
 #[derive(Clone, Debug)]
 pub struct ExaConnectOptionsBuilder<'a> {
@@ -54,21 +55,15 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 }
 
 impl<'a> ExaConnectOptionsBuilder<'a> {
-    pub fn build(self) -> Result<ExaConnectOptions, String> {
-        let Some(hostname) = self.host else {
-            return Err("No hostname provided".to_owned());
-        };
+    pub fn build(self) -> Result<ExaConnectOptions, Error> {
+        let hostname = self.host.ok_or(ExaConfigError::MissingHost)?;
+        let password = self.password.unwrap_or_default();
 
-        let login_kind = match (self.username, self.access_token, self.refresh_token) {
-            (Some(username), None, None) => Login::Credentials(Credentials::new(
-                username,
-                self.password.unwrap_or_default(),
-            )),
-            (None, Some(access_token), None) => Login::AccessToken(AccessToken::new(access_token)),
-            (None, None, Some(refresh_token)) => {
-                Login::RefreshToken(RefreshToken::new(refresh_token))
-            }
-            _ => return Err("Multiple auth methods provided".to_owned()),
+        let login = match (self.username, self.access_token, self.refresh_token) {
+            (Some(user), None, None) => Login::Credentials(Credentials::new(user, password)),
+            (None, Some(token), None) => Login::AccessToken(AccessToken::new(token)),
+            (None, None, Some(token)) => Login::RefreshToken(RefreshToken::new(token)),
+            _ => return Err(ExaConfigError::MultipleAuthMethods.into()),
         };
 
         let opts = ExaConnectOptions {
@@ -79,7 +74,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             ssl_client_cert: self.ssl_client_cert,
             ssl_client_key: self.ssl_client_key,
             statement_cache_capacity: self.statement_cache_capacity,
-            login: login_kind,
+            login,
             schema: self.schema,
             protocol_version: self.protocol_version,
             fetch_size: self.fetch_size,
@@ -177,7 +172,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         self
     }
 
-    fn generate_hosts(hostname: &str) -> Result<Vec<String>, String> {
+    fn generate_hosts(hostname: &str) -> Result<Vec<String>, Error> {
         let mut hostname_iter = hostname.split("..");
 
         let (first, last) = match (hostname_iter.next(), hostname_iter.next()) {
@@ -185,10 +180,10 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             _ => return Ok(vec![hostname.to_owned()]),
         };
 
-        let (start_range_idx, end_range_idx) = match (
-            first.find(char::is_numeric),
-            last.find(|c: char| !c.is_numeric()),
-        ) {
+        let opt_start = first.find(char::is_numeric);
+        let opt_end = last.find(|c: char| !c.is_numeric());
+
+        let (start_range_idx, end_range_idx) = match (opt_start, opt_end) {
             (Some(start), Some(end)) => (start, end),
             _ => return Ok(vec![hostname.to_owned()]),
         };
@@ -196,8 +191,12 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         let (prefix, start_range) = first.split_at(start_range_idx);
         let (end_range, suffix) = last.split_at(end_range_idx);
 
-        let start_range = start_range.parse::<usize>().map_err(|e| e.to_string())?;
-        let end_range = end_range.parse::<usize>().map_err(|e| e.to_string())?;
+        let start_range = start_range
+            .parse::<usize>()
+            .map_err(ExaConfigError::InvalidHostRange)?;
+        let end_range = end_range
+            .parse::<usize>()
+            .map_err(ExaConfigError::InvalidHostRange)?;
 
         let hosts = (start_range..end_range)
             .map(|i| format!("{prefix}{i}{suffix}"))
