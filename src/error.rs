@@ -1,3 +1,4 @@
+use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Error as WsError;
 use rsa::errors::Error as RsaError;
 use serde_json;
@@ -11,7 +12,7 @@ use thiserror::Error as ThisError;
 pub enum ExaProtocolError {
     #[error("can't fetch more rows, no result set handle provided in response")]
     MissingResultHandle,
-    #[error("invalid response  from database, expecting {0}")]
+    #[error("invalid response from database, expecting {0}")]
     UnexpectedResponse(&'static str),
     #[error("transaction already open")]
     TransactionAlreadyOpen,
@@ -19,8 +20,20 @@ pub enum ExaProtocolError {
     MissingResponseData,
     #[error("no message received")]
     MissingMessage,
+    #[error("server closed connection due to: {0}")]
+    WebsocketClosed(String),
     #[error("feature 'flate2' must be enabled to use compression")]
     CompressionDisabled,
+}
+
+impl<'a> From<Option<CloseFrame<'a>>> for ExaProtocolError {
+    fn from(value: Option<CloseFrame<'a>>) -> Self {
+        let msg = value
+            .map(|c| c.to_string())
+            .unwrap_or("unknown reason".to_owned());
+
+        Self::WebsocketClosed(msg)
+    }
 }
 
 impl From<ExaProtocolError> for SqlxError {

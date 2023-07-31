@@ -344,7 +344,10 @@ impl ExaWebSocket {
             return match msg {
                 Message::Text(s) => serde_json::from_str(&s).to_sqlx_err(),
                 Message::Binary(v) => serde_json::from_slice(&v).to_sqlx_err(),
-                Message::Close(_c) => todo!("handle close frame"),
+                Message::Close(c) => {
+                    self.close().await.ok();
+                    Err(ExaProtocolError::from(c))?
+                }
                 _ => continue,
             };
         }
@@ -373,7 +376,10 @@ impl ExaWebSocket {
             let bytes = match response.to_sqlx_err()? {
                 Message::Text(s) => s.into_bytes(),
                 Message::Binary(v) => v,
-                Message::Close(_c) => todo!("handle close frame"),
+                Message::Close(c) => {
+                    self.close().await.ok();
+                    Err(ExaProtocolError::from(c))?
+                }
                 _ => continue,
             };
 
