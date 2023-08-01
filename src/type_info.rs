@@ -1,4 +1,4 @@
-use std::{default, fmt::Display};
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
@@ -64,6 +64,13 @@ pub struct Decimal {
 }
 
 impl Decimal {
+    pub const MAX_8BIT_PRECISION: u32 = 3;
+    pub const MAX_16BIT_PRECISION: u32 = 5;
+    pub const MAX_32BIT_PRECISION: u32 = 10;
+    pub const MAX_64BIT_PRECISION: u32 = 18;
+    pub const MAX_PRECISION: u32 = 36;
+    pub const MAX_SCALE: u32 = 35;
+
     pub fn new(precision: u32, scale: u32) -> Self {
         Self { precision, scale }
     }

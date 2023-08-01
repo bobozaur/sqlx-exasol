@@ -19,6 +19,9 @@ use sqlx_core::{
 
 use crate::database::Exasol;
 
+const MIN_I64_NUMERIC: i64 = -999999999999999999;
+const MAX_I64_NUMERIC: i64 = 1000000000000000000;
+
 impl<'q, T> Encode<'q, Exasol> for Option<T>
 where
     T: Encode<'q, Exasol> + Type<Exasol> + 'q,

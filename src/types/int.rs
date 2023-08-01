@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx_core::decode::Decode;
@@ -9,9 +11,13 @@ use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
+use super::{MAX_I64_NUMERIC, MIN_I64_NUMERIC};
+
+const NUMERIC_I64_RANGE: Range<i64> = MIN_I64_NUMERIC..MAX_I64_NUMERIC;
+
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(3, 0))
+        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_8BIT_PRECISION, 0))
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -39,7 +45,7 @@ impl Decode<'_, Exasol> for i8 {
 
 impl Type<Exasol> for i16 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(5, 0))
+        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0))
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -67,7 +73,7 @@ impl Decode<'_, Exasol> for i16 {
 
 impl Type<Exasol> for i32 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(10, 0))
+        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0))
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -95,7 +101,7 @@ impl Decode<'_, Exasol> for i32 {
 
 impl Type<Exasol> for i64 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(20, 0))
+        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_64BIT_PRECISION, 0))
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -105,7 +111,7 @@ impl Type<Exasol> for i64 {
 
 impl Encode<'_, Exasol> for i64 {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let value = if self < &1000000000000000000 && &-1000000000000000000 < self {
+        let value = if NUMERIC_I64_RANGE.contains(self) {
             json!(self)
         } else {
             // Large numbers get serialized as strings

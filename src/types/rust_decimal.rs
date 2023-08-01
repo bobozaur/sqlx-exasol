@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx_core::{
@@ -13,9 +15,13 @@ use crate::{
     value::ExaValueRef,
 };
 
+const NUMERIC_DECIMAL_RANGE: Range<rust_decimal::Decimal> =
+    rust_decimal::Decimal::from_parts(2808348671, 232830643, 0, true, 0)
+        ..rust_decimal::Decimal::from_parts(2808348672, 232830643, 0, false, 0);
+
 impl Type<Exasol> for rust_decimal::Decimal {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(36, 35))
+        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_PRECISION, Decimal::MAX_SCALE))
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -25,9 +31,7 @@ impl Type<Exasol> for rust_decimal::Decimal {
 
 impl Encode<'_, Exasol> for rust_decimal::Decimal {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let value = if self < &rust_decimal::Decimal::new(1000000000000000000, 0)
-            && &rust_decimal::Decimal::new(-1000000000000000000, 0) < self
-        {
+        let value = if NUMERIC_DECIMAL_RANGE.contains(self) {
             // We know for sure that the conversion will succeed
             // since we checked the number boundaries
             json!(i64::try_from(*self).unwrap())
@@ -57,4 +61,13 @@ impl Decode<'_, Exasol> for rust_decimal::Decimal {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
+}
+
+#[test]
+fn test_decimal_range() {
+    let start = rust_decimal::Decimal::new(super::MIN_I64_NUMERIC, 0);
+    let end = rust_decimal::Decimal::new(super::MAX_I64_NUMERIC, 0);
+
+    assert_eq!(NUMERIC_DECIMAL_RANGE.start, start);
+    assert_eq!(NUMERIC_DECIMAL_RANGE.end, end);
 }

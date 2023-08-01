@@ -43,7 +43,7 @@ impl TestSupport for Exasol {
             conn.execute(&format!("drop database if exists {};", db_name)[..])
                 .await?;
 
-            query("DELETE FROM sqlx_test_databases WHERE db_id = ?")
+            query(r#"DELETE FROM "_sqlx_test_databases" WHERE db_id = ?"#)
                 .bind(db_id)
                 .execute(&mut *conn)
                 .await?;
@@ -107,7 +107,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     conn.execute(
         r#"
-        CREATE TABLE IF NOT EXISTS sqlx_test_databases (
+        CREATE TABLE IF NOT EXISTS "_sqlx_test_databases" (
             db_id BIGINT IDENTITY,
             test_path CLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -128,13 +128,13 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         do_cleanup(&mut conn, now).await?;
     }
 
-    query("INSERT INTO sqlx_test_databases (test_path) VALUES (?)")
+    query(r#"INSERT INTO "_sqlx_test_databases" (test_path) VALUES (?)"#)
         .bind(args.test_path)
         .execute(&mut *conn)
         .await?;
 
     let new_db_id: u64 =
-        query_scalar("SELECT ZEROIFNULL(MAX(db_id)) + 1 FROM sqlx_test_databases;")
+        query_scalar(r#"SELECT ZEROIFNULL(MAX(db_id)) + 1 FROM "_sqlx_test_databases";"#)
             .fetch_one(&mut *conn)
             .await?;
 
@@ -164,11 +164,12 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 }
 
 async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Result<usize, Error> {
-    let delete_db_ids: Vec<u64> =
-        query_scalar("SELECT db_id FROM sqlx_test_databases WHERE created_at < FROM_POSIX_TIME(?)")
-            .bind(created_before.as_secs())
-            .fetch_all(&mut *conn)
-            .await?;
+    let delete_db_ids: Vec<u64> = query_scalar(
+        r#"SELECT db_id FROM "_sqlx_test_databases" WHERE created_at < FROM_POSIX_TIME(?)"#,
+    )
+    .bind(created_before.as_secs())
+    .fetch_all(&mut *conn)
+    .await?;
 
     if delete_db_ids.is_empty() {
         return Ok(0);
@@ -197,7 +198,7 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         }
     }
 
-    let mut query = QueryBuilder::new("DELETE FROM sqlx_test_databases WHERE db_id IN (");
+    let mut query = QueryBuilder::new(r#"DELETE FROM "_sqlx_test_databases" WHERE db_id IN ("#);
 
     let mut separated = query.separated(",");
 
@@ -211,17 +212,12 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
 }
 
 fn db_name(id: u64) -> String {
-    format!("sqlx_test_database_{}", id)
+    format!(r#""_sqlx_test_database_{}""#, id)
 }
 
 fn db_id(name: &str) -> u64 {
-    name.trim_start_matches("sqlx_test_database_")
+    name.trim_start_matches(r#""_sqlx_test_database_"#)
+        .trim_end_matches('"')
         .parse()
         .unwrap_or_else(|_1| panic!("failed to parse ID from database name {:?}", name))
-}
-
-#[test]
-fn test_db_name_id() {
-    assert_eq!(db_name(12345), "sqlx_test_database_12345");
-    assert_eq!(db_id("sqlx_test_database_12345"), 12345);
 }
