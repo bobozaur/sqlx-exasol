@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    cmp,
     ops::{Add, Sub},
 };
 
@@ -19,8 +20,6 @@ use crate::{
     value::ExaValueRef,
 };
 
-use super::impl_encode_decode;
-
 impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Timestamp
@@ -34,6 +33,10 @@ impl Type<Exasol> for DateTime<Utc> {
 impl Encode<'_, Exasol> for DateTime<Utc> {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         Encode::<Exasol>::encode(self.naive_utc(), buf)
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Timestamp)
     }
 }
 
@@ -58,6 +61,10 @@ impl Encode<'_, Exasol> for DateTime<Local> {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         Encode::<Exasol>::encode(self.naive_utc(), buf)
     }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::TimestampWithLocalTimeZone)
+    }
 }
 
 impl<'r> Decode<'r, Exasol> for DateTime<Local> {
@@ -66,21 +73,9 @@ impl<'r> Decode<'r, Exasol> for DateTime<Local> {
     }
 }
 
-impl Type<Exasol> for NaiveDate {
-    fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Date
-    }
-}
-
-impl Type<Exasol> for NaiveDateTime {
-    fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Timestamp
-    }
-}
-
 impl Type<Exasol> for chrono::Duration {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::IntervalDayToSecond(IntervalDayToSecond::new(2, 3))
+        ExaTypeInfo::IntervalDayToSecond(Default::default())
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -99,6 +94,29 @@ impl Encode<'_, Exasol> for chrono::Duration {
             self.num_milliseconds()
         ))]);
         IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self
+            .num_days()
+            .unsigned_abs()
+            .checked_ilog10()
+            .unwrap_or_default()
+            + 1;
+        let precision = cmp::min(precision, 9);
+
+        let fraction = self
+            .num_milliseconds()
+            .unsigned_abs()
+            .checked_ilog10()
+            .map(|v| v + 1)
+            .unwrap_or_default();
+
+        let fraction = cmp::min(fraction, 9);
+
+        Some(ExaTypeInfo::IntervalDayToSecond(IntervalDayToSecond::new(
+            precision, fraction,
+        )))
     }
 }
 
@@ -135,8 +153,51 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
     }
 }
 
-impl_encode_decode!(NaiveDate);
-impl_encode_decode!(NaiveDateTime);
+impl Type<Exasol> for NaiveDate {
+    fn type_info() -> ExaTypeInfo {
+        ExaTypeInfo::Date
+    }
+}
+
+impl Encode<'_, Exasol> for NaiveDate {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        buf.push([json!(self)]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Date)
+    }
+}
+
+impl Decode<'_, Exasol> for NaiveDate {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+    }
+}
+
+impl Type<Exasol> for NaiveDateTime {
+    fn type_info() -> ExaTypeInfo {
+        ExaTypeInfo::Timestamp
+    }
+}
+
+impl Encode<'_, Exasol> for NaiveDateTime {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        buf.push([json!(self)]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Timestamp)
+    }
+}
+
+impl Decode<'_, Exasol> for NaiveDateTime {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+    }
+}
 
 /// A duration in calendar months
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
@@ -150,6 +211,58 @@ impl Months {
 
     pub fn num_months(&self) -> i32 {
         self.0
+    }
+}
+
+impl Type<Exasol> for Months {
+    fn type_info() -> ExaTypeInfo {
+        ExaTypeInfo::IntervalYearToMonth(Default::default())
+    }
+
+    fn compatible(ty: &ExaTypeInfo) -> bool {
+        matches!(ty, ExaTypeInfo::IntervalYearToMonth(_))
+    }
+}
+
+impl Encode<'_, Exasol> for Months {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        let years = self.0 / 12;
+        let months = self.0 % 12;
+
+        buf.push([json!(format_args!("{}-{}", years, months))]);
+
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let num_years = self.0 / 12;
+        let precision = num_years
+            .unsigned_abs()
+            .checked_ilog10()
+            .unwrap_or_default()
+            + 1;
+        Some(ExaTypeInfo::IntervalYearToMonth(IntervalYearToMonth::new(
+            precision,
+        )))
+    }
+}
+
+impl<'r> Decode<'r, Exasol> for Months {
+    fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
+        let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
+        let (years, months) = input
+            .rsplit_once('-')
+            .ok_or_else(|| format!("could not parse {input} as INTERVAL YEAR TO MONTH"))?;
+
+        let years = years.parse::<i32>().map_err(Box::new)?;
+        let months = months.parse::<i32>().map_err(Box::new)?;
+
+        let total_months = match years.is_negative() {
+            true => years * 12 - months,
+            false => years * 12 + months,
+        };
+
+        Ok(Months::new(total_months))
     }
 }
 
@@ -228,45 +341,5 @@ impl Sub<Months> for NaiveDateTime {
         } else {
             self.checked_sub_months(rhs.into()).unwrap()
         }
-    }
-}
-
-impl Type<Exasol> for Months {
-    fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::IntervalYearToMonth(IntervalYearToMonth::new(2))
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::IntervalYearToMonth(_))
-    }
-}
-
-impl Encode<'_, Exasol> for Months {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let years = self.0 / 12;
-        let months = self.0 % 12;
-
-        buf.push([json!(format_args!("{}-{}", years, months))]);
-
-        IsNull::No
-    }
-}
-
-impl<'r> Decode<'r, Exasol> for Months {
-    fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
-        let (years, months) = input
-            .rsplit_once('-')
-            .ok_or_else(|| format!("could not parse {input} as INTERVAL YEAR TO MONTH"))?;
-
-        let years = years.parse::<i32>().map_err(Box::new)?;
-        let months = months.parse::<i32>().map_err(Box::new)?;
-
-        let total_months = match years.is_negative() {
-            true => years * 12 - months,
-            false => years * 12 + months,
-        };
-
-        Ok(Months::new(total_months))
     }
 }

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{default, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
@@ -24,58 +24,55 @@ pub enum ExaTypeInfo {
     Hashtype(Hashtype),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StringLike {
-    size: u32,
-    character_set: String,
-}
-
-impl Default for StringLike {
-    fn default() -> Self {
-        Self {
-            size: Default::default(),
-            character_set: Self::DEFAULT_CHARSET.to_owned(),
-        }
-    }
+    size: usize,
+    character_set: Charset,
 }
 
 impl StringLike {
-    const DEFAULT_CHARSET: &str = "UTF8";
-
-    pub fn new(size: u32, character_set: String) -> Self {
+    pub fn new(size: usize, character_set: Charset) -> Self {
         Self {
             size,
             character_set,
         }
     }
 
-    pub fn size(&self) -> u32 {
+    pub fn size(&self) -> usize {
         self.size
     }
 
-    pub fn character_set(&self) -> &str {
-        &self.character_set
+    pub fn character_set(&self) -> Charset {
+        self.character_set
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Charset {
+    #[default]
+    Utf8,
+    Ascii,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Decimal {
-    precision: u8,
-    scale: u8,
+    precision: u32,
+    scale: u32,
 }
 
 impl Decimal {
-    pub fn new(precision: u8, scale: u8) -> Self {
+    pub fn new(precision: u32, scale: u32) -> Self {
         Self { precision, scale }
     }
 
-    pub fn precision(&self) -> u8 {
+    pub fn precision(&self) -> u32 {
         self.precision
     }
 
-    pub fn scale(&self) -> u8 {
+    pub fn scale(&self) -> u32 {
         self.scale
     }
 }
@@ -99,23 +96,32 @@ impl Geometry {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalDayToSecond {
-    precision: u8,
-    fraction: u8,
+    precision: u32,
+    fraction: u32,
+}
+
+impl Default for IntervalDayToSecond {
+    fn default() -> Self {
+        Self {
+            precision: 2,
+            fraction: 3,
+        }
+    }
 }
 
 impl IntervalDayToSecond {
-    pub fn new(precision: u8, fraction: u8) -> Self {
+    pub fn new(precision: u32, fraction: u32) -> Self {
         Self {
             precision,
             fraction,
         }
     }
 
-    pub fn precision(&self) -> u8 {
+    pub fn precision(&self) -> u32 {
         self.precision
     }
 
-    pub fn fraction(&self) -> u8 {
+    pub fn fraction(&self) -> u32 {
         self.fraction
     }
 }
@@ -123,15 +129,21 @@ impl IntervalDayToSecond {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalYearToMonth {
-    precision: u8,
+    precision: u32,
+}
+
+impl Default for IntervalYearToMonth {
+    fn default() -> Self {
+        Self { precision: 2 }
+    }
 }
 
 impl IntervalYearToMonth {
-    pub fn new(precision: u8) -> Self {
+    pub fn new(precision: u32) -> Self {
         Self { precision }
     }
 
-    pub fn precision(&self) -> u8 {
+    pub fn precision(&self) -> u32 {
         self.precision
     }
 }
@@ -140,6 +152,12 @@ impl IntervalYearToMonth {
 #[serde(rename_all = "camelCase")]
 pub struct Hashtype {
     size: u16,
+}
+
+impl Default for Hashtype {
+    fn default() -> Self {
+        Self { size: 32 }
+    }
 }
 
 impl Hashtype {

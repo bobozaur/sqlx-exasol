@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
@@ -9,7 +9,11 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+use crate::{
+    database::Exasol,
+    type_info::{Charset, ExaTypeInfo, StringLike},
+    value::ExaValueRef,
+};
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
@@ -31,11 +35,18 @@ impl Encode<'_, Exasol> for &'_ str {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         if self.is_empty() {
             buf.push([Value::Null]);
-            IsNull::Yes
-        } else {
-            buf.push([json!(self)]);
-            IsNull::No
+            return IsNull::Yes;
         }
+
+        buf.push([Value::String(self.to_string())]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Varchar(StringLike::new(
+            self.chars().count(),
+            Charset::Utf8,
+        )))
     }
 }
 
@@ -58,6 +69,26 @@ impl Type<Exasol> for String {
 impl Encode<'_, Exasol> for String {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
         <&str as Encode<Exasol>>::encode(&**self, buf)
+    }
+
+    fn encode(
+        self,
+        buf: &mut <Exasol as sqlx_core::database::HasArguments<'_>>::ArgumentBuffer,
+    ) -> IsNull
+    where
+        Self: Sized,
+    {
+        if self.is_empty() {
+            buf.push([Value::Null]);
+            return IsNull::Yes;
+        }
+
+        buf.push([Value::String(self)]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<<Exasol as sqlx_core::database::Database>::TypeInfo> {
+        <&str as Encode<Exasol>>::produces(&&**self)
     }
 }
 
@@ -83,6 +114,27 @@ impl Encode<'_, Exasol> for Cow<'_, str> {
             Cow::Borrowed(str) => <&str as Encode<Exasol>>::encode(*str, buf),
             Cow::Owned(str) => <&str as Encode<Exasol>>::encode(&**str, buf),
         }
+    }
+
+    fn encode(
+        self,
+        buf: &mut <Exasol as sqlx_core::database::HasArguments<'_>>::ArgumentBuffer,
+    ) -> IsNull
+    where
+        Self: Sized,
+    {
+        if self.is_empty() {
+            buf.push([Value::Null]);
+            return IsNull::Yes;
+        }
+
+        let value = match self {
+            Cow::Borrowed(s) => Value::String(s.to_string()),
+            Cow::Owned(s) => Value::String(s),
+        };
+
+        buf.push([value]);
+        IsNull::No
     }
 }
 

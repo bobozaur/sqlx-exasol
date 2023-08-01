@@ -10,26 +10,50 @@ mod uint;
 #[cfg(feature = "uuid")]
 mod uuid;
 
-macro_rules! impl_encode_decode {
-    ($ty:ty) => {
-        impl sqlx_core::encode::Encode<'_, $crate::database::Exasol> for $ty {
-            fn encode_by_ref(
-                &self,
-                buf: &mut Vec<[serde_json::Value; 1]>,
-            ) -> sqlx_core::encode::IsNull {
-                buf.push([serde_json::json!(self)]);
-                sqlx_core::encode::IsNull::No
-            }
-        }
+use serde_json::Value;
+use sqlx_core::{
+    database::{Database, HasArguments},
+    encode::{Encode, IsNull},
+    types::Type,
+};
 
-        impl sqlx_core::decode::Decode<'_, crate::database::Exasol> for $ty {
-            fn decode(
-                value: $crate::value::ExaValueRef<'_>,
-            ) -> Result<Self, sqlx_core::error::BoxDynError> {
-                <Self as serde::Deserialize>::deserialize(value.value).map_err(From::from)
-            }
+use crate::database::Exasol;
+
+impl<'q, T> Encode<'q, Exasol> for Option<T>
+where
+    T: Encode<'q, Exasol> + Type<Exasol> + 'q,
+{
+    #[inline]
+    fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
+        if let Some(v) = self {
+            v.produces()
+        } else {
+            Some(T::type_info())
         }
-    };
+    }
+
+    #[inline]
+    fn encode(self, buf: &mut <Exasol as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        if let Some(v) = self {
+            v.encode(buf)
+        } else {
+            buf.push([Value::Null]);
+            IsNull::Yes
+        }
+    }
+
+    #[inline]
+    fn encode_by_ref(&self, buf: &mut <Exasol as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        if let Some(v) = self {
+            v.encode_by_ref(buf)
+        } else {
+            buf.push([Value::Null]);
+            IsNull::Yes
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> usize {
+        self.as_ref().map_or(0, Encode::size_hint)
+    }
 }
-
-pub(crate) use impl_encode_decode;

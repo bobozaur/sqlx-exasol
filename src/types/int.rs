@@ -9,8 +9,6 @@ use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
-use super::impl_encode_decode;
-
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(3, 0))
@@ -18,6 +16,24 @@ impl Type<Exasol> for i8 {
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
         matches!(ty, ExaTypeInfo::Decimal(_))
+    }
+}
+
+impl Encode<'_, Exasol> for i8 {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        buf.push([json!(self)]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
+        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+    }
+}
+
+impl Decode<'_, Exasol> for i8 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
 }
 
@@ -31,6 +47,24 @@ impl Type<Exasol> for i16 {
     }
 }
 
+impl Encode<'_, Exasol> for i16 {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        buf.push([json!(self)]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
+        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+    }
+}
+
+impl Decode<'_, Exasol> for i16 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+    }
+}
+
 impl Type<Exasol> for i32 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(10, 0))
@@ -38,6 +72,24 @@ impl Type<Exasol> for i32 {
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
         matches!(ty, ExaTypeInfo::Decimal(_))
+    }
+}
+
+impl Encode<'_, Exasol> for i32 {
+    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        buf.push([json!(self)]);
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
+        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+    }
+}
+
+impl Decode<'_, Exasol> for i32 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
 }
 
@@ -51,21 +103,22 @@ impl Type<Exasol> for i64 {
     }
 }
 
-impl_encode_decode!(i8);
-impl_encode_decode!(i16);
-impl_encode_decode!(i32);
-
 impl Encode<'_, Exasol> for i64 {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        // Large numbers get serialized as strings
         let value = if self < &1000000000000000000 && &-1000000000000000000 < self {
             json!(self)
         } else {
+            // Large numbers get serialized as strings
             Value::String(self.to_string())
         };
 
         buf.push([value]);
         IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
+        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
     }
 }
 

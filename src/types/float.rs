@@ -50,7 +50,12 @@ impl Encode<'_, Exasol> for f32 {
             IsNull::Yes
         }
     }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Double)
+    }
 }
+
 impl Decode<'_, Exasol> for f32 {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
@@ -70,7 +75,12 @@ impl Encode<'_, Exasol> for f64 {
             IsNull::Yes
         }
     }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Double)
+    }
 }
+
 impl Decode<'_, Exasol> for f64 {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
