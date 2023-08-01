@@ -167,7 +167,7 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
     let delete_db_ids: Vec<u64> = query_scalar(
         r#"SELECT db_id FROM "_sqlx_test_databases" WHERE created_at < FROM_POSIX_TIME(?)"#,
     )
-    .bind(created_before.as_secs())
+    .bind(created_before.as_secs().to_string())
     .fetch_all(&mut *conn)
     .await?;
 
@@ -220,4 +220,10 @@ fn db_id(name: &str) -> u64 {
         .trim_end_matches('"')
         .parse()
         .unwrap_or_else(|_1| panic!("failed to parse ID from database name {:?}", name))
+}
+
+#[test]
+fn test_db_name_id() {
+    assert_eq!(db_name(12345), r#""_sqlx_test_database_12345""#);
+    assert_eq!(db_id(r#""_sqlx_test_database_12345""#), 12345);
 }
