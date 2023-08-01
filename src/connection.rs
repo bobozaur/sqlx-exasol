@@ -1,8 +1,9 @@
-use std::{borrow::Cow, future};
+use std::{borrow::Cow, future, iter};
 
 use either::Either;
 use lru::LruCache;
 use sqlx_core::{
+    column::Column,
     connection::{Connection, LogSettings},
     database::{Database, HasStatement},
     describe::Describe,
@@ -134,10 +135,15 @@ impl ExaConnection {
             .get_or_prepare(&mut self.statement_cache, sql, persist)
             .await?;
 
+        let column_types = prepared.columns.iter().map(Column::type_info);
+        for (expected, provided) in iter::zip(column_types, &args.types) {
+            expected.check_compatibility(provided)?;
+        }
+
         let cmd = ExaCommand::new_execute_prepared(
             prepared.statement_handle,
             &prepared.columns,
-            args.0,
+            args.values,
             &self.ws.attributes,
         )
         .try_into()?;
