@@ -30,7 +30,7 @@ impl sqlx_core::value::Value for ExaValue {
         }
     }
 
-    fn type_info(&self) -> std::borrow::Cow<'_, <Self::Database as Database>::TypeInfo> {
+    fn type_info(&self) -> Cow<'_, <Self::Database as Database>::TypeInfo> {
         Cow::Borrowed(&self.type_info)
     }
 

@@ -332,6 +332,8 @@ impl ExaWebSocket {
             self.attributes.update(attributes)
         }
 
+        tracing::trace!("Database response: {response_data:?}");
+
         Ok(response_data)
     }
 
