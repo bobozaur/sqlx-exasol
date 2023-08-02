@@ -13,7 +13,7 @@ use super::{fetched::DataChunk, ExaColumns};
 #[serde(tag = "resultType", rename_all = "camelCase")]
 pub enum QueryResult {
     #[serde(rename_all = "camelCase")]
-    ResultSet { rs: ResultSet },
+    ResultSet { result_set: ResultSet },
     #[serde(rename_all = "camelCase")]
     RowCount { row_count: u64 },
 }
@@ -21,7 +21,7 @@ pub enum QueryResult {
 impl QueryResult {
     pub fn handle(&self) -> Option<u16> {
         match self {
-            QueryResult::ResultSet { rs: result_set } => result_set.result_set_handle,
+            QueryResult::ResultSet { result_set } => result_set.result_set_handle,
             QueryResult::RowCount { .. } => None,
         }
     }

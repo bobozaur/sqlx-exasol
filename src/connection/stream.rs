@@ -142,7 +142,7 @@ where
         fetcher_maker: C,
     ) -> Result<Self, SqlxError> {
         let stream = match query_result {
-            QueryResult::ResultSet { rs } => Self::result_set(rs, ws, fetcher_maker)?,
+            QueryResult::ResultSet { result_set: rs } => Self::result_set(rs, ws, fetcher_maker)?,
             QueryResult::RowCount { row_count } => Self::row_count(row_count),
         };
 
