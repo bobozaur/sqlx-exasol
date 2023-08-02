@@ -13,6 +13,8 @@ use crate::value::ExaValueRef;
 
 use super::{MAX_I64_NUMERIC, MIN_I64_NUMERIC};
 
+/// Numbers within this range must be serialized/deserialized as integers.
+/// The ones above/under these thresholds are treated as strings.
 const NUMERIC_I64_RANGE: Range<i64> = MIN_I64_NUMERIC..MAX_I64_NUMERIC;
 
 impl Type<Exasol> for i8 {

@@ -2,8 +2,7 @@ use serde::Deserialize;
 
 use crate::options::ProtocolVersion;
 
-/// Struct representing database information returned
-/// after establishing a connection.
+/// Struct representing database information returned after establishing a connection.
 #[allow(unused)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

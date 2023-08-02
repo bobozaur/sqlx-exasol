@@ -20,10 +20,7 @@ use crate::{
     command::{Command, ExaCommand},
     database::Exasol,
     options::ExaConnectOptions,
-    responses::{
-        fetched::DataChunk, prepared_stmt::PreparedStatement, session_info::SessionInfo,
-        ExaAttributes,
-    },
+    responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
     statement::{ExaStatement, ExaStatementMetadata},
     stream::{QueryResultStream, ResultStream},
     websocket::{ExaWebSocket, WithRwSocket},

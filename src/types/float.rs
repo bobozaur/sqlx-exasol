@@ -61,7 +61,7 @@ impl Decode<'_, Exasol> for f32 {
         match value.value {
             Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
             Value::String(s) => serde_json::from_str(s).map_err(From::from),
-            v => Err(format!("invalid u64 value: {v}").into()),
+            v => Err(format!("invalid f32 value: {v}").into()),
         }
     }
 }
@@ -90,7 +90,7 @@ impl Decode<'_, Exasol> for f64 {
         match value.value {
             Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
             Value::String(s) => serde_json::from_str(s).map_err(From::from),
-            v => Err(format!("invalid u64 value: {v}").into()),
+            v => Err(format!("invalid f64 value: {v}").into()),
         }
     }
 }

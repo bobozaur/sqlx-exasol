@@ -1,8 +1,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-/// Struct used for deserialization of fetched data
-/// from getting a result set given a statement handle
+/// Struct returned by doing [fetch](<https://github.com/exasol/websocket-api/blob/master/docs/commands/fetchV1.md>) 
+/// calls on a result set.
 #[derive(Debug, Deserialize)]
 pub struct DataChunk {
     pub num_rows: usize,

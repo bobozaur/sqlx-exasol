@@ -7,9 +7,7 @@ use crate::column::{ExaColumn, ExaColumns};
 
 use super::fetched::DataChunk;
 
-/// Struct used for deserialization of the JSON
-/// returned sending queries to the database.
-/// Represents the result of one query.
+/// Struct representing the result of a single query.
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 #[serde(tag = "resultType", rename_all = "camelCase")]
@@ -30,18 +28,6 @@ impl QueryResult {
 }
 
 /// Struct representing a database result set.
-/// You'll generally only interact with this if you need information about result set columns.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ResultSetDe {
-    num_rows: usize,
-    result_set_handle: Option<u16>,
-    columns: ExaColumns,
-    num_rows_in_message: usize,
-    #[serde(default)]
-    data: Vec<Vec<Value>>,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(from = "ResultSetDe")]
 pub struct ResultSet {
@@ -65,4 +51,16 @@ impl From<ResultSetDe> for ResultSet {
             data_chunk,
         }
     }
+}
+
+/// Deserialization helper for [`ResultSet`].
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResultSetDe {
+    num_rows: usize,
+    result_set_handle: Option<u16>,
+    columns: ExaColumns,
+    num_rows_in_message: usize,
+    #[serde(default)]
+    data: Vec<Vec<Value>>,
 }

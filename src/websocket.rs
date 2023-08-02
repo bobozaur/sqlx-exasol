@@ -19,8 +19,8 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
     },
     responses::{
-        fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult,
-        session_info::SessionInfo, ExaAttributes, Response, ResponseData,
+        DataChunk, ExaAttributes, PreparedStatement, QueryResult, Response, ResponseData,
+        SessionInfo,
     },
     stream::QueryResultStream,
     tls,

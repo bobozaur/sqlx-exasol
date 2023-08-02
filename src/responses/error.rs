@@ -3,7 +3,8 @@ use std::{borrow::Cow, fmt::Display};
 use serde::Deserialize;
 use sqlx_core::error::{self, ErrorKind};
 
-/// Type representing an error directly issued by the Exasol database.
+/// An error directly issued by the Exasol database.
+/// Represents the [`super::Response::Error`] variant.
 #[derive(Debug, Deserialize)]
 pub struct ExaDatabaseError {
     text: String,

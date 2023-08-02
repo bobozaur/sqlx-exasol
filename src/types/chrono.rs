@@ -123,19 +123,12 @@ impl Encode<'_, Exasol> for chrono::Duration {
 impl<'r> Decode<'r, Exasol> for chrono::Duration {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
         let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
+        let input_err_fn = || format!("could not parse {input} as INTERVAL DAY TO SECOND");
 
-        let (days, rest) = input
-            .split_once(' ')
-            .ok_or_else(|| format!("could not parse {input} as INTERVAL DAY TO SECOND"))?;
-        let (hours, rest) = rest
-            .split_once(':')
-            .ok_or_else(|| format!("could not parse {input} as INTERVAL DAY TO SECOND"))?;
-        let (minutes, rest) = rest
-            .split_once(':')
-            .ok_or_else(|| format!("could not parse {input} as INTERVAL DAY TO SECOND"))?;
-        let (seconds, millis) = rest
-            .split_once('.')
-            .ok_or_else(|| format!("could not parse {input} as INTERVAL DAY TO SECOND"))?;
+        let (days, rest) = input.split_once(' ').ok_or_else(input_err_fn)?;
+        let (hours, rest) = rest.split_once(':').ok_or_else(input_err_fn)?;
+        let (minutes, rest) = rest.split_once(':').ok_or_else(input_err_fn)?;
+        let (seconds, millis) = rest.split_once('.').ok_or_else(input_err_fn)?;
 
         let days = days.parse().map_err(Box::new)?;
         let hours = hours.parse().map_err(Box::new)?;
@@ -199,12 +192,12 @@ impl Decode<'_, Exasol> for NaiveDateTime {
     }
 }
 
-/// A duration in calendar months
+/// A duration in calendar months, analog to [`chrono::Months`].
+/// Unlike [`chrono::Months`], this type can represent a negative duration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
 pub struct Months(i32);
 
 impl Months {
-    /// Construct a new `Months` from a number of months
     pub const fn new(num: i32) -> Self {
         Self(num)
     }
@@ -241,6 +234,7 @@ impl Encode<'_, Exasol> for Months {
             .checked_ilog10()
             .unwrap_or_default()
             + 1;
+
         Some(ExaTypeInfo::IntervalYearToMonth(IntervalYearToMonth::new(
             precision,
         )))
@@ -250,13 +244,16 @@ impl Encode<'_, Exasol> for Months {
 impl<'r> Decode<'r, Exasol> for Months {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
         let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
-        let (years, months) = input
-            .rsplit_once('-')
-            .ok_or_else(|| format!("could not parse {input} as INTERVAL YEAR TO MONTH"))?;
+
+        let input_err_fn = || format!("could not parse {input} as INTERVAL YEAR TO MONTH");
+
+        let (years, months) = input.rsplit_once('-').ok_or_else(input_err_fn)?;
 
         let years = years.parse::<i32>().map_err(Box::new)?;
         let months = months.parse::<i32>().map_err(Box::new)?;
 
+        // The number of months will always get decoded as being positive.
+        // So the sign of the years determines how to add up the months.
         let total_months = match years.is_negative() {
             true => years * 12 - months,
             false => years * 12 + months,

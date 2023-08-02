@@ -33,6 +33,7 @@ impl Type<Exasol> for str {
 
 impl Encode<'_, Exasol> for &'_ str {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+        // Exasol treats empty strings as NULL
         if self.is_empty() {
             buf.push([Value::Null]);
             return IsNull::Yes;
@@ -71,13 +72,11 @@ impl Encode<'_, Exasol> for String {
         <&str as Encode<Exasol>>::encode(&**self, buf)
     }
 
-    fn encode(
-        self,
-        buf: &mut <Exasol as sqlx_core::database::HasArguments<'_>>::ArgumentBuffer,
-    ) -> IsNull
+    fn encode(self, buf: &mut Vec<[Value; 1]>) -> IsNull
     where
         Self: Sized,
     {
+        // Exasol treats empty strings as NULL
         if self.is_empty() {
             buf.push([Value::Null]);
             return IsNull::Yes;
@@ -87,7 +86,7 @@ impl Encode<'_, Exasol> for String {
         IsNull::No
     }
 
-    fn produces(&self) -> Option<<Exasol as sqlx_core::database::Database>::TypeInfo> {
+    fn produces(&self) -> Option<ExaTypeInfo> {
         <&str as Encode<Exasol>>::produces(&&**self)
     }
 }
@@ -116,13 +115,11 @@ impl Encode<'_, Exasol> for Cow<'_, str> {
         }
     }
 
-    fn encode(
-        self,
-        buf: &mut <Exasol as sqlx_core::database::HasArguments<'_>>::ArgumentBuffer,
-    ) -> IsNull
+    fn encode(self, buf: &mut Vec<[Value; 1]>) -> IsNull
     where
         Self: Sized,
     {
+        // Exasol treats empty strings as NULL
         if self.is_empty() {
             buf.push([Value::Null]);
             return IsNull::Yes;

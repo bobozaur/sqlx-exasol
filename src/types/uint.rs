@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx_core::decode::Decode;
@@ -11,7 +9,9 @@ use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
-const NUMERIC_U64_RANGE: Range<u64> = 0..1000000000000000000;
+/// Numbers below this threshold must be serialized/deserialized as integers.
+/// The ones above must be treated as strings.
+const MAX_U64_NUMERIC: u64 = 1000000000000000000;
 
 impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
@@ -109,7 +109,7 @@ impl Type<Exasol> for u64 {
 
 impl Encode<'_, Exasol> for u64 {
     fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let value = if NUMERIC_U64_RANGE.contains(self) {
+        let value = if self < &MAX_U64_NUMERIC {
             json!(self)
         } else {
             // Large numbers get serialized as strings

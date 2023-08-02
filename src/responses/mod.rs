@@ -1,39 +1,30 @@
-mod error;
-pub(crate) mod fetched;
-pub(crate) mod prepared_stmt;
-pub(crate) mod result;
-pub(crate) mod session_info;
+//! Module containing data structures used in representing data returned from the database.
 
-use std::num::NonZeroUsize;
+mod attributes;
+mod error;
+mod fetched;
+mod prepared_stmt;
+mod result;
+mod session_info;
 
 use rsa::errors::Error as RsaError;
 use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ExaResultExt;
-use crate::{
-    column::ExaColumns,
-    error::ExaProtocolError,
-    options::{ProtocolVersion, DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE},
-};
-
-use self::{
-    fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult,
-    session_info::SessionInfo,
-};
+use crate::{column::ExaColumns, error::ExaProtocolError, options::ProtocolVersion};
 
 use sqlx_core::Error as SqlxError;
 
+pub use attributes::{Attributes, ExaAttributes};
 pub use error::ExaDatabaseError;
+pub use fetched::DataChunk;
+pub use prepared_stmt::PreparedStatement;
+pub use result::{QueryResult, ResultSet};
+pub use session_info::SessionInfo;
 
-/// Generic response received from the Exasol server
-/// This is the first deserialization step
-/// Used to determine whether the message
-/// is a proper response, or an error
-///
-/// We're forced to use internal tagging as
-/// ok/error responses have different adjacent fields
+/// A response from the Exasol server.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum Response {
@@ -47,6 +38,12 @@ pub enum Response {
     },
 }
 
+/// The response data field of the [`Response::Ok`] variant, received on successful execution of a command.
+/// This contains the actual data relevant to the executed command, but there's unfortunately
+/// no tag to use for deciding the concrete type to deserialize to.
+///
+/// Therefore, we try to deserialize all the possible fields, and match on
+/// various combinations to determine whether we got the expected response or not.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseData {
@@ -70,6 +67,7 @@ pub struct ResponseData {
     public_key_pem: Option<String>,
 }
 
+/// See: https://github.com/exasol/websocket-api/blob/master/docs/commands/createPreparedStatementV1.md
 impl TryFrom<ResponseData> for PreparedStatement {
     type Error = SqlxError;
 
@@ -93,6 +91,7 @@ impl TryFrom<ResponseData> for PreparedStatement {
     }
 }
 
+/// See: https://github.com/exasol/websocket-api/blob/master/docs/commands/executeV1.md
 impl TryFrom<ResponseData> for QueryResult {
     type Error = SqlxError;
 
@@ -105,6 +104,7 @@ impl TryFrom<ResponseData> for QueryResult {
     }
 }
 
+/// See: https://github.com/exasol/websocket-api/blob/master/docs/commands/fetchV1.md
 impl TryFrom<ResponseData> for DataChunk {
     type Error = SqlxError;
 
@@ -116,6 +116,7 @@ impl TryFrom<ResponseData> for DataChunk {
     }
 }
 
+/// See: https://github.com/exasol/websocket-api/blob/master/docs/commands/getHostsV1.md
 impl TryFrom<ResponseData> for Vec<String> {
     type Error = SqlxError;
 
@@ -127,6 +128,8 @@ impl TryFrom<ResponseData> for Vec<String> {
     }
 }
 
+/// See: https://github.com/exasol/websocket-api/blob/master/docs/commands/loginV3.md
+/// and https://github.com/exasol/websocket-api/blob/master/docs/commands/loginTokenV3.md
 impl TryFrom<ResponseData> for SessionInfo {
     type Error = SqlxError;
 
@@ -174,6 +177,7 @@ impl TryFrom<ResponseData> for SessionInfo {
     }
 }
 
+/// See: https://github.com/exasol/websocket-api/blob/master/docs/commands/loginV3.md
 impl TryFrom<ResponseData> for RsaPublicKey {
     type Error = SqlxError;
 
@@ -193,159 +197,4 @@ impl TryFrom<ResponseData> for RsaPublicKey {
 #[serde(rename_all = "camelCase")]
 pub struct Parameters {
     pub(crate) columns: ExaColumns,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExaAttributes {
-    // Database read-write attributes
-    pub(crate) autocommit: bool,
-    pub(crate) current_schema: Option<String>,
-    pub(crate) feedback_interval: u64,
-    pub(crate) numeric_characters: String,
-    pub(crate) query_timeout: u64,
-    pub(crate) snapshot_transactions_enabled: bool,
-    pub(crate) timestamp_utc_enabled: bool,
-    // Database read-only attributes
-    #[serde(skip_serializing)]
-    pub(crate) compression_enabled: bool,
-    #[serde(skip_serializing)]
-    pub(crate) date_format: String,
-    #[serde(skip_serializing)]
-    pub(crate) date_language: String,
-    #[serde(skip_serializing)]
-    pub(crate) datetime_format: String,
-    #[serde(skip_serializing)]
-    pub(crate) default_like_escape_character: String,
-    #[serde(skip_serializing)]
-    pub(crate) open_transaction: bool,
-    #[serde(skip_serializing)]
-    pub(crate) timezone: String,
-    #[serde(skip_serializing)]
-    pub(crate) timezone_behavior: String,
-    // Driver specific attributes
-    #[serde(skip_serializing)]
-    pub(crate) fetch_size: usize,
-    #[serde(skip_serializing)]
-    pub(crate) encryption_enabled: bool,
-    #[serde(skip_serializing)]
-    pub(crate) statement_cache_capacity: NonZeroUsize,
-}
-
-impl Default for ExaAttributes {
-    fn default() -> Self {
-        Self {
-            autocommit: true,
-            current_schema: None,
-            feedback_interval: 1,
-            numeric_characters: ".,".to_owned(),
-            query_timeout: 0,
-            snapshot_transactions_enabled: false,
-            timestamp_utc_enabled: false,
-            compression_enabled: false,
-            date_format: "YYYY-MM-DD".to_owned(),
-            date_language: "ENG".to_owned(),
-            datetime_format: "YYYY-MM-DD HH24:MI:SS.FF6".to_owned(),
-            default_like_escape_character: "\\".to_owned(),
-            open_transaction: false,
-            timezone: "UNIVERSAL".to_owned(),
-            timezone_behavior: "INVALID SHIFT AMBIGUOUS ST".to_owned(),
-            fetch_size: DEFAULT_FETCH_SIZE,
-            encryption_enabled: true,
-            statement_cache_capacity: NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
-        }
-    }
-}
-
-impl ExaAttributes {
-    pub(crate) fn update(&mut self, other: Attributes) {
-        macro_rules! other_or_prev {
-            ($field:tt) => {
-                if let Some(new) = other.$field {
-                    self.$field = new;
-                }
-            };
-        }
-
-        if let Some(schema) = other.current_schema {
-            self.current_schema = Some(schema);
-        }
-
-        other_or_prev!(autocommit);
-        other_or_prev!(feedback_interval);
-        other_or_prev!(numeric_characters);
-        other_or_prev!(query_timeout);
-        other_or_prev!(snapshot_transactions_enabled);
-        other_or_prev!(timestamp_utc_enabled);
-        other_or_prev!(compression_enabled);
-        other_or_prev!(date_format);
-        other_or_prev!(date_language);
-        other_or_prev!(datetime_format);
-        other_or_prev!(default_like_escape_character);
-        other_or_prev!(open_transaction);
-        other_or_prev!(timezone);
-        other_or_prev!(timezone_behavior);
-    }
-}
-/// Struct representing attributes returned from Exasol.
-/// These can either be returned by an explicit `getAttributes` call
-/// or as part of any response.
-///
-/// Note that some of these are *read-only*!
-/// See the [specification](<https://github.com/exasol/websocket-api/blob/master/docs/WebsocketAPIV1.md#attributes-session-and-database-properties>)
-/// for more details.
-#[allow(dead_code)]
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Attributes {
-    // Read-write attributes
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) autocommit: Option<bool>,
-    pub(crate) current_schema: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) feedback_interval: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) numeric_characters: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) query_timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) snapshot_transactions_enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) timestamp_utc_enabled: Option<bool>,
-    // Read-only attributes
-    #[serde(skip_serializing)]
-    pub(crate) compression_enabled: Option<bool>,
-    #[serde(skip_serializing)]
-    pub(crate) date_format: Option<String>,
-    #[serde(skip_serializing)]
-    pub(crate) date_language: Option<String>,
-    #[serde(skip_serializing)]
-    pub(crate) datetime_format: Option<String>,
-    #[serde(skip_serializing)]
-    pub(crate) default_like_escape_character: Option<String>,
-    #[serde(skip_serializing)]
-    #[serde(default)]
-    #[serde(deserialize_with = "Attributes::deserialize_open_transaction")]
-    pub(crate) open_transaction: Option<bool>,
-    #[serde(skip_serializing)]
-    pub(crate) timezone: Option<String>,
-    #[serde(skip_serializing)]
-    pub(crate) timezone_behavior: Option<String>,
-}
-
-impl Attributes {
-    fn deserialize_open_transaction<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let Some(value) = Option::deserialize(deserializer)? else {return Ok(None)};
-
-        match value {
-            0 => Ok(Some(false)),
-            1 => Ok(Some(true)),
-            v => Err(D::Error::custom(format!(
-                "Invalid value for 'open_transaction' field: {v}"
-            ))),
-        }
-    }
 }

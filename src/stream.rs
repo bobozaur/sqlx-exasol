@@ -21,10 +21,7 @@ use crate::{
     command::{Command, ExaCommand},
     error::ExaProtocolError,
     query_result::ExaQueryResult,
-    responses::{
-        fetched::DataChunk,
-        result::{QueryResult, ResultSet},
-    },
+    responses::{DataChunk, QueryResult, ResultSet},
     row::ExaRow,
     websocket::ExaWebSocket,
 };

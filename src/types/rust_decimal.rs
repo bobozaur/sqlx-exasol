@@ -15,6 +15,8 @@ use crate::{
     value::ExaValueRef,
 };
 
+/// Numbers within this range must be serialized/deserialized as integers.
+/// The ones above/under these thresholds are treated as strings.
 const NUMERIC_DECIMAL_RANGE: Range<rust_decimal::Decimal> =
     rust_decimal::Decimal::from_parts(2808348671, 232830643, 0, true, 0)
         ..rust_decimal::Decimal::from_parts(2808348672, 232830643, 0, false, 0);
