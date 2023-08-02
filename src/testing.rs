@@ -202,8 +202,7 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         separated.push_bind(db_id);
     }
 
-    query.push(")");
-    conn.ws.execute_batch(query.sql()).await?;
+    query.push(")").build().execute(&mut *conn).await?;
 
     Ok(deleted_db_ids.len())
 }
