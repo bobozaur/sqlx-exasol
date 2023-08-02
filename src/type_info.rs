@@ -25,7 +25,7 @@ pub enum ExaTypeInfo {
 }
 
 impl ExaTypeInfo {
-    pub fn check_compatibility(&self, ty: &Self) -> Result<(), SqlxError> {
+    pub(crate) fn check_compatibility(&self, ty: &Self) -> Result<(), SqlxError> {
         let flag = match self {
             ExaTypeInfo::Boolean => matches!(ty, ExaTypeInfo::Boolean),
             ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => c.compatible(ty),
@@ -90,6 +90,7 @@ impl ExaTypeInfo {
             ExaTypeInfo::IntervalYearToMonth(iym) => {
                 format!("INTERVAL YEAR ({}) TO MONTH", iym.precision)
             }
+            // For HASHTYPE the database returns the size as doubled.
             ExaTypeInfo::Hashtype(h) => format!("{self}({} BYTE)", h.size / 2),
         }
     }

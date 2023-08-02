@@ -75,7 +75,8 @@ impl ExaWebSocket {
         Ok((ws, session_info))
     }
 
-    pub(crate) async fn get_results_stream<'a, C, F>(
+    /// Executes a [`Command`] and returns a [`QueryResultStream`].
+    pub(crate) async fn get_result_stream<'a, C, F>(
         &'a mut self,
         cmd: Command,
         rs_handle: &mut Option<u16>,
@@ -85,18 +86,21 @@ impl ExaWebSocket {
         C: FnMut(&'a mut ExaWebSocket, Command) -> F,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
-        if let Some(handle) = rs_handle {
-            self.close_result_set(*handle).await?;
+        if let Some(handle) = rs_handle.take() {
+            self.close_result_set(handle).await?;
         }
 
-        let query_result = self.get_results(cmd).await?;
-        std::mem::swap(rs_handle, &mut query_result.handle());
+        let query_result = self.get_query_result(cmd).await?;
+        *rs_handle = query_result.handle();
 
         QueryResultStream::new(self, query_result, fetcher_maker)
     }
 
-    pub(crate) async fn get_results(&mut self, cmd: Command) -> Result<QueryResult, SqlxError> {
-        let resp_data = self.get_resp_data(cmd).await?;
+    pub(crate) async fn get_query_result(
+        &mut self,
+        cmd: Command,
+    ) -> Result<QueryResult, SqlxError> {
+        let resp_data = self.get_response_data(cmd).await?;
         QueryResult::try_from(resp_data)
     }
 
@@ -110,7 +114,7 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<PreparedStatement, SqlxError> {
-        let resp_data = self.get_resp_data(cmd).await?;
+        let resp_data = self.get_response_data(cmd).await?;
         PreparedStatement::try_from(resp_data)
     }
 
@@ -124,7 +128,7 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<(DataChunk, &mut Self), SqlxError> {
-        let resp_data = self.get_resp_data(cmd).await?;
+        let resp_data = self.get_response_data(cmd).await?;
         DataChunk::try_from(resp_data).map(|c| (c, self))
     }
 
@@ -229,10 +233,9 @@ impl ExaWebSocket {
     ) -> Result<SessionInfo, SqlxError> {
         match &mut opts.login {
             LoginRef::Credentials(creds) => {
-                self.start_login_credentials(creds, opts.protocol_version)
-                    .await?
+                self.login_credentials(creds, opts.protocol_version).await?
             }
-            _ => self.start_login_token(opts.protocol_version).await?,
+            _ => self.login_token(opts.protocol_version).await?,
         }
 
         let cmd = (&opts).try_into()?;
@@ -271,47 +274,47 @@ impl ExaWebSocket {
         result
     }
 
-    async fn start_login_credentials(
+    async fn login_credentials(
         &mut self,
         credentials: &mut CredentialsRef<'_>,
         protocol_version: ProtocolVersion,
     ) -> Result<(), SqlxError> {
-        let key = self.get_pub_key(protocol_version).await?;
+        let key = self.get_public_key(protocol_version).await?;
         credentials.encrypt_password(key)?;
 
         Ok(())
     }
 
-    async fn start_login_token(
-        &mut self,
-        protocol_version: ProtocolVersion,
-    ) -> Result<(), SqlxError> {
+    async fn login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_login_token(protocol_version).try_into()?;
         self.send_cmd(cmd).await?;
         Ok(())
     }
 
-    async fn get_pub_key(
+    async fn get_public_key(
         &mut self,
         protocol_version: ProtocolVersion,
     ) -> Result<RsaPublicKey, SqlxError> {
         let cmd = ExaCommand::new_login(protocol_version).try_into()?;
-        let resp_data = self.get_resp_data(cmd).await?;
+        let resp_data = self.get_response_data(cmd).await?;
         RsaPublicKey::try_from(resp_data)
     }
 
     async fn get_session_info(&mut self, cmd: Command) -> Result<SessionInfo, SqlxError> {
-        let resp_data = self.get_resp_data(cmd).await?;
+        let resp_data = self.get_response_data(cmd).await?;
         SessionInfo::try_from(resp_data)
     }
 
-    async fn get_resp_data(&mut self, cmd: Command) -> Result<ResponseData, SqlxError> {
+    /// Helper function for when a [`ResponseData`] is expected out of a [`Command`].
+    async fn get_response_data(&mut self, cmd: Command) -> Result<ResponseData, SqlxError> {
         self.send_cmd(cmd)
             .await?
             .ok_or(ExaProtocolError::MissingResponseData)
             .map_err(From::from)
     }
 
+    /// Sends a [`Command`] to the database, processing the attributes the
+    /// database responded with and returning the [`ResponseData`].
     async fn send_cmd(&mut self, cmd: Command) -> Result<Option<ResponseData>, SqlxError> {
         let cmd = cmd.into_inner();
         tracing::trace!("Sending command to database: {cmd}");
@@ -342,6 +345,7 @@ impl ExaWebSocket {
         Ok(response_data)
     }
 
+    /// Sends an uncompressed command
     async fn send_uncompressed_cmd(&mut self, cmd: String) -> Result<Response, SqlxError> {
         self.ws.send(Message::Text(cmd)).await.to_sqlx_err()?;
 
@@ -362,6 +366,7 @@ impl ExaWebSocket {
         Err(ExaProtocolError::MissingMessage)?
     }
 
+    /// Compresses the command before sending and decodes the compressed response.
     #[cfg(feature = "flate2")]
     async fn send_compressed_cmd(&mut self, cmd: String) -> Result<Response, SqlxError> {
         use std::io::Write;

@@ -131,7 +131,7 @@ impl ExaConnection {
         .try_into()?;
 
         self.ws
-            .get_results_stream(cmd, &mut self.last_rs_handle, fetcher_maker)
+            .get_result_stream(cmd, &mut self.last_rs_handle, fetcher_maker)
             .await
     }
 
@@ -146,7 +146,7 @@ impl ExaConnection {
     {
         let cmd = ExaCommand::new_execute(sql, &self.ws.attributes).try_into()?;
         self.ws
-            .get_results_stream(cmd, &mut self.last_rs_handle, fetcher_maker)
+            .get_result_stream(cmd, &mut self.last_rs_handle, fetcher_maker)
             .await
     }
 }

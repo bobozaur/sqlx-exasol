@@ -55,6 +55,7 @@ pub struct ExaAttributes {
     pub(crate) statement_cache_capacity: NonZeroUsize,
 }
 
+/// Sensible attribute defaults that anyway get overwritten after connection login.
 impl Default for ExaAttributes {
     fn default() -> Self {
         Self {
