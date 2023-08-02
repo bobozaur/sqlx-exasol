@@ -2,6 +2,7 @@ use crate::options::URL_SCHEME;
 use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
+// Error returned for configuration failures caused by invalid URL connection strings.
 #[derive(Debug, Clone, ThisError)]
 pub enum ExaConfigError {
     #[error("no host provided")]

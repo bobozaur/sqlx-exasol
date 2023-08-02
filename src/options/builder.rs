@@ -31,8 +31,8 @@ pub struct ExaConnectOptionsBuilder<'a> {
     feedback_interval: u8,
 }
 
-impl<'a> ExaConnectOptionsBuilder<'a> {
-    pub(crate) fn new() -> Self {
+impl<'a> Default for ExaConnectOptionsBuilder<'a> {
+    fn default() -> Self {
         Self {
             host: None,
             port: DEFAULT_PORT,

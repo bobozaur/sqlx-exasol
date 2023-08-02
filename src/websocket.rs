@@ -16,8 +16,7 @@ use crate::{
     command::{Command, ExaCommand},
     error::{ExaProtocolError, ExaResultExt},
     options::{
-        login::{CredentialsRef, LoginRef},
-        ExaConnectOptionsRef, ProtocolVersion,
+        ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
     },
     responses::{
         fetched::DataChunk, prepared_stmt::PreparedStatement, result::QueryResult,

@@ -1,16 +1,14 @@
 mod builder;
 mod error;
-pub(crate) mod login;
+mod login;
 mod protocol_version;
 mod serializable;
-pub(crate) mod ssl_mode;
+mod ssl_mode;
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-pub use login::{Credentials, Login};
-pub use protocol_version::ProtocolVersion;
 use serde::Serialize;
 use sqlx_core::connection::{ConnectOptions, LogSettings};
 use sqlx_core::net::tls::CertificateInput;
@@ -19,10 +17,13 @@ use url::Url;
 
 use crate::connection::ExaConnection;
 
-use self::error::ExaConfigError;
-use self::login::LoginRef;
-use self::ssl_mode::ExaSslMode;
-use self::{builder::ExaConnectOptionsBuilder, serializable::SerializableConOpts};
+use builder::ExaConnectOptionsBuilder;
+use error::ExaConfigError;
+use serializable::SerializableConOpts;
+
+pub use login::{Credentials, CredentialsRef, Login, LoginRef};
+pub use protocol_version::ProtocolVersion;
+pub use ssl_mode::ExaSslMode;
 
 pub(crate) const URL_SCHEME: &str = "exa";
 
@@ -62,10 +63,9 @@ pub struct ExaConnectOptions {
     log_settings: LogSettings,
 }
 
-/// Connection options
 impl ExaConnectOptions {
     pub fn builder<'a>() -> ExaConnectOptionsBuilder<'a> {
-        ExaConnectOptionsBuilder::new()
+        ExaConnectOptionsBuilder::default()
     }
 }
 

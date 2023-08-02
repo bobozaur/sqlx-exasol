@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use super::{login::LoginRef, ExaConnectOptionsRef};
 
+/// Serialization helper for [`ExaConnectOptionsRef`].
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerializableConOpts<'a> {
@@ -15,6 +16,8 @@ pub struct SerializableConOpts<'a> {
     attributes: Attributes<'a>,
 }
 
+/// Serialization helper, analog to [crate::responses::Attributes]
+/// but containing only the relevant fields for login.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Attributes<'a> {

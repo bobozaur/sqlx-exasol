@@ -1,7 +1,6 @@
 use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Error as WsError;
 use rsa::errors::Error as RsaError;
-use serde_json;
 use serde_json::error::Error as JsonError;
 use sqlx_core::Error as SqlxError;
 

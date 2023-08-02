@@ -7,7 +7,7 @@ use sqlx_core::{
 };
 
 use crate::{
-    options::{ssl_mode::ExaSslMode, ExaConnectOptionsRef},
+    options::{ExaConnectOptionsRef, ExaSslMode},
     websocket::{RwSocket, WithRwSocket},
 };
 

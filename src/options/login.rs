@@ -4,7 +4,7 @@ use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 use serde::Serialize;
 use sqlx_core::Error as SqlxError;
 
-/// Login type.
+/// Enum representing the possible ways of authenticating a connection.
 /// The variant chosen dictates which login process is called.
 #[derive(Clone, Debug, Serialize)]
 pub enum Login {
@@ -13,7 +13,6 @@ pub enum Login {
     RefreshToken(RefreshToken),
 }
 
-/// Login credentials.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Credentials {
@@ -51,9 +50,11 @@ impl RefreshToken {
     }
 }
 
+/// Serialization helper used particularly in the event
+/// that we need to encrypt the password in a [`Login::Credentials`] login.
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
-pub(crate) enum LoginRef<'a> {
+pub enum LoginRef<'a> {
     Credentials(CredentialsRef<'a>),
     AccessToken(&'a AccessToken),
     RefreshToken(&'a RefreshToken),
@@ -69,9 +70,11 @@ impl<'a> From<&'a Login> for LoginRef<'a> {
     }
 }
 
+/// Serialization helper. We need to encrypt the password,
+/// hence mutate it, but the rest can be borrowed.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CredentialsRef<'a> {
+pub struct CredentialsRef<'a> {
     username: &'a str,
     password: String,
 }
@@ -86,8 +89,11 @@ impl<'a> From<&'a Credentials> for CredentialsRef<'a> {
 }
 
 impl<'a> CredentialsRef<'a> {
-    /// Encrypts the password with the provided key
-    pub(crate) fn encrypt_password(&mut self, key: RsaPublicKey) -> Result<(), SqlxError> {
+    /// Encrypts the password with the provided key.
+    ///
+    /// When connecting using [`Login::Credentials`], Exasol first sends out
+    /// a public key to encrypt the password with.
+    pub fn encrypt_password(&mut self, key: RsaPublicKey) -> Result<(), SqlxError> {
         let mut rng = OsRng;
 
         let padding = Pkcs1v15Encrypt;
