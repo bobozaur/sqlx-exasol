@@ -181,22 +181,50 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
     /// We do expect the range to be in the ascending order though,
     /// so `hostname4..1.com` won't work.
     fn generate_hosts(hostname: &str) -> Vec<String> {
-        // Really not expecting any other match on this apart from the range.
-        // If this actually ends up failing for some people, they should really
-        // reconsider their taste in domain names.
-        let mut hostname_iter = hostname.split("..");
+        let mut index_accum = 0;
 
-        // If there aren't two elements provided, then the splitting failed.
-        // So, we just use the host as is.
-        let (Some(first), Some(last)) = (hostname_iter.next(), hostname_iter.next()) else {
-            return vec![hostname.to_owned()];
+        // We loop through occurences of ranges (..) and try to find one surrounded by digits.
+        // If that happens, then we break out of the loop with the index of the range occurance.
+        let range_idx = loop {
+            let search_str = &hostname[index_accum..];
+
+            // No range? No problem! Return the host as is.
+            let Some(idx) = search_str.find("..") else {return vec![hostname.to_owned()]};
+
+            // While if someone actually uses some "..thisismyhostname" host in the connection string
+            // would be absolutely insane, it's still somewhat nicer not have this overflow.
+            //
+            // But really, if you read this and your host looks like that, you really should
+            // re-evaluate your taste in domain names.
+            //
+            // In any case, the index points to the range dots.
+            // We want to look before that, hence the substraction.
+            let before_opt = idx
+                .checked_sub(1)
+                .and_then(|i| search_str.as_bytes().get(i));
+
+            // Get the byte after the range dots.
+            let after_opt = search_str.as_bytes().get(idx + 2);
+
+            // Check if the range is surrounded by digits and if so, return its index.
+            // Continue to the next range if not.
+            break match (before_opt, after_opt) {
+                (Some(b), Some(a)) if b.is_ascii_digit() || a.is_ascii_digit() => idx + index_accum,
+                _ => {
+                    index_accum += idx + 2;
+                    continue;
+                }
+            };
         };
 
-        // We wanna find the last non-numeric character, before the range start, in the first
-        // part of the hostname and the first non-numeric character, right after the range end,
+        let before_range = &hostname[..range_idx];
+        let after_range = &hostname[range_idx + 2..];
+
+        // We wanna find the last non-numeric character before the range index in the first
+        // part of the hostname and the first non-numeric character right after the range dots,
         // in the second part of the hostname.
-        let opt_start = first.rfind(|c: char| !c.is_numeric());
-        let opt_end = last.find(|c: char| !c.is_numeric());
+        let opt_start = before_range.rfind(|c: char| !c.is_numeric());
+        let opt_end = after_range.find(|c: char| !c.is_numeric());
 
         // Return the hostname as is if we could not identify the range boundaries.
         let (Some(start_idx), Some(end_idx)) = (opt_start, opt_end) else {
@@ -205,14 +233,14 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
 
         // We split the hostname parts to isolate components.
         // The start is incremented as the index is for the last non-numeric character.
-        let (prefix, start_range) = first.split_at(start_idx + 1);
-        let (end_range, suffix) = last.split_at(end_idx);
+        let (prefix, start_range) = before_range.split_at(start_idx + 1);
+        let (end_range, suffix) = after_range.split_at(end_idx);
 
         // Return the hostname as is if the range boundaries are not integers.
-        let Ok(start_range) = start_range.parse::<usize>() else {return vec![hostname.to_owned()];};
-        let Ok(end_range) = end_range.parse::<usize>() else {return vec![hostname.to_owned()];};
+        let Ok(start) = start_range.parse::<usize>() else {return vec![hostname.to_owned()];};
+        let Ok(end) = end_range.parse::<usize>() else {return vec![hostname.to_owned()];};
 
-        (start_range..=end_range)
+        (start..=end)
             .map(|i| format!("{prefix}{i}{suffix}"))
             .collect()
     }
@@ -278,5 +306,34 @@ mod tests {
 
         let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
         assert_eq!(generated, vec![hostname]);
+    }
+
+    #[test]
+    fn test_hostname_starts_with_range() {
+        let hostname = "..myhost.com";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, vec![hostname]);
+    }
+
+    #[test]
+    fn test_hostname_ends_with_range() {
+        let hostname = "myhost.com..";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, vec![hostname]);
+    }
+
+    #[test]
+    fn test_hostname_real_and_fake_range() {
+        let hostname = "myhosta..bcdef1..3.com";
+        let expected = vec![
+            "myhosta..bcdef1.com".to_owned(),
+            "myhosta..bcdef2.com".to_owned(),
+            "myhosta..bcdef3.com".to_owned(),
+        ];
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, expected);
     }
 }
