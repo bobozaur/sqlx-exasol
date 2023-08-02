@@ -58,7 +58,11 @@ impl Encode<'_, Exasol> for f32 {
 
 impl Decode<'_, Exasol> for f32 {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+        match value.value {
+            Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
+            Value::String(s) => serde_json::from_str(s).map_err(From::from),
+            v => Err(format!("invalid u64 value: {v}").into()),
+        }
     }
 }
 
@@ -83,6 +87,10 @@ impl Encode<'_, Exasol> for f64 {
 
 impl Decode<'_, Exasol> for f64 {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+        match value.value {
+            Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
+            Value::String(s) => serde_json::from_str(s).map_err(From::from),
+            v => Err(format!("invalid u64 value: {v}").into()),
+        }
     }
 }

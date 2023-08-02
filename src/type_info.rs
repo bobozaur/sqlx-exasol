@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, fmt::Display};
 
 use serde::{Deserialize, Serialize};
-use sqlx_core::{type_info::TypeInfo, types::Type, Error as SqlxError};
+use sqlx_core::{type_info::TypeInfo, Error as SqlxError};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -27,7 +27,7 @@ pub enum ExaTypeInfo {
 impl ExaTypeInfo {
     pub fn check_compatibility(&self, ty: &Self) -> Result<(), SqlxError> {
         let flag = match self {
-            ExaTypeInfo::Boolean => bool::compatible(ty),
+            ExaTypeInfo::Boolean => matches!(ty, ExaTypeInfo::Boolean),
             ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => c.compatible(ty),
             ExaTypeInfo::Date => matches!(
                 ty,
@@ -63,8 +63,33 @@ impl ExaTypeInfo {
             return Ok(());
         }
 
-        let msg = format!("type mismatch: expected SQL type `{self}` but was provided `{ty}`");
+        let msg = format!(
+            "type mismatch: expected SQL type `{}` but was provided `{}`",
+            self.pretty_print(),
+            ty.pretty_print()
+        );
         Err(SqlxError::Decode(msg.into()))
+    }
+
+    pub fn pretty_print(&self) -> String {
+        match self {
+            ExaTypeInfo::Boolean
+            | ExaTypeInfo::Date
+            | ExaTypeInfo::Double
+            | ExaTypeInfo::Timestamp
+            | ExaTypeInfo::TimestampWithLocalTimeZone => self.to_string(),
+            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => format!("{self}({})", c.size),
+            ExaTypeInfo::Decimal(d) => format!("{self}({}, {})", d.precision, d.scale),
+            ExaTypeInfo::Geometry(g) => format!("{self}({})", g.srid),
+            ExaTypeInfo::IntervalDayToSecond(ids) => format!(
+                "INTERVAL DAY ({}) TO SECOND ({})",
+                ids.precision, ids.fraction
+            ),
+            ExaTypeInfo::IntervalYearToMonth(iym) => {
+                format!("INTERVAL YEAR ({}) TO MONTH", iym.precision)
+            }
+            ExaTypeInfo::Hashtype(h) => format!("{self}({} BYTE)", h.size / 2),
+        }
     }
 }
 
@@ -186,6 +211,7 @@ impl Decimal {
         match ty {
             ExaTypeInfo::Decimal(d) => self >= d,
             ExaTypeInfo::Double => self.scale > 0,
+            ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_) => self.precision > 18,
             _ => false,
         }
     }
