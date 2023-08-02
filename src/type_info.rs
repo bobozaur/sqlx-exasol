@@ -78,7 +78,9 @@ impl ExaTypeInfo {
             | ExaTypeInfo::Double
             | ExaTypeInfo::Timestamp
             | ExaTypeInfo::TimestampWithLocalTimeZone => self.to_string(),
-            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => format!("{self}({})", c.size),
+            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => {
+                format!("{self}({}) {}", c.size, c.character_set)
+            }
             ExaTypeInfo::Decimal(d) => format!("{self}({}, {})", d.precision, d.scale),
             ExaTypeInfo::Geometry(g) => format!("{self}({})", g.srid),
             ExaTypeInfo::IntervalDayToSecond(ids) => format!(
@@ -167,6 +169,21 @@ pub enum Charset {
     #[default]
     Utf8,
     Ascii,
+}
+
+impl AsRef<str> for Charset {
+    fn as_ref(&self) -> &str {
+        match self {
+            Charset::Utf8 => "UTF8",
+            Charset::Ascii => "ASCII",
+        }
+    }
+}
+
+impl Display for Charset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
 }
 
 impl PartialOrd for Charset {
