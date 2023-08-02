@@ -40,13 +40,11 @@ impl TestSupport for Exasol {
 
             let db_id = db_id(db_name);
 
-            conn.execute(&format!("drop database if exists {};", db_name)[..])
-                .await?;
+            let query_str = format!("drop database if exists {};", db_name);
+            conn.execute(&*query_str).await?;
 
-            query(r#"DELETE FROM "_sqlx_test_databases" WHERE db_id = ?"#)
-                .bind(db_id)
-                .execute(&mut *conn)
-                .await?;
+            let query_str = r#"DELETE FROM "_sqlx_test_databases" WHERE db_id = ?"#;
+            query(query_str).bind(db_id).execute(&mut *conn).await?;
 
             Ok(())
         })
@@ -105,16 +103,13 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     let mut conn = master_pool.acquire().await?;
 
-    conn.execute(
-        r#"
+    let query_str = r#"
         CREATE TABLE IF NOT EXISTS "_sqlx_test_databases" (
             db_id BIGINT IDENTITY,
             test_path CLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    "#,
-    )
-    .await?;
+        );"#;
+    conn.execute(query_str).await?;
 
     // Record the current time _before_ we acquire the `DO_CLEANUP` permit. This
     // prevents the first test thread from accidentally deleting new test dbs
@@ -128,20 +123,18 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         do_cleanup(&mut conn, now).await?;
     }
 
-    query(r#"INSERT INTO "_sqlx_test_databases" (test_path) VALUES (?)"#)
+    let query_str = r#"INSERT INTO "_sqlx_test_databases" (test_path) VALUES (?)"#;
+    query(query_str)
         .bind(args.test_path)
         .execute(&mut *conn)
         .await?;
 
-    let new_db_id: u64 =
-        query_scalar(r#"SELECT ZEROIFNULL(MAX(db_id)) + 1 FROM "_sqlx_test_databases";"#)
-            .fetch_one(&mut *conn)
-            .await?;
-
+    let query_str = r#"SELECT ZEROIFNULL(MAX(db_id)) + 1 FROM "_sqlx_test_databases";"#;
+    let new_db_id: u64 = query_scalar(query_str).fetch_one(&mut *conn).await?;
     let new_db_name = db_name(new_db_id);
 
-    conn.execute(&format!("CREATE SCHEMA {}", new_db_name)[..])
-        .await?;
+    let query_str = format!("CREATE SCHEMA {}", new_db_name);
+    conn.execute(&*query_str).await?;
 
     eprintln!("created database {}", new_db_name);
 
@@ -164,12 +157,15 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 }
 
 async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Result<usize, Error> {
-    let delete_db_ids: Vec<u64> = query_scalar(
-        r#"SELECT db_id FROM "_sqlx_test_databases" WHERE created_at < FROM_POSIX_TIME(?)"#,
-    )
-    .bind(created_before.as_secs().to_string())
-    .fetch_all(&mut *conn)
-    .await?;
+    let query_str = r#"
+        SELECT db_id FROM 
+        "_sqlx_test_databases" 
+        WHERE created_at < FROM_POSIX_TIME(?)"#;
+
+    let delete_db_ids: Vec<u64> = query_scalar(query_str)
+        .bind(created_before.as_secs().to_string())
+        .fetch_all(&mut *conn)
+        .await?;
 
     if delete_db_ids.is_empty() {
         return Ok(0);
@@ -206,7 +202,8 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         separated.push_bind(db_id);
     }
 
-    query.push(")").build().execute(&mut *conn).await?;
+    query.push(")");
+    conn.ws.execute_batch(query.sql()).await?;
 
     Ok(deleted_db_ids.len())
 }

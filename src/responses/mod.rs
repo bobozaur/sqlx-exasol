@@ -7,13 +7,16 @@ mod prepared_stmt;
 mod result;
 mod session_info;
 
+use std::sync::Arc;
+
 use rsa::errors::Error as RsaError;
 use rsa::{pkcs1::DecodeRsaPublicKey, RsaPublicKey};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ExaResultExt;
-use crate::{column::ExaColumns, error::ExaProtocolError, options::ProtocolVersion};
+use crate::ExaColumn;
+use crate::{error::ExaProtocolError, options::ProtocolVersion};
 
 use sqlx_core::Error as SqlxError;
 
@@ -197,4 +200,24 @@ impl TryFrom<ResponseData> for RsaPublicKey {
 #[serde(rename_all = "camelCase")]
 pub struct Parameters {
     pub(crate) columns: ExaColumns,
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+pub(crate) struct ExaColumnsDe(pub Vec<ExaColumn>);
+
+#[derive(Debug, Deserialize)]
+#[serde(from = "ExaColumnsDe")]
+pub(crate) struct ExaColumns(pub Arc<[ExaColumn]>);
+
+impl From<ExaColumnsDe> for ExaColumns {
+    fn from(mut value: ExaColumnsDe) -> Self {
+        value
+            .0
+            .iter_mut()
+            .enumerate()
+            .for_each(|(idx, c)| c.ordinal = idx);
+
+        Self(value.0.into())
+    }
 }

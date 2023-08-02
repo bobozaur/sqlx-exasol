@@ -5,6 +5,7 @@ use std::{
 };
 
 use either::Either;
+use futures_core::ready;
 use futures_util::{
     future::{self, Ready},
     pin_mut,
@@ -26,6 +27,8 @@ use crate::{
     websocket::ExaWebSocket,
 };
 
+/// Adapter stream that stores a future following the query execution
+/// and then a stream of results from the database.
 #[pin_project]
 pub struct ResultStream<'a, C, F1, F2>
 where
@@ -63,9 +66,7 @@ where
         match state {
             ResultStreamStateProj::Stream(stream) => stream.poll_next(cx),
             ResultStreamStateProj::Initial(fut) => {
-                let Poll::Ready(stream) = fut.poll(cx)? else {
-                    return Poll::Pending;
-                };
+                let stream = ready!(fut.poll(cx)?);
                 this.state.set(ResultStreamState::Stream(stream));
 
                 cx.waker().wake_by_ref();
@@ -88,9 +89,7 @@ where
             return Poll::Ready(None);
         }
 
-        let Poll::Ready(opt) = self.as_mut().poll_next_impl(cx) else {
-            return Poll::Pending;
-        };
+        let opt = ready!(self.as_mut().poll_next_impl(cx));
         let Some(res) = opt else {
             return Poll::Ready(None);
         };
@@ -107,6 +106,8 @@ where
     }
 }
 
+// State used to distinguish between the initial query execution
+// and the subsequent streaming of rows.
 #[pin_project(project = ResultStreamStateProj)]
 enum ResultStreamState<'a, C, F1, F2>
 where
@@ -118,6 +119,8 @@ where
     Stream(#[pin] QueryResultStream<'a, C, F1>),
 }
 
+/// A stream over either a result set or a single element stream
+/// containing the count of affected rows.
 #[pin_project(project = QueryResultStreamProj)]
 pub enum QueryResultStream<'a, C, F>
 where
@@ -139,9 +142,7 @@ where
         fetcher_maker: C,
     ) -> Result<Self, SqlxError> {
         let stream = match query_result {
-            QueryResult::ResultSet { result_set } => {
-                Self::result_set(result_set, ws, fetcher_maker)?
-            }
+            QueryResult::ResultSet { rs } => Self::result_set(rs, ws, fetcher_maker)?,
             QueryResult::RowCount { row_count } => Self::row_count(row_count),
         };
 
@@ -185,6 +186,11 @@ where
     }
 }
 
+/// A stream over an entire result set.
+/// All result sets are sent by Exasol with the first data chunk.
+/// If there will be more, the stream will fetch them one by one,
+/// while repopulating the chunk iterator, which then gets
+/// iterated over to output rows.
 #[pin_project]
 pub struct ResultSetStream<'a, C, F>
 where
@@ -278,6 +284,8 @@ where
     }
 }
 
+/// A stream of chunks for a given result set.
+/// The chunks then get iterated over through [`ChunkIter`].
 #[pin_project]
 struct ChunkStream<'a, C, F>
 where
@@ -336,6 +344,7 @@ where
     }
 }
 
+// An iterator over a chunk of data from a result set.
 struct ChunkIter {
     column_names: Arc<HashMap<Arc<str>, usize>>,
     columns: Arc<[ExaColumn]>,

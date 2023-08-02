@@ -1,26 +1,26 @@
 use std::borrow::Cow;
 
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use sqlx_core::{
     database::{Database, HasValueRef},
-    value::ValueRef,
+    value::{Value, ValueRef},
 };
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
 #[derive(Clone)]
 pub struct ExaValue {
-    pub(crate) value: Value,
+    pub(crate) value: JsonValue,
     type_info: ExaTypeInfo,
 }
 
 #[derive(Clone)]
 pub struct ExaValueRef<'r> {
-    pub(crate) value: &'r Value,
+    pub(crate) value: &'r JsonValue,
     pub(crate) type_info: &'r ExaTypeInfo,
 }
 
-impl sqlx_core::value::Value for ExaValue {
+impl Value for ExaValue {
     type Database = Exasol;
 
     fn as_ref(&self) -> <Self::Database as HasValueRef<'_>>::ValueRef {

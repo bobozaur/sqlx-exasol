@@ -3,6 +3,8 @@ use serde::Serialize;
 use super::{login::LoginRef, ExaConnectOptionsRef};
 
 /// Serialization helper for [`ExaConnectOptionsRef`].
+/// This actually represents a database request, used for finalizing the login process.
+/// However, it's structure does not allow including it into [`crate::command::Command`].
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerializableConOpts<'a> {

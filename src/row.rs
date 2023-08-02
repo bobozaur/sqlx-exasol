@@ -11,10 +11,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 /// Struct representing a result set row.
-/// This is only used internally to further deserialize it into a given Rust type.
-///
-/// To avoid intermediary allocations, we just index in the mutable array of columns,
-/// and take out values based on the `row_offset`.
 #[derive(Debug)]
 pub struct ExaRow {
     column_names: Arc<HashMap<Arc<str>, usize>>,

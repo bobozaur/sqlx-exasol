@@ -38,12 +38,8 @@ impl MigrateDatabase for Exasol {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
 
-            let _ = conn
-                .execute(&*format!(
-                    "CREATE SCHEMA \"{}\"",
-                    database.replace('"', "\"\"")
-                ))
-                .await?;
+            let query = format!("CREATE SCHEMA \"{}\"", database.replace('"', "\"\""));
+            let _ = conn.execute(&*query).await?;
 
             Ok(())
         })
@@ -54,7 +50,8 @@ impl MigrateDatabase for Exasol {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
 
-            let exists: bool = query_scalar("SELECT true FROM exa_schemas WHERE schema_name = ?")
+            let query = "SELECT true FROM exa_schemas WHERE schema_name = ?";
+            let exists: bool = query_scalar(query)
                 .bind(database)
                 .fetch_one(&mut conn)
                 .await?;
@@ -68,9 +65,8 @@ impl MigrateDatabase for Exasol {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
 
-            let _ = conn
-                .execute(&*format!("DROP SCHEMA IF EXISTS `{}`", database))
-                .await?;
+            let query = format!("DROP SCHEMA IF EXISTS `{}`", database);
+            let _ = conn.execute(&*query).await?;
 
             Ok(())
         })
@@ -80,19 +76,17 @@ impl MigrateDatabase for Exasol {
 impl Migrate for ExaConnection {
     fn ensure_migrations_table(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
         Box::pin(async move {
-            self.execute(
-                r#"
-CREATE TABLE IF NOT EXISTS _sqlx_migrations (
-    version BIGINT,
-    description CLOB NOT NULL,
-    installed_on TIMESTAMPT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    success BOOLEAN NOT NULL,
-    checksum CLOB NOT NULL,
-    execution_time BIGINT NOT NULL
-);
-                "#,
-            )
-            .await?;
+            let query = r#"
+            CREATE TABLE IF NOT EXISTS "_sqlx_migrations" (
+                version BIGINT,
+                description CLOB NOT NULL,
+                installed_on TIMESTAMPT DEFAULT CURRENT_TIMESTAMP,
+                success BOOLEAN NOT NULL,
+                checksum CLOB NOT NULL,
+                execution_time BIGINT NOT NULL
+            );"#;
+
+            self.execute(query).await?;
 
             Ok(())
         })
@@ -100,11 +94,15 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
 
     fn dirty_version(&mut self) -> BoxFuture<'_, Result<Option<i64>, MigrateError>> {
         Box::pin(async move {
-            let row: Option<(i64,)> = query_as(
-                "SELECT version FROM _sqlx_migrations WHERE success = false ORDER BY version LIMIT 1",
-            )
-            .fetch_optional(self)
-            .await?;
+            let query = r#"
+            SELECT version 
+            FROM "_sqlx_migrations" 
+            WHERE success = false 
+            ORDER BY version 
+            LIMIT 1
+            "#;
+
+            let row: Option<(i64,)> = query_as(query).fetch_optional(self).await?;
 
             Ok(row.map(|r| r.0))
         })
@@ -114,11 +112,8 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
         &mut self,
     ) -> BoxFuture<'_, Result<Vec<AppliedMigration>, MigrateError>> {
         Box::pin(async move {
-            // language=SQL
-            let rows: Vec<(i64, String)> =
-                query_as("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
-                    .fetch_all(self)
-                    .await?;
+            let query = r#"SELECT version, checksum FROM "_sqlx_migrations" ORDER BY version"#;
+            let rows: Vec<(i64, String)> = query_as(query).fetch_all(self).await?;
 
             let mut migrations = Vec::with_capacity(rows.len());
 
@@ -136,23 +131,30 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
         })
     }
 
+    /// We rely on database transactions for the lock.
+    /// Essentially, the executed query does absolutely nothing to the data.
+    /// However, it does place a lock on the table which will only be released
+    /// when the transaction is over.
     fn lock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
         Box::pin(async move {
-            self.begin_transaction()
+            self.ws
+                .begin()
                 .await
                 .map_err(From::from)
                 .map_err(MigrateError::Source)?;
 
-            self.execute("DELETE FROM _sqlx_migrations WHERE 1 = 2")
-                .await?;
+            let query = r#"DELETE FROM "_sqlx_migrations" WHERE 1 = 2"#;
+            self.execute(query).await?;
 
             Ok(())
         })
     }
 
+    /// Issues a `ROLLBACK`, thus clearing the transaction, thus releasing the lock.
     fn unlock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
         Box::pin(async move {
-            self.rollback_transaction()
+            self.ws
+                .rollback()
                 .await
                 .map_err(From::from)
                 .map_err(MigrateError::Source)
@@ -167,29 +169,30 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            tx.execute_batch(&migration.sql)
+            tx.ws
+                .execute_batch(&migration.sql)
                 .await
                 .map_err(From::from)
                 .map_err(MigrateError::Source)?;
             let checksum = hex::encode(&*migration.checksum);
 
-            let _ = query(
-                r#"
-    INSERT INTO _sqlx_migrations ( version, description, success, checksum, execution_time )
-    VALUES ( ?, ?, TRUE, ?, -1 )
-                "#,
-            )
-            .bind(migration.version)
-            .bind(&*migration.description)
-            .bind(checksum)
-            .execute(&mut *tx)
-            .await?;
+            let query_str = r#"
+            INSERT INTO "_sqlx_migrations" ( version, description, success, checksum, execution_time )
+            VALUES ( ?, ?, TRUE, ?, -1 )"#;
+
+            let _ = query(query_str)
+                .bind(migration.version)
+                .bind(&*migration.description)
+                .bind(checksum)
+                .execute(&mut *tx)
+                .await?;
 
             tx.commit().await?;
 
             let elapsed = start.elapsed();
 
-            let _ = query(r#"UPDATE _sqlx_migrations SET execution_time = ? WHERE version = ?"#)
+            let query_str = r#"UPDATE "_sqlx_migrations" SET execution_time = ? WHERE version = ?"#;
+            let _ = query(query_str)
                 .bind(elapsed.as_nanos() as i64)
                 .bind(migration.version)
                 .execute(self)
@@ -207,12 +210,14 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            tx.execute_batch(&migration.sql)
+            tx.ws
+                .execute_batch(&migration.sql)
                 .await
                 .map_err(From::from)
                 .map_err(MigrateError::Source)?;
 
-            let _ = query(r#"DELETE FROM _sqlx_migrations WHERE version = ?"#)
+            let query_str = r#"DELETE FROM "_sqlx_migrations" WHERE version = ?"#;
+            let _ = query(query_str)
                 .bind(migration.version)
                 .execute(&mut *tx)
                 .await?;

@@ -81,21 +81,6 @@ impl ExaConnection {
         Ok(con)
     }
 
-    #[cfg(feature = "migrate")]
-    pub(crate) async fn begin_transaction(&mut self) -> Result<(), SqlxError> {
-        self.ws.begin().await
-    }
-
-    #[cfg(feature = "migrate")]
-    pub(crate) async fn rollback_transaction(&mut self) -> Result<(), SqlxError> {
-        self.ws.rollback().await
-    }
-
-    #[cfg(feature = "migrate")]
-    pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), SqlxError> {
-        self.ws.execute_batch(sql).await
-    }
-
     async fn execute_query<'a, C, F>(
         &'a mut self,
         sql: &str,

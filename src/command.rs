@@ -10,6 +10,7 @@ use crate::{
     responses::ExaAttributes,
 };
 
+/// Enum encapsulating database requests, differentiated by the `command` tag.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "command")]

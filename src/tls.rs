@@ -35,11 +35,13 @@ pub(crate) async fn maybe_upgrade<S: Socket>(
         }
     }
 
+    let accept_invalid_certs = !matches!(
+        options.ssl_mode,
+        ExaSslMode::VerifyCa | ExaSslMode::VerifyIdentity
+    );
+
     let tls_config = TlsConfig {
-        accept_invalid_certs: !matches!(
-            options.ssl_mode,
-            ExaSslMode::VerifyCa | ExaSslMode::VerifyIdentity
-        ),
+        accept_invalid_certs,
         accept_invalid_hostnames: !matches!(options.ssl_mode, ExaSslMode::VerifyIdentity),
         hostname: host,
         root_cert_path: options.ssl_ca,

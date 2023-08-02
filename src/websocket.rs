@@ -1,4 +1,10 @@
-use std::{borrow::Cow, fmt::Debug, io, task::Poll};
+use std::{
+    borrow::Cow,
+    fmt::Debug,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_core::ready;
@@ -391,6 +397,8 @@ impl ExaWebSocket {
         Err(ExaProtocolError::MissingMessage)?
     }
 }
+
+/// Implementor of [`WithSocket`].
 pub struct WithRwSocket;
 
 impl WithSocket for WithRwSocket {
@@ -401,6 +409,9 @@ impl WithSocket for WithRwSocket {
     }
 }
 
+/// A wrapper so we can implement [`AsyncRead`] and [`AsyncWrite`]
+/// for the underlying TCP socket. The traits are needed by the
+/// [`WebSocketStream`] wrapper.
 pub struct RwSocket(Box<dyn Socket>);
 
 impl Debug for RwSocket {
@@ -411,10 +422,10 @@ impl Debug for RwSocket {
 
 impl AsyncRead for RwSocket {
     fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
         mut buf: &mut [u8],
-    ) -> std::task::Poll<futures_io::Result<usize>> {
+    ) -> Poll<futures_io::Result<usize>> {
         while buf.has_remaining_mut() {
             match self.0.try_read(&mut buf) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -430,10 +441,10 @@ impl AsyncRead for RwSocket {
 
 impl AsyncWrite for RwSocket {
     fn poll_write(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> std::task::Poll<futures_io::Result<usize>> {
+    ) -> Poll<futures_io::Result<usize>> {
         while !buf.is_empty() {
             match self.0.try_write(buf) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -446,17 +457,11 @@ impl AsyncWrite for RwSocket {
         Poll::Ready(Ok(0))
     }
 
-    fn poll_flush(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<futures_io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
         self.0.poll_flush(cx)
     }
 
-    fn poll_close(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<futures_io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
         self.0.poll_shutdown(cx)
     }
 }

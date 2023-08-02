@@ -7,6 +7,7 @@ use sqlx_core::Error as SqlxError;
 use std::fmt::Debug;
 use thiserror::Error as ThisError;
 
+/// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]
 pub enum ExaProtocolError {
     #[error("can't fetch more rows, no result set handle provided in response")]
@@ -41,6 +42,7 @@ impl From<ExaProtocolError> for SqlxError {
     }
 }
 
+/// Helper trait used for converting errors from various underlying libraries to SQLx.
 pub(crate) trait ExaResultExt<T> {
     fn to_sqlx_err(self) -> Result<T, SqlxError>;
 }

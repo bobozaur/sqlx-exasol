@@ -5,26 +5,6 @@ use sqlx_core::{column::Column, database::Database};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
-#[derive(Deserialize)]
-#[serde(transparent)]
-pub(crate) struct ExaColumnsDe(pub Vec<ExaColumn>);
-
-#[derive(Debug, Deserialize)]
-#[serde(from = "ExaColumnsDe")]
-pub(crate) struct ExaColumns(pub Arc<[ExaColumn]>);
-
-impl From<ExaColumnsDe> for ExaColumns {
-    fn from(mut value: ExaColumnsDe) -> Self {
-        value
-            .0
-            .iter_mut()
-            .enumerate()
-            .for_each(|(idx, c)| c.ordinal = idx);
-
-        Self(value.0.into())
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExaColumn {
     #[serde(skip)]

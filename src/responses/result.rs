@@ -3,9 +3,9 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::column::{ExaColumn, ExaColumns};
+use crate::column::ExaColumn;
 
-use super::fetched::DataChunk;
+use super::{fetched::DataChunk, ExaColumns};
 
 /// Struct representing the result of a single query.
 #[allow(non_snake_case)]
@@ -13,7 +13,7 @@ use super::fetched::DataChunk;
 #[serde(tag = "resultType", rename_all = "camelCase")]
 pub enum QueryResult {
     #[serde(rename_all = "camelCase")]
-    ResultSet { result_set: ResultSet },
+    ResultSet { rs: ResultSet },
     #[serde(rename_all = "camelCase")]
     RowCount { row_count: u64 },
 }
@@ -21,7 +21,7 @@ pub enum QueryResult {
 impl QueryResult {
     pub fn handle(&self) -> Option<u16> {
         match self {
-            QueryResult::ResultSet { result_set } => result_set.result_set_handle,
+            QueryResult::ResultSet { rs: result_set } => result_set.result_set_handle,
             QueryResult::RowCount { .. } => None,
         }
     }

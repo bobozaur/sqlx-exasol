@@ -65,13 +65,13 @@ impl ExaTypeInfo {
 
         let msg = format!(
             "type mismatch: expected SQL type `{}` but was provided `{}`",
-            self.pretty_print(),
-            ty.pretty_print()
+            self.full_type(),
+            ty.full_type()
         );
         Err(SqlxError::Decode(msg.into()))
     }
 
-    pub fn pretty_print(&self) -> String {
+    pub fn full_type(&self) -> String {
         match self {
             ExaTypeInfo::Boolean
             | ExaTypeInfo::Date
