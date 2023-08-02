@@ -9,6 +9,7 @@ use super::{
 };
 use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
 
+/// Builder for [`ExaConnectOptions`].
 #[derive(Clone, Debug)]
 pub struct ExaConnectOptionsBuilder<'a> {
     host: Option<&'a str>,
@@ -59,6 +60,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         let hostname = self.host.ok_or(ExaConfigError::MissingHost)?;
         let password = self.password.unwrap_or_default();
 
+        // Only one authentication method can be used at once
         let login = match (self.username, self.access_token, self.refresh_token) {
             (Some(user), None, None) => Login::Credentials(Credentials::new(user, password)),
             (None, Some(token), None) => Login::AccessToken(AccessToken::new(token)),
@@ -67,7 +69,7 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         };
 
         let opts = ExaConnectOptions {
-            hosts: Self::generate_hosts(hostname)?,
+            hosts: Self::generate_hosts(hostname),
             port: self.port,
             ssl_mode: self.ssl_mode,
             ssl_ca: self.ssl_ca,
@@ -172,36 +174,109 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
         self
     }
 
-    fn generate_hosts(hostname: &str) -> Result<Vec<String>, SqlxError> {
+    /// Exasol supports host ranges, e.g: hostname4..1.com.
+    /// This method parses the provided host in the connection string
+    /// and generates one for each possible entry in the range.
+    ///
+    /// We do expect the range to be in the ascending order though,
+    /// so `hostname4..1.com` won't work.
+    fn generate_hosts(hostname: &str) -> Vec<String> {
+        // Really not expecting any other match on this apart from the range.
+        // If this actually ends up failing for some people, they should really
+        // reconsider their taste in domain names.
         let mut hostname_iter = hostname.split("..");
 
-        let (first, last) = match (hostname_iter.next(), hostname_iter.next()) {
-            (Some(first), Some(last)) => (first, last),
-            _ => return Ok(vec![hostname.to_owned()]),
+        // If there aren't two elements provided, then the splitting failed.
+        // So, we just use the host as is.
+        let (Some(first), Some(last)) = (hostname_iter.next(), hostname_iter.next()) else {
+            return vec![hostname.to_owned()];
         };
 
-        let opt_start = first.find(char::is_numeric);
+        // We wanna find the last non-numeric character, before the range start, in the first
+        // part of the hostname and the first non-numeric character, right after the range end,
+        // in the second part of the hostname.
+        let opt_start = first.rfind(|c: char| !c.is_numeric());
         let opt_end = last.find(|c: char| !c.is_numeric());
 
-        let (start_range_idx, end_range_idx) = match (opt_start, opt_end) {
-            (Some(start), Some(end)) => (start, end),
-            _ => return Ok(vec![hostname.to_owned()]),
+        // Return the hostname as is if we could not identify the range boundaries.
+        let (Some(start_idx), Some(end_idx)) = (opt_start, opt_end) else {
+            return vec![hostname.to_owned()];
         };
 
-        let (prefix, start_range) = first.split_at(start_range_idx);
-        let (end_range, suffix) = last.split_at(end_range_idx);
+        // We split the hostname parts to isolate components.
+        // The start is incremented as the index is for the last non-numeric character.
+        let (prefix, start_range) = first.split_at(start_idx + 1);
+        let (end_range, suffix) = last.split_at(end_idx);
 
-        let start_range = start_range
-            .parse::<usize>()
-            .map_err(ExaConfigError::InvalidHostRange)?;
-        let end_range = end_range
-            .parse::<usize>()
-            .map_err(ExaConfigError::InvalidHostRange)?;
+        // Return the hostname as is if the range boundaries are not integers.
+        let Ok(start_range) = start_range.parse::<usize>() else {return vec![hostname.to_owned()];};
+        let Ok(end_range) = end_range.parse::<usize>() else {return vec![hostname.to_owned()];};
 
-        let hosts = (start_range..end_range)
+        (start_range..=end_range)
             .map(|i| format!("{prefix}{i}{suffix}"))
-            .collect();
+            .collect()
+    }
+}
 
-        Ok(hosts)
+#[cfg(test)]
+mod tests {
+    use super::ExaConnectOptionsBuilder;
+
+    #[test]
+    fn test_simple_hostname() {
+        let hostname = "myhost.com";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, vec![hostname]);
+    }
+
+    #[test]
+    fn test_hostname_with_range() {
+        let hostname = "myhost1..4.com";
+        let expected = vec!["myhost1.com", "myhost2.com", "myhost3.com", "myhost4.com"];
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, expected);
+    }
+
+    #[test]
+    fn test_hostname_with_big_range() {
+        let hostname = "myhost125..127.com";
+        let expected = vec!["myhost125.com", "myhost126.com", "myhost127.com"];
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, expected);
+    }
+
+    #[test]
+    fn test_hostname_with_inverse_range() {
+        let hostname = "myhost127..125.com";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert!(generated.is_empty())
+    }
+
+    #[test]
+    fn test_hostname_with_numbers_no_range() {
+        let hostname = "myhost1.4.com";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, vec![hostname]);
+    }
+
+    #[test]
+    fn test_hostname_with_range_one_numbers() {
+        let hostname = "myhost1..b.com";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, vec![hostname]);
+    }
+
+    #[test]
+    fn test_hostname_with_range_no_numbers() {
+        let hostname = "myhosta..b.com";
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, vec![hostname]);
     }
 }

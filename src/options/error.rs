@@ -1,5 +1,3 @@
-use std::num::ParseIntError;
-
 use crate::options::URL_SCHEME;
 use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
@@ -10,8 +8,6 @@ pub enum ExaConfigError {
     MissingHost,
     #[error("multiple authentication methods provided")]
     MultipleAuthMethods,
-    #[error("error parsing host range: {0}")]
-    InvalidHostRange(#[from] ParseIntError),
     #[error("invalid URL scheme: {0}, expected: {}", URL_SCHEME)]
     InvalidUrlScheme(String),
     #[error("invalid connection parameter: {0}")]
