@@ -1,3 +1,7 @@
+mod stream;
+mod tls;
+mod websocket;
+
 use std::{borrow::Cow, future, iter};
 
 use either::Either;
@@ -22,9 +26,10 @@ use crate::{
     options::ExaConnectOptions,
     responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
     statement::{ExaStatement, ExaStatementMetadata},
-    stream::{QueryResultStream, ResultStream},
-    websocket::{ExaWebSocket, WithRwSocket},
 };
+
+use stream::{QueryResultStream, ResultStream};
+use websocket::{ExaWebSocket, WithRwSocket};
 
 #[derive(Debug)]
 pub struct ExaConnection {

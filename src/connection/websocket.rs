@@ -28,9 +28,9 @@ use crate::{
         DataChunk, ExaAttributes, PreparedStatement, QueryResult, Response, ResponseData,
         SessionInfo,
     },
-    stream::QueryResultStream,
-    tls,
 };
+
+use super::{tls, stream::QueryResultStream};
 
 #[derive(Debug)]
 pub struct ExaWebSocket {

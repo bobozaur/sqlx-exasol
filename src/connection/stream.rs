@@ -20,11 +20,11 @@ use sqlx_core::{logger::QueryLogger, Error as SqlxError, HashMap};
 use crate::{
     column::ExaColumn,
     command::{Command, ExaCommand},
+    connection::websocket::ExaWebSocket,
     error::ExaProtocolError,
     query_result::ExaQueryResult,
     responses::{DataChunk, QueryResult, ResultSet},
     row::ExaRow,
-    websocket::ExaWebSocket,
 };
 
 /// Adapter stream that stores a future following the query execution

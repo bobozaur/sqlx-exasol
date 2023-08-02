@@ -7,8 +7,8 @@ use sqlx_core::{
 };
 
 use crate::{
+    connection::websocket::{RwSocket, WithRwSocket},
     options::{ExaConnectOptionsRef, ExaSslMode},
-    websocket::{RwSocket, WithRwSocket},
 };
 
 pub(crate) async fn maybe_upgrade<S: Socket>(

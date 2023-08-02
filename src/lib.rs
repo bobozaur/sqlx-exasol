@@ -11,15 +11,12 @@ mod query_result;
 mod responses;
 mod row;
 mod statement;
-mod stream;
 #[cfg(feature = "migrate")]
 mod testing;
-mod tls;
 mod transaction;
 mod type_info;
 mod types;
 mod value;
-mod websocket;
 
 use sqlx_core::{
     executor::Executor, impl_acquire, impl_column_index_for_row, impl_column_index_for_statement,
