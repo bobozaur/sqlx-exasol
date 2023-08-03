@@ -237,40 +237,27 @@ pub struct Attributes {
     // ##########################################################
     // ############# Database read-write attributes #############
     // ##########################################################
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) autocommit: Option<bool>,
+    #[serde(default)]
     #[serde(deserialize_with = "Attributes::deserialize_current_schema")]
     pub(crate) current_schema: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) feedback_interval: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) numeric_characters: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) query_timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) snapshot_transactions_enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) timestamp_utc_enabled: Option<bool>,
     // ##########################################################
     // ############# Database read-only attributes ##############
     // ##########################################################
-    #[serde(skip_serializing)]
     pub(crate) compression_enabled: Option<bool>,
-    #[serde(skip_serializing)]
     pub(crate) date_format: Option<String>,
-    #[serde(skip_serializing)]
     pub(crate) date_language: Option<String>,
-    #[serde(skip_serializing)]
     pub(crate) datetime_format: Option<String>,
-    #[serde(skip_serializing)]
     pub(crate) default_like_escape_character: Option<String>,
-    #[serde(skip_serializing)]
     #[serde(default)]
     #[serde(deserialize_with = "Attributes::deserialize_open_transaction")]
     pub(crate) open_transaction: Option<bool>,
-    #[serde(skip_serializing)]
     pub(crate) timezone: Option<String>,
-    #[serde(skip_serializing)]
     pub(crate) timezone_behavior: Option<String>,
 }
 
