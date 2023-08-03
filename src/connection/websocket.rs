@@ -12,6 +12,7 @@ use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{io::BufReader, Future, SinkExt, StreamExt};
 use lru::LruCache;
 use rsa::RsaPublicKey;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use sqlx_core::{
     bytes::BufMut,
     net::{Socket, WithSocket},
@@ -25,12 +26,12 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
     },
     responses::{
-        DataChunk, ExaAttributes, PreparedStatement, QueryResult, Response, ResponseData,
+        DataChunk, ExaAttributes, PreparedStatement, PublicKey, QueryResult, Response, Results,
         SessionInfo,
     },
 };
 
-use super::{tls, stream::QueryResultStream};
+use super::{stream::QueryResultStream, tls};
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
@@ -100,8 +101,7 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<QueryResult, SqlxError> {
-        let resp_data = self.get_response_data(cmd).await?;
-        QueryResult::try_from(resp_data)
+        self.send_cmd::<Results>(cmd).await.map(From::from)
     }
 
     pub(crate) async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
@@ -114,36 +114,30 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<PreparedStatement, SqlxError> {
-        let resp_data = self.get_response_data(cmd).await?;
-        PreparedStatement::try_from(resp_data)
+        self.send_cmd(cmd).await
     }
 
     pub(crate) async fn close_prepared(&mut self, handle: u16) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_close_prepared(handle).try_into()?;
-        self.send_cmd(cmd).await?;
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub(crate) async fn fetch_chunk(
         &mut self,
         cmd: Command,
     ) -> Result<(DataChunk, &mut Self), SqlxError> {
-        let resp_data = self.get_response_data(cmd).await?;
-        DataChunk::try_from(resp_data).map(|c| (c, self))
+        self.send_cmd(cmd).await.map(|d| (d, self))
     }
 
     #[allow(dead_code)]
     pub(crate) async fn set_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_set_attributes(&self.attributes).try_into()?;
-        self.send_cmd(cmd).await?;
-
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub(crate) async fn get_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::GetAttributes.try_into()?;
-        self.send_cmd(cmd).await?;
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub(crate) async fn begin(&mut self) -> Result<(), SqlxError> {
@@ -166,18 +160,14 @@ impl ExaWebSocket {
         // but we would still have to send a command to the server
         // to update it, so we might as well be explicit.
         let cmd = ExaCommand::new_execute("COMMIT;", &self.attributes).try_into()?;
-        self.send_cmd(cmd).await?;
-
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub(crate) async fn rollback(&mut self) -> Result<(), SqlxError> {
         self.attributes.autocommit = true;
 
         let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
-        self.send_cmd(cmd).await?;
-
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub(crate) async fn ping(&mut self) -> Result<(), SqlxError> {
@@ -191,8 +181,7 @@ impl ExaWebSocket {
 
     pub(crate) async fn disconnect(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::Disconnect.try_into()?;
-        self.send_cmd(cmd).await?;
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub(crate) async fn close(&mut self) -> Result<(), SqlxError> {
@@ -242,33 +231,70 @@ impl ExaWebSocket {
         self.get_session_info(cmd).await
     }
 
+    /// Tries to take advance of the batch SQL execution command provided by Exasol.
+    /// The command however implies splitting the SQL into an array of statements.
+    ///
+    /// Since this is finicky, we'll only use it for migration purposes, where
+    /// batch SQL is actually expected/encouraged.
+    ///
+    /// If batch execution fails, we will try to separate statements and execute them
+    /// one by one.
     #[cfg(feature = "migrate")]
     pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), SqlxError> {
+        // Trim the query end so we don't have an empty statement at the end of the array.
         let sql = sql.trim_end();
         let sql = sql.strip_suffix(';').unwrap_or(sql);
 
+        // Do a dumb and valiant attempt at splitting the query.
         let sql_batch = sql.split(';').collect();
         let cmd = ExaCommand::new_execute_batch(sql_batch, &self.attributes).try_into()?;
 
-        if self.send_cmd(cmd).await.is_ok() {
-            return Ok(());
-        }
+        // Run batch SQL command
+        match self.send_cmd_ignore_response(cmd).await {
+            Ok(_) => return Ok(()),
+            Err(e) => tracing::warn!(
+                "Failed to execute batch SQL: {e}; Will attempt sequential execution"
+            ),
+        };
 
-        let result = Ok(());
+        // If we got here then batch execution failed.
+        // This will pretty much be happening if  there are ';' literals in the query.
+        //
+        // So.. we'll do an incremental identification of queries, still splitting by ';'
+        // but this time, if a statement execution fails, we concatenate it with the next string
+        // up until the next ';'.
+        let mut result = Ok(());
         let mut position = 0;
         let mut sql_start = 0;
 
         while let Some(sql_end) = sql[position..].find(';') {
-            let sql = &sql[sql_start..sql_end];
-            let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
+            // Found a separator, split the SQL.
+            let sql = &sql[sql_start..position + sql_end];
 
-            if let Err(_e) = self.send_cmd(cmd).await {
-                position = sql.len();
-                // TODO: match on e after proper error handling
+            let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
+            // Next lookup will be after the just encountered separator.
+            position += sql_end + 1;
+
+            if let Err(e) = self.send_cmd_ignore_response(cmd).await {
+                // Exasol doesn't seem to provide a lot of helpful codes for syntax errors.
+                // The code seems to be '42000' but it looks like it's associated to
+                // more errors and I don't know if it's reliable enough.
+                // Matching on the error would be tricky here.
+                tracing::warn!("Error running sequential statement: {e}; Perhaps it's incomplete?");
+                result = Err(e);
             } else {
-                position = sql.len();
+                // Yay!!!
                 sql_start = position;
+                result = Ok(());
             }
+        }
+
+        // We need to run the remaining statement, if any.
+        let sql = &sql[sql_start..];
+
+        if !sql.is_empty() {
+            let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
+            self.send_cmd_ignore_response(cmd).await?;
         }
 
         result
@@ -281,14 +307,12 @@ impl ExaWebSocket {
     ) -> Result<(), SqlxError> {
         let key = self.get_public_key(protocol_version).await?;
         credentials.encrypt_password(key)?;
-
         Ok(())
     }
 
     async fn login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_login_token(protocol_version).try_into()?;
-        self.send_cmd(cmd).await?;
-        Ok(())
+        self.send_cmd_ignore_response(cmd).await
     }
 
     async fn get_public_key(
@@ -296,26 +320,26 @@ impl ExaWebSocket {
         protocol_version: ProtocolVersion,
     ) -> Result<RsaPublicKey, SqlxError> {
         let cmd = ExaCommand::new_login(protocol_version).try_into()?;
-        let resp_data = self.get_response_data(cmd).await?;
-        RsaPublicKey::try_from(resp_data)
+        self.send_cmd::<PublicKey>(cmd).await.map(From::from)
     }
 
     async fn get_session_info(&mut self, cmd: Command) -> Result<SessionInfo, SqlxError> {
-        let resp_data = self.get_response_data(cmd).await?;
-        SessionInfo::try_from(resp_data)
+        self.send_cmd(cmd).await
     }
 
-    /// Helper function for when a [`ResponseData`] is expected out of a [`Command`].
-    async fn get_response_data(&mut self, cmd: Command) -> Result<ResponseData, SqlxError> {
-        self.send_cmd(cmd)
-            .await?
-            .ok_or(ExaProtocolError::MissingResponseData)
-            .map_err(From::from)
+    /// Utility method for when the `response_data` field of the [`Response`] is not of any interest.
+    /// Note that attributes will still get updated.
+    async fn send_cmd_ignore_response(&mut self, cmd: Command) -> Result<(), SqlxError> {
+        self.send_cmd::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
     }
 
     /// Sends a [`Command`] to the database, processing the attributes the
-    /// database responded with and returning the [`ResponseData`].
-    async fn send_cmd(&mut self, cmd: Command) -> Result<Option<ResponseData>, SqlxError> {
+    /// database responded with and returning the `response_data` field of the [`Response`].
+    async fn send_cmd<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
+    where
+        T: DeserializeOwned + Debug,
+    {
         let cmd = cmd.into_inner();
         tracing::trace!("Sending command to database: {cmd}");
 
@@ -345,8 +369,11 @@ impl ExaWebSocket {
         Ok(response_data)
     }
 
-    /// Sends an uncompressed command
-    async fn send_uncompressed_cmd(&mut self, cmd: String) -> Result<Response, SqlxError> {
+    /// Sends an uncompressed command and awaits a response
+    async fn send_uncompressed_cmd<T>(&mut self, cmd: String) -> Result<Response<T>, SqlxError>
+    where
+        T: DeserializeOwned,
+    {
         self.ws.send(Message::Text(cmd)).await.to_sqlx_err()?;
 
         while let Some(response) = self.ws.next().await {
@@ -368,7 +395,10 @@ impl ExaWebSocket {
 
     /// Compresses the command before sending and decodes the compressed response.
     #[cfg(feature = "flate2")]
-    async fn send_compressed_cmd(&mut self, cmd: String) -> Result<Response, SqlxError> {
+    async fn send_compressed_cmd<T>(&mut self, cmd: String) -> Result<Response<T>, SqlxError>
+    where
+        T: DeserializeOwned,
+    {
         use std::io::Write;
 
         use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};

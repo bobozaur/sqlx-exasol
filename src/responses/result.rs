@@ -5,7 +5,26 @@ use serde_json::Value;
 
 use crate::column::ExaColumn;
 
-use super::{fetched::DataChunk, ExaColumns};
+use super::{columns::ExaColumns, fetched::DataChunk};
+
+/// The `results` field returned by Exasol after executing a query.
+/// We only work with one statement at a time, so we only ever expect a single
+/// result in the array.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Results {
+    results: [QueryResult; 1],
+}
+
+impl From<Results> for QueryResult {
+    fn from(value: Results) -> Self {
+        value
+            .results
+            .into_iter()
+            .next()
+            .expect("query result array must have one element")
+    }
+}
 
 /// Struct representing the result of a single query.
 #[allow(non_snake_case)]
@@ -47,7 +66,7 @@ impl From<ResultSetDe> for ResultSet {
         Self {
             total_rows_num: value.num_rows,
             result_set_handle: value.result_set_handle,
-            columns: value.columns.0,
+            columns: value.columns.0.into(),
             data_chunk,
         }
     }

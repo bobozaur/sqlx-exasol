@@ -13,18 +13,22 @@ use sqlx_core::migrate::{Migrate, MigrateDatabase};
 use sqlx_core::query::query;
 use sqlx_core::query_as::query_as;
 use sqlx_core::query_scalar::query_scalar;
-use sqlx_core::Error;
+use sqlx_core::Error as SqlxError;
 
 use crate::connection::ExaConnection;
 use crate::database::Exasol;
 use crate::options::ExaConnectOptions;
 
-fn parse_for_maintenance(url: &str) -> Result<(ExaConnectOptions, String), Error> {
+const LOCK_ERR: &str = "\
+    Exasol does not support database locking! \
+    Change the migrator behavior with `set_locking`";
+
+fn parse_for_maintenance(url: &str) -> Result<(ExaConnectOptions, String), SqlxError> {
     let mut options = ExaConnectOptions::from_str(url)?;
 
-    let database = options
-        .schema
-        .ok_or_else(|| Error::Configuration("DATABASE_URL does not specify a database".into()))?;
+    let database = options.schema.ok_or_else(|| {
+        SqlxError::Configuration("DATABASE_URL does not specify a database".into())
+    })?;
 
     // switch to <no> database for create/drop commands
     options.schema = None;
@@ -33,7 +37,7 @@ fn parse_for_maintenance(url: &str) -> Result<(ExaConnectOptions, String), Error
 }
 
 impl MigrateDatabase for Exasol {
-    fn create_database(url: &str) -> BoxFuture<'_, Result<(), Error>> {
+    fn create_database(url: &str) -> BoxFuture<'_, Result<(), SqlxError>> {
         Box::pin(async move {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
@@ -45,7 +49,7 @@ impl MigrateDatabase for Exasol {
         })
     }
 
-    fn database_exists(url: &str) -> BoxFuture<'_, Result<bool, Error>> {
+    fn database_exists(url: &str) -> BoxFuture<'_, Result<bool, SqlxError>> {
         Box::pin(async move {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
@@ -60,7 +64,7 @@ impl MigrateDatabase for Exasol {
         })
     }
 
-    fn drop_database(url: &str) -> BoxFuture<'_, Result<(), Error>> {
+    fn drop_database(url: &str) -> BoxFuture<'_, Result<(), SqlxError>> {
         Box::pin(async move {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
@@ -77,16 +81,18 @@ impl Migrate for ExaConnection {
     fn ensure_migrations_table(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
         Box::pin(async move {
             let query = r#"
-            CREATE TABLE IF NOT EXISTS "_sqlx_migrations" (
+            CREATE SCHEMA IF NOT EXISTS "_sqlx_migrations";
+
+            CREATE TABLE IF NOT EXISTS "_sqlx_migrations".migrations (
                 version BIGINT,
                 description CLOB NOT NULL,
-                installed_on TIMESTAMPT DEFAULT CURRENT_TIMESTAMP,
+                installed_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 success BOOLEAN NOT NULL,
                 checksum CLOB NOT NULL,
                 execution_time BIGINT NOT NULL
             );"#;
 
-            self.execute(query).await?;
+            self.ws.execute_batch(query).await?;
 
             Ok(())
         })
@@ -96,7 +102,7 @@ impl Migrate for ExaConnection {
         Box::pin(async move {
             let query = r#"
             SELECT version 
-            FROM "_sqlx_migrations" 
+            FROM "_sqlx_migrations".migrations
             WHERE success = false 
             ORDER BY version 
             LIMIT 1
@@ -112,7 +118,12 @@ impl Migrate for ExaConnection {
         &mut self,
     ) -> BoxFuture<'_, Result<Vec<AppliedMigration>, MigrateError>> {
         Box::pin(async move {
-            let query = r#"SELECT version, checksum FROM "_sqlx_migrations" ORDER BY version"#;
+            let query = r#"
+                SELECT version, checksum 
+                FROM "_sqlx_migrations".migrations 
+                ORDER BY version
+                "#;
+
             let rows: Vec<(i64, String)> = query_as(query).fetch_all(self).await?;
 
             let mut migrations = Vec::with_capacity(rows.len());
@@ -131,34 +142,12 @@ impl Migrate for ExaConnection {
         })
     }
 
-    /// We rely on database transactions for the lock.
-    /// Essentially, the executed query does absolutely nothing to the data.
-    /// However, it does place a lock on the table which will only be released
-    /// when the transaction is over.
     fn lock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
-        Box::pin(async move {
-            self.ws
-                .begin()
-                .await
-                .map_err(From::from)
-                .map_err(MigrateError::Source)?;
-
-            let query = r#"DELETE FROM "_sqlx_migrations" WHERE 1 = 2"#;
-            self.execute(query).await?;
-
-            Ok(())
-        })
+        Box::pin(async move { Err(SqlxError::Configuration(LOCK_ERR.into()))? })
     }
 
-    /// Issues a `ROLLBACK`, thus clearing the transaction, thus releasing the lock.
     fn unlock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
-        Box::pin(async move {
-            self.ws
-                .rollback()
-                .await
-                .map_err(From::from)
-                .map_err(MigrateError::Source)
-        })
+        Box::pin(async move { Err(SqlxError::Configuration(LOCK_ERR.into()))? })
     }
 
     fn apply<'e: 'm, 'm>(
@@ -177,8 +166,9 @@ impl Migrate for ExaConnection {
             let checksum = hex::encode(&*migration.checksum);
 
             let query_str = r#"
-            INSERT INTO "_sqlx_migrations" ( version, description, success, checksum, execution_time )
-            VALUES ( ?, ?, TRUE, ?, -1 )"#;
+            INSERT INTO "_sqlx_migrations".migrations ( version, description, success, checksum, execution_time )
+            VALUES ( ?, ?, TRUE, ?, -1 );
+            "#;
 
             let _ = query(query_str)
                 .bind(migration.version)
@@ -191,7 +181,12 @@ impl Migrate for ExaConnection {
 
             let elapsed = start.elapsed();
 
-            let query_str = r#"UPDATE "_sqlx_migrations" SET execution_time = ? WHERE version = ?"#;
+            let query_str = r#"
+                UPDATE "_sqlx_migrations".migrations 
+                SET execution_time = ? 
+                WHERE version = ?
+                "#;
+
             let _ = query(query_str)
                 .bind(elapsed.as_nanos() as i64)
                 .bind(migration.version)
@@ -216,7 +211,7 @@ impl Migrate for ExaConnection {
                 .map_err(From::from)
                 .map_err(MigrateError::Source)?;
 
-            let query_str = r#"DELETE FROM "_sqlx_migrations" WHERE version = ?"#;
+            let query_str = r#" DELETE FROM "_sqlx_migrations".migrations WHERE version = ? "#;
             let _ = query(query_str)
                 .bind(migration.version)
                 .execute(&mut *tx)

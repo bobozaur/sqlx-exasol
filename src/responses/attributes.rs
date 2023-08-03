@@ -19,6 +19,7 @@ pub struct ExaAttributes {
     // ############# Database read-write attributes #############
     // ##########################################################
     pub(crate) autocommit: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) current_schema: Option<String>,
     pub(crate) feedback_interval: u64,
     pub(crate) numeric_characters: String,
@@ -82,6 +83,78 @@ impl Default for ExaAttributes {
 }
 
 impl ExaAttributes {
+    pub fn autocommit(&self) -> bool {
+        self.autocommit
+    }
+
+    pub fn current_schema(&self) -> Option<&str> {
+        self.current_schema.as_deref()
+    }
+
+    pub fn feedback_interval(&self) -> u64 {
+        self.feedback_interval
+    }
+
+    pub fn numeric_characters(&self) -> &str {
+        &self.numeric_characters
+    }
+
+    pub fn query_timeout(&self) -> u64 {
+        self.query_timeout
+    }
+
+    pub fn snapshot_transactions_enabled(&self) -> bool {
+        self.snapshot_transactions_enabled
+    }
+
+    pub fn timestamp_utc_enabled(&self) -> bool {
+        self.timestamp_utc_enabled
+    }
+
+    pub fn compression_enabled(&self) -> bool {
+        self.compression_enabled
+    }
+
+    pub fn date_format(&self) -> &str {
+        &self.date_format
+    }
+
+    pub fn date_language(&self) -> &str {
+        &self.date_language
+    }
+
+    pub fn datetime_format(&self) -> &str {
+        &self.datetime_format
+    }
+
+    pub fn default_like_escape_character(&self) -> &str {
+        &self.default_like_escape_character
+    }
+
+    pub fn open_transaction(&self) -> bool {
+        self.open_transaction
+    }
+
+    pub fn timezone(&self) -> &str {
+        &self.timezone
+    }
+
+    pub fn timezone_behavior(&self) -> &str {
+        &self.timezone_behavior
+    }
+
+    pub fn fetch_size(&self) -> usize {
+        self.fetch_size
+    }
+
+    pub fn encryption_enabled(&self) -> bool {
+        self.encryption_enabled
+    }
+
+    pub fn statement_cache_capacity(&self) -> NonZeroUsize {
+        self.statement_cache_capacity
+    }
+
     pub(crate) fn update(&mut self, other: Attributes) {
         macro_rules! other_or_prev {
             ($field:tt) => {
@@ -122,6 +195,7 @@ pub struct Attributes {
     // ##########################################################
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) autocommit: Option<bool>,
+    #[serde(deserialize_with = "Attributes::deserialize_current_schema")]
     pub(crate) current_schema: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) feedback_interval: Option<u64>,
@@ -170,6 +244,19 @@ impl Attributes {
             v => Err(D::Error::custom(format!(
                 "Invalid value for 'open_transaction' field: {v}"
             ))),
+        }
+    }
+
+    /// Exasol returns an empty string if no schema was selected.
+    fn deserialize_current_schema<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let Some(value) = Option::deserialize(deserializer)? else {return Ok(None)};
+
+        match String::is_empty(&value) {
+            true => Ok(None),
+            false => Ok(Some(value)),
         }
     }
 }
