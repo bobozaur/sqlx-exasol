@@ -336,4 +336,17 @@ mod tests {
         let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
         assert_eq!(generated, expected);
     }
+
+    #[test]
+    fn test_hostname_two_valid_ranges() {
+        let hostname = "myhost1..3cdef4..7.com";
+        let expected = vec![
+            "myhost1cdef4..7.com".to_owned(),
+            "myhost2cdef4..7.com".to_owned(),
+            "myhost3cdef4..7.com".to_owned(),
+        ];
+
+        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname);
+        assert_eq!(generated, expected);
+    }
 }
