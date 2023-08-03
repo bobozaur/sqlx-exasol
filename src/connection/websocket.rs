@@ -26,8 +26,8 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
     },
     responses::{
-        DataChunk, ExaAttributes, PreparedStatement, PublicKey, QueryResult, Response, Results,
-        SessionInfo,
+        DataChunk, ExaAttributes, Hosts, PreparedStatement, PublicKey, QueryResult, Response,
+        Results, SessionInfo,
     },
 };
 
@@ -129,10 +129,18 @@ impl ExaWebSocket {
         self.send_cmd(cmd).await.map(|d| (d, self))
     }
 
-    #[allow(dead_code)]
+    
     pub(crate) async fn set_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_set_attributes(&self.attributes).try_into()?;
         self.send_cmd_ignore_response(cmd).await
+    }
+
+    #[allow(dead_code)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    pub(crate) async fn get_hosts(&mut self) -> Result<Vec<String>, SqlxError> {
+        let _cmd = ExaCommand::new_get_hosts(todo!()).try_into()?;
+        self.send_cmd::<Hosts>(_cmd).await.map(From::from)
     }
 
     pub(crate) async fn get_attributes(&mut self) -> Result<(), SqlxError> {

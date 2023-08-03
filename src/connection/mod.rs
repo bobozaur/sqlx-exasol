@@ -45,6 +45,19 @@ impl ExaConnection {
         &self.ws.attributes
     }
 
+    /// Allows setting connection attributes through the driver.
+    ///
+    /// Note that attributes will only reach Exasol after a statement is
+    /// executed or after explicitly calling the `flush_attributes()` method.
+    pub fn attributes_mut(&mut self) -> &mut ExaAttributes {
+        &mut self.ws.attributes
+    }
+
+    /// Flushes the current [`ExaAttributes`] to Exasol.
+    pub async fn flush_attributes(&mut self) -> Result<(), SqlxError> {
+        self.ws.set_attributes().await
+    }
+
     pub fn session_info(&self) -> &SessionInfo {
         &self.session_info
     }

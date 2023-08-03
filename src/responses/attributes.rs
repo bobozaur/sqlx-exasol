@@ -87,28 +87,63 @@ impl ExaAttributes {
         self.autocommit
     }
 
+    pub fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
+        self.autocommit = autocommit;
+        self
+    }
+
     pub fn current_schema(&self) -> Option<&str> {
         self.current_schema.as_deref()
+    }
+
+    pub fn set_current_schema(&mut self, current_schema: Option<String>) -> &mut Self {
+        self.current_schema = current_schema;
+        self
     }
 
     pub fn feedback_interval(&self) -> u64 {
         self.feedback_interval
     }
 
+    pub fn set_feedback_interval(&mut self, feedback_interval: u64) -> &mut Self {
+        self.feedback_interval = feedback_interval;
+        self
+    }
+
     pub fn numeric_characters(&self) -> &str {
         &self.numeric_characters
+    }
+
+    pub fn set_numeric_characters(&mut self, numeric_characters: String) -> &mut Self {
+        self.numeric_characters = numeric_characters;
+        self
     }
 
     pub fn query_timeout(&self) -> u64 {
         self.query_timeout
     }
 
+    pub fn set_query_timeout(&mut self, query_timeout: u64) -> &mut Self {
+        self.query_timeout = query_timeout;
+        self
+    }
+
     pub fn snapshot_transactions_enabled(&self) -> bool {
         self.snapshot_transactions_enabled
     }
 
+    pub fn set_snapshot_transactions_enabled(&mut self, enabled: bool) -> &mut Self {
+        self.snapshot_transactions_enabled = enabled;
+        self
+    }
+
     pub fn timestamp_utc_enabled(&self) -> bool {
         self.timestamp_utc_enabled
+    }
+
+    pub fn set_timestamp_utc_enabled(&mut self, enabled: bool) -> &mut Self {
+        self.timestamp_utc_enabled = enabled;
+        self
     }
 
     pub fn compression_enabled(&self) -> bool {
