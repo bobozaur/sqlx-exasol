@@ -13,6 +13,7 @@ use serde::Serialize;
 use sqlx_core::connection::{ConnectOptions, LogSettings};
 use sqlx_core::net::tls::CertificateInput;
 use sqlx_core::Error as SqlxError;
+use tracing::log;
 use url::Url;
 
 use crate::connection::ExaConnection;
