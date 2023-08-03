@@ -129,7 +129,6 @@ impl ExaWebSocket {
         self.send_cmd(cmd).await.map(|d| (d, self))
     }
 
-    
     pub(crate) async fn set_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_set_attributes(&self.attributes).try_into()?;
         self.send_cmd_ignore_response(cmd).await
@@ -253,7 +252,7 @@ impl ExaWebSocket {
         let sql = sql.trim_end();
         let sql = sql.strip_suffix(';').unwrap_or(sql);
 
-        // Do a dumb and valiant attempt at splitting the query.
+        // Do a naive yet valiant attempt at splitting the query.
         let sql_batch = sql.split(';').collect();
         let cmd = ExaCommand::new_execute_batch(sql_batch, &self.attributes).try_into()?;
 
@@ -261,7 +260,7 @@ impl ExaWebSocket {
         match self.send_cmd_ignore_response(cmd).await {
             Ok(_) => return Ok(()),
             Err(e) => tracing::warn!(
-                "Failed to execute batch SQL: {e}; Will attempt sequential execution"
+                "failed to execute batch SQL: {e}; will attempt sequential execution"
             ),
         };
 
@@ -283,13 +282,19 @@ impl ExaWebSocket {
             // Next lookup will be after the just encountered separator.
             position += sql_end + 1;
 
-            if let Err(e) = self.send_cmd_ignore_response(cmd).await {
-                // Exasol doesn't seem to provide a lot of helpful codes for syntax errors.
-                // The code seems to be '42000' but it looks like it's associated to
-                // more errors and I don't know if it's reliable enough.
-                // Matching on the error would be tricky here.
-                tracing::warn!("Error running sequential statement: {e}; Perhaps it's incomplete?");
-                result = Err(e);
+            if let Err(err) = self.send_cmd_ignore_response(cmd).await {
+                // Exasol doesn't seem to have a dedicated code for malformed queries.
+                // There's `42000` but it does not look to only be related to syntax errors.
+                //
+                // So we at least check if this is a database error and continue if so.
+                // Otherwise something else is wrong and we can fail early.
+                match &err {
+                    SqlxError::Database(e) => {
+                        tracing::warn!("error running statement: {e}; perhaps it's incomplete?");
+                        result = Err(err);
+                    }
+                    _ => return Err(err),
+                }
             } else {
                 // Yay!!!
                 sql_start = position;
@@ -349,7 +354,7 @@ impl ExaWebSocket {
         T: DeserializeOwned + Debug,
     {
         let cmd = cmd.into_inner();
-        tracing::trace!("Sending command to database: {cmd}");
+        tracing::trace!("sending command to database: {cmd}");
 
         #[allow(unreachable_patterns)]
         let response = match self.attributes.compression_enabled {
@@ -368,11 +373,11 @@ impl ExaWebSocket {
         };
 
         if let Some(attributes) = attributes {
-            tracing::trace!("Updating connection attributes using:\n{attributes:#?}");
+            tracing::trace!("updating connection attributes using:\n{attributes:#?}");
             self.attributes.update(attributes)
         }
 
-        tracing::trace!("Database response:\n{response_data:#?}");
+        tracing::trace!("database response:\n{response_data:#?}");
 
         Ok(response_data)
     }

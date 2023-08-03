@@ -19,9 +19,7 @@ use crate::connection::ExaConnection;
 use crate::database::Exasol;
 use crate::options::ExaConnectOptions;
 
-const LOCK_ERR: &str = "\
-    Exasol does not support database locking! \
-    Change the migrator behavior with `set_locking`";
+const LOCK_WARN: &str = "Exasol does not support database locking!";
 
 fn parse_for_maintenance(url: &str) -> Result<(ExaConnectOptions, String), SqlxError> {
     let mut options = ExaConnectOptions::from_str(url)?;
@@ -143,11 +141,17 @@ impl Migrate for ExaConnection {
     }
 
     fn lock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
-        Box::pin(async move { Err(SqlxError::Configuration(LOCK_ERR.into()))? })
+        Box::pin(async move {
+            tracing::warn!("{LOCK_WARN}");
+            Ok(())
+        })
     }
 
     fn unlock(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
-        Box::pin(async move { Err(SqlxError::Configuration(LOCK_ERR.into()))? })
+        Box::pin(async move {
+            tracing::warn!("{LOCK_WARN}");
+            Ok(())
+        })
     }
 
     fn apply<'e: 'm, 'm>(
