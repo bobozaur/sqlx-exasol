@@ -7,6 +7,7 @@ use super::{
     Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
     DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
+use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
 
 /// Builder for [`ExaConnectOptions`].
@@ -68,8 +69,11 @@ impl<'a> ExaConnectOptionsBuilder<'a> {
             _ => return Err(ExaConfigError::MultipleAuthMethods.into()),
         };
 
+        let mut hosts = Self::generate_hosts(hostname);
+        hosts.shuffle(&mut thread_rng());
+
         let opts = ExaConnectOptions {
-            hosts: Self::generate_hosts(hostname),
+            hosts,
             port: self.port,
             ssl_mode: self.ssl_mode,
             ssl_ca: self.ssl_ca,
