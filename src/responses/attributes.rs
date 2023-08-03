@@ -19,6 +19,10 @@ pub struct ExaAttributes {
     // ############# Database read-write attributes #############
     // ##########################################################
     pub(crate) autocommit: bool,
+    // The API doesn't having no schema open through this attribute,
+    // hence the serialization skip.
+    //
+    // It is possible to change it through the attribute though.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) current_schema: Option<String>,
     pub(crate) feedback_interval: u64,
@@ -96,8 +100,13 @@ impl ExaAttributes {
         self.current_schema.as_deref()
     }
 
-    pub fn set_current_schema(&mut self, current_schema: Option<String>) -> &mut Self {
-        self.current_schema = current_schema;
+    /// Note that setting the open schema to `None` cannot be done
+    /// through this attribute. It can only be changed to a different one.
+    ///
+    /// An explicit `CLOSE SCHEMA;` statement would have to be executed
+    /// to accomplish the `no open schema` behavior.
+    pub fn set_current_schema(&mut self, schema: String) -> &mut Self {
+        self.current_schema = Some(schema);
         self
     }
 

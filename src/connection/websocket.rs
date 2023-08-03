@@ -368,11 +368,11 @@ impl ExaWebSocket {
         };
 
         if let Some(attributes) = attributes {
-            tracing::trace!("Updating connection attributes using: {attributes:?}");
+            tracing::trace!("Updating connection attributes using:\n{attributes:#?}");
             self.attributes.update(attributes)
         }
 
-        tracing::trace!("Database response: {response_data:?}");
+        tracing::trace!("Database response:\n{response_data:#?}");
 
         Ok(response_data)
     }
