@@ -325,3 +325,42 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         })
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "migrate")]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use sqlx::query;
+    use sqlx_core::{error::BoxDynError, pool::PoolOptions};
+
+    use crate::{ExaConnectOptions, Exasol};
+
+    #[sqlx::test]
+    async fn test_stmt_cache(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        // Set a low cache size
+        exa_opts.statement_cache_capacity = NonZeroUsize::new(1).unwrap();
+
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+
+        let sql1 = "SELECT 1 FROM dual";
+        let sql2 = "SELECT 2 FROM dual";
+
+        assert!(!con.as_ref().statement_cache.contains(sql1));
+        assert!(!con.as_ref().statement_cache.contains(sql2));
+
+        query(sql1).execute(&mut *con).await?;
+        assert!(con.as_ref().statement_cache.contains(sql1));
+        assert!(!con.as_ref().statement_cache.contains(sql2));
+
+        query(sql2).execute(&mut *con).await?;
+        assert!(!con.as_ref().statement_cache.contains(sql1));
+        assert!(con.as_ref().statement_cache.contains(sql2));
+
+        Ok(())
+    }
+}

@@ -40,10 +40,10 @@ impl TestSupport for Exasol {
 
             let db_id = db_id(db_name);
 
-            let query_str = format!("drop database if exists {};", db_name);
+            let query_str = format!("DROP SCHEMA IF EXISTS {} CASCADE;", db_name);
             conn.execute(&*query_str).await?;
 
-            let query_str = r#"DELETE FROM "_sqlx_test_databases" WHERE db_id = ?"#;
+            let query_str = r#"DELETE FROM "_sqlx_test_databases" WHERE db_id = ?;"#;
             query(query_str).bind(db_id).execute(&mut *conn).await?;
 
             Ok(())
@@ -160,7 +160,8 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
     let query_str = r#"
         SELECT db_id FROM 
         "_sqlx_test_databases" 
-        WHERE created_at < FROM_POSIX_TIME(?)"#;
+        WHERE created_at < FROM_POSIX_TIME(?);
+        "#;
 
     let delete_db_ids: Vec<u64> = query_scalar(query_str)
         .bind(created_before.as_secs().to_string())
@@ -180,7 +181,7 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
 
         let db_name = db_name(db_id);
 
-        writeln!(command, "DROP SCHEMA IF EXISTS {}", db_name).ok();
+        writeln!(command, "DROP SCHEMA IF EXISTS {} CASCADE", db_name).ok();
         match conn.execute(&*command).await {
             Ok(_deleted) => {
                 deleted_db_ids.push(db_id);
@@ -199,7 +200,7 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
     let mut separated = query.separated(",");
 
     for db_id in &deleted_db_ids {
-        separated.push_bind(db_id);
+        separated.push(db_id);
     }
 
     query.push(")").build().execute(&mut *conn).await?;

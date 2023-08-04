@@ -213,7 +213,7 @@ impl ExaWebSocket {
         let prepared = self.create_prepared(cmd).await?;
 
         if persist {
-            if let Some(old) = cache.put(sql.to_owned(), prepared) {
+            if let Some((_, old)) = cache.push(sql.to_owned(), prepared) {
                 self.close_prepared(old.statement_handle).await?;
             }
 

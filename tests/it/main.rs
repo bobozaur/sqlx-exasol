@@ -1,1 +1,1 @@
-mod prepared;
+mod queries;
