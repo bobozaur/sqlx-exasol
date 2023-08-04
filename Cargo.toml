@@ -10,6 +10,11 @@ keywords = ["database", "sql", "exasol", "sqlx", "driver"]
 exclude = ["tests/*"]
 categories = ["database"]
 
+[features]
+flate2 = ["dep:flate2"]
+uuid = ["dep:uuid"]
+migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
+
 [dependencies]
 rand = "0.8.5"
 base64 = "0.21.2"
@@ -37,7 +42,9 @@ rust_decimal = { version = "1.30.0", optional = true }
 dotenvy = { version = "0.15.7", optional = true }
 hex = { version = "0.4.3", optional = true }
 
-[features]
-flate2 = ["dep:flate2"]
-uuid = ["dep:uuid"]
-migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
+[dev-dependencies]
+sqlx = { version = "=0.7.1", features = [
+    "runtime-tokio",
+    "tls-native-tls",
+    "migrate",
+] }
