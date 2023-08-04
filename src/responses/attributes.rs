@@ -191,6 +191,11 @@ impl ExaAttributes {
         self.fetch_size
     }
 
+    pub fn set_fetch_size(&mut self, fetch_size: usize) -> &mut Self {
+        self.fetch_size = fetch_size;
+        self
+    }
+
     pub fn encryption_enabled(&self) -> bool {
         self.encryption_enabled
     }
