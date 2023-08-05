@@ -143,9 +143,9 @@ impl ExaConnection {
         let cmd = ExaCommand::new_execute_prepared(
             prepared.statement_handle,
             &prepared.columns,
-            args.values,
+            args.buf,
             &self.ws.attributes,
-        )
+        )?
         .try_into()?;
 
         self.ws

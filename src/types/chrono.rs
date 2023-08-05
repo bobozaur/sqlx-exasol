@@ -6,7 +6,6 @@ use std::{
 
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
-use serde_json::{json, Value};
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
@@ -15,10 +14,13 @@ use sqlx_core::{
 };
 
 use crate::{
+    arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaTypeInfo, IntervalDayToSecond, IntervalYearToMonth},
     value::ExaValueRef,
 };
+
+use super::ExaParameter;
 
 impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
@@ -31,7 +33,7 @@ impl Type<Exasol> for DateTime<Utc> {
 }
 
 impl Encode<'_, Exasol> for DateTime<Utc> {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         Encode::<Exasol>::encode(self.naive_utc(), buf)
     }
 
@@ -58,7 +60,7 @@ impl Type<Exasol> for DateTime<Local> {
 }
 
 impl Encode<'_, Exasol> for DateTime<Local> {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         Encode::<Exasol>::encode(self.naive_utc(), buf)
     }
 
@@ -84,15 +86,16 @@ impl Type<Exasol> for chrono::Duration {
 }
 
 impl Encode<'_, Exasol> for chrono::Duration {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(format_args!(
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(format_args!(
             "{} {}:{}:{}.{}",
             self.num_days(),
             self.num_hours(),
             self.num_minutes(),
             self.num_seconds(),
             self.num_milliseconds()
-        ))]);
+        ));
+
         IsNull::No
     }
 
@@ -146,6 +149,8 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
     }
 }
 
+impl ExaParameter for NaiveDate {}
+
 impl Type<Exasol> for NaiveDate {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Date
@@ -153,8 +158,8 @@ impl Type<Exasol> for NaiveDate {
 }
 
 impl Encode<'_, Exasol> for NaiveDate {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -169,6 +174,8 @@ impl Decode<'_, Exasol> for NaiveDate {
     }
 }
 
+impl ExaParameter for NaiveDateTime {}
+
 impl Type<Exasol> for NaiveDateTime {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Timestamp
@@ -176,8 +183,8 @@ impl Type<Exasol> for NaiveDateTime {
 }
 
 impl Encode<'_, Exasol> for NaiveDateTime {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -218,11 +225,10 @@ impl Type<Exasol> for Months {
 }
 
 impl Encode<'_, Exasol> for Months {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         let years = self.0 / 12;
         let months = self.0 % 12;
-
-        buf.push([json!(format_args!("{}-{}", years, months))]);
+        buf.append(format_args!("{}-{}", years, months));
 
         IsNull::No
     }

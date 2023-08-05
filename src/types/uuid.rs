@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use serde_json::{json, Value};
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
@@ -8,7 +7,11 @@ use sqlx_core::{
 };
 use uuid::Uuid;
 
-use crate::{database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+
+use super::ExaParameter;
+
+impl ExaParameter for Uuid {}
 
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
@@ -24,8 +27,8 @@ impl Type<Exasol> for Uuid {
 }
 
 impl Encode<'_, Exasol> for Uuid {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 

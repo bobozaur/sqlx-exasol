@@ -1,10 +1,10 @@
 use std::net::IpAddr;
 
 use serde::Serialize;
-use serde_json::Value;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
+    arguments::ExaBuffer,
     column::ExaColumn,
     options::{ExaConnectOptionsRef, ProtocolVersion},
     responses::ExaAttributes,
@@ -79,10 +79,11 @@ impl<'a> ExaCommand<'a> {
     pub fn new_execute_prepared(
         handle: u16,
         columns: &'a [ExaColumn],
-        data: Vec<[Value; 1]>,
+        buf: ExaBuffer,
         attributes: &'a ExaAttributes,
-    ) -> Self {
-        Self::ExecutePreparedStatement(ExecutePreparedStmt::new(handle, columns, data, attributes))
+    ) -> Result<Self, SqlxError> {
+        let prepared = ExecutePreparedStmt::new(handle, columns, buf, attributes)?;
+        Ok(Self::ExecutePreparedStatement(prepared))
     }
 
     pub fn new_close_prepared(handle: u16) -> Self {
@@ -194,32 +195,32 @@ pub(crate) struct ExecutePreparedStmt<'a> {
     attributes: &'a ExaAttributes,
     statement_handle: u16,
     num_columns: usize,
-    num_rows: u8,
-    #[serde(skip_serializing_if = "ExecutePreparedStmt::has_no_columns")]
+    num_rows: usize,
+    #[serde(skip_serializing_if = "<[ExaColumn]>::is_empty")]
     columns: &'a [ExaColumn],
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    data: Vec<[Value; 1]>,
+    #[serde(skip_serializing_if = "ExaBuffer::is_empty")]
+    data: ExaBuffer,
 }
 
 impl<'a> ExecutePreparedStmt<'a> {
     fn new(
         handle: u16,
         columns: &'a [ExaColumn],
-        data: Vec<[Value; 1]>,
+        mut buf: ExaBuffer,
         attributes: &'a ExaAttributes,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, SqlxError> {
+        buf.end();
+
+        let prepared = Self {
             attributes,
             statement_handle: handle,
             num_columns: columns.len(),
-            num_rows: (!data.is_empty()).into(),
+            num_rows: buf.num_rows()?,
             columns,
-            data,
-        }
-    }
+            data: buf,
+        };
 
-    fn has_no_columns(columns: &[ExaColumn]) -> bool {
-        columns.is_empty()
+        Ok(prepared)
     }
 }
 

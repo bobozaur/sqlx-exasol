@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use serde::Deserialize;
-use serde_json::Value;
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
@@ -10,10 +9,15 @@ use sqlx_core::{
 };
 
 use crate::{
+    arguments::ExaBuffer,
     database::Exasol,
     type_info::{Charset, ExaTypeInfo, StringLike},
     value::ExaValueRef,
 };
+
+use super::ExaParameter;
+
+impl ExaParameter for &str {}
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
@@ -32,14 +36,14 @@ impl Type<Exasol> for str {
 }
 
 impl Encode<'_, Exasol> for &'_ str {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         // Exasol treats empty strings as NULL
         if self.is_empty() {
-            buf.push([Value::Null]);
+            buf.append(());
             return IsNull::Yes;
         }
 
-        buf.push([Value::String(self.to_string())]);
+        buf.append(self);
         IsNull::No
     }
 
@@ -67,22 +71,24 @@ impl Type<Exasol> for String {
     }
 }
 
+impl ExaParameter for String {}
+
 impl Encode<'_, Exasol> for String {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         <&str as Encode<Exasol>>::encode(&**self, buf)
     }
 
-    fn encode(self, buf: &mut Vec<[Value; 1]>) -> IsNull
+    fn encode(self, buf: &mut ExaBuffer) -> IsNull
     where
         Self: Sized,
     {
         // Exasol treats empty strings as NULL
         if self.is_empty() {
-            buf.push([Value::Null]);
+            buf.append(());
             return IsNull::Yes;
         }
 
-        buf.push([Value::String(self)]);
+        buf.append(self);
         IsNull::No
     }
 
@@ -97,6 +103,8 @@ impl Decode<'_, Exasol> for String {
     }
 }
 
+impl ExaParameter for Cow<'_, str> {}
+
 impl Type<Exasol> for Cow<'_, str> {
     fn type_info() -> ExaTypeInfo {
         <&str as Type<Exasol>>::type_info()
@@ -108,29 +116,24 @@ impl Type<Exasol> for Cow<'_, str> {
 }
 
 impl Encode<'_, Exasol> for Cow<'_, str> {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         match self {
             Cow::Borrowed(str) => <&str as Encode<Exasol>>::encode(*str, buf),
             Cow::Owned(str) => <&str as Encode<Exasol>>::encode(&**str, buf),
         }
     }
 
-    fn encode(self, buf: &mut Vec<[Value; 1]>) -> IsNull
+    fn encode(self, buf: &mut ExaBuffer) -> IsNull
     where
         Self: Sized,
     {
         // Exasol treats empty strings as NULL
         if self.is_empty() {
-            buf.push([Value::Null]);
+            buf.append(());
             return IsNull::Yes;
         }
 
-        let value = match self {
-            Cow::Borrowed(s) => Value::String(s.to_string()),
-            Cow::Owned(s) => Value::String(s),
-        };
-
-        buf.push([value]);
+        buf.append(self);
         IsNull::No
     }
 }

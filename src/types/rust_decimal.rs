@@ -1,7 +1,6 @@
 use std::ops::Range;
 
 use serde::Deserialize;
-use serde_json::{json, Value};
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
@@ -10,16 +9,21 @@ use sqlx_core::{
 };
 
 use crate::{
+    arguments::ExaBuffer,
     database::Exasol,
     type_info::{Decimal, ExaTypeInfo},
     value::ExaValueRef,
 };
+
+use super::ExaParameter;
 
 /// Numbers within this range must be serialized/deserialized as integers.
 /// The ones above/under these thresholds are treated as strings.
 const NUMERIC_DECIMAL_RANGE: Range<rust_decimal::Decimal> =
     rust_decimal::Decimal::from_parts(2808348671, 232830643, 0, true, 0)
         ..rust_decimal::Decimal::from_parts(2808348672, 232830643, 0, false, 0);
+
+impl ExaParameter for rust_decimal::Decimal {}
 
 impl Type<Exasol> for rust_decimal::Decimal {
     fn type_info() -> ExaTypeInfo {
@@ -32,17 +36,17 @@ impl Type<Exasol> for rust_decimal::Decimal {
 }
 
 impl Encode<'_, Exasol> for rust_decimal::Decimal {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let value = if NUMERIC_DECIMAL_RANGE.contains(self) {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        if NUMERIC_DECIMAL_RANGE.contains(self) {
             // We know for sure that the conversion will succeed
             // since we checked the number boundaries
-            json!(i64::try_from(*self).unwrap())
+            let val = i64::try_from(*self).unwrap();
+            buf.append(val);
         } else {
             // Large numbers get serialized as strings
-            Value::String(self.to_string())
+            buf.append(format_args!("{self}"));
         };
 
-        buf.push([value]);
         IsNull::No
     }
 

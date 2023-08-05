@@ -1,17 +1,22 @@
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use sqlx_core::decode::Decode;
 use sqlx_core::encode::{Encode, IsNull};
 use sqlx_core::error::BoxDynError;
 use sqlx_core::types::Type;
 
+use crate::arguments::ExaBuffer;
 use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
+use super::ExaParameter;
+
 /// Numbers below this threshold must be serialized/deserialized as integers.
 /// The ones above must be treated as strings.
 const MAX_U64_NUMERIC: u64 = 1000000000000000000;
+
+impl ExaParameter for u8 {}
 
 impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
@@ -24,8 +29,8 @@ impl Type<Exasol> for u8 {
 }
 
 impl Encode<'_, Exasol> for u8 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -41,6 +46,8 @@ impl Decode<'_, Exasol> for u8 {
     }
 }
 
+impl ExaParameter for u16 {}
+
 impl Type<Exasol> for u16 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0))
@@ -52,8 +59,8 @@ impl Type<Exasol> for u16 {
 }
 
 impl Encode<'_, Exasol> for u16 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -69,6 +76,8 @@ impl Decode<'_, Exasol> for u16 {
     }
 }
 
+impl ExaParameter for u32 {}
+
 impl Type<Exasol> for u32 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0))
@@ -80,8 +89,8 @@ impl Type<Exasol> for u32 {
 }
 
 impl Encode<'_, Exasol> for u32 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -97,6 +106,8 @@ impl Decode<'_, Exasol> for u32 {
     }
 }
 
+impl ExaParameter for u64 {}
+
 impl Type<Exasol> for u64 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_64BIT_PRECISION, 0))
@@ -108,15 +119,14 @@ impl Type<Exasol> for u64 {
 }
 
 impl Encode<'_, Exasol> for u64 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let value = if self < &MAX_U64_NUMERIC {
-            json!(self)
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        if self < &MAX_U64_NUMERIC {
+            buf.append(self);
         } else {
             // Large numbers get serialized as strings
-            Value::String(self.to_string())
+            buf.append(format_args!("{self}"));
         };
 
-        buf.push([value]);
         IsNull::No
     }
 }

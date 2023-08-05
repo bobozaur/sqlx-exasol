@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use serde_json::{json, Value};
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
@@ -7,7 +6,11 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+
+use super::ExaParameter;
+
+impl ExaParameter for bool {}
 
 impl Type<Exasol> for bool {
     fn type_info() -> ExaTypeInfo {
@@ -16,8 +19,8 @@ impl Type<Exasol> for bool {
 }
 
 impl Encode<'_, Exasol> for bool {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 

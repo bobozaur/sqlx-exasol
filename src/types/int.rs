@@ -1,21 +1,24 @@
 use std::ops::Range;
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use sqlx_core::decode::Decode;
 use sqlx_core::encode::{Encode, IsNull};
 use sqlx_core::error::BoxDynError;
 use sqlx_core::types::Type;
 
+use crate::arguments::ExaBuffer;
 use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
-use super::{MAX_I64_NUMERIC, MIN_I64_NUMERIC};
+use super::{ExaParameter, MAX_I64_NUMERIC, MIN_I64_NUMERIC};
 
 /// Numbers within this range must be serialized/deserialized as integers.
 /// The ones above/under these thresholds are treated as strings.
 const NUMERIC_I64_RANGE: Range<i64> = MIN_I64_NUMERIC..MAX_I64_NUMERIC;
+
+impl ExaParameter for i8 {}
 
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {
@@ -28,8 +31,8 @@ impl Type<Exasol> for i8 {
 }
 
 impl Encode<'_, Exasol> for i8 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -45,6 +48,8 @@ impl Decode<'_, Exasol> for i8 {
     }
 }
 
+impl ExaParameter for i16 {}
+
 impl Type<Exasol> for i16 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0))
@@ -56,8 +61,8 @@ impl Type<Exasol> for i16 {
 }
 
 impl Encode<'_, Exasol> for i16 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -73,6 +78,8 @@ impl Decode<'_, Exasol> for i16 {
     }
 }
 
+impl ExaParameter for i32 {}
+
 impl Type<Exasol> for i32 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0))
@@ -84,8 +91,8 @@ impl Type<Exasol> for i32 {
 }
 
 impl Encode<'_, Exasol> for i32 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        buf.push([json!(self)]);
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(self);
         IsNull::No
     }
 
@@ -101,6 +108,8 @@ impl Decode<'_, Exasol> for i32 {
     }
 }
 
+impl ExaParameter for i64 {}
+
 impl Type<Exasol> for i64 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_64BIT_PRECISION, 0))
@@ -112,15 +121,14 @@ impl Type<Exasol> for i64 {
 }
 
 impl Encode<'_, Exasol> for i64 {
-    fn encode_by_ref(&self, buf: &mut Vec<[Value; 1]>) -> IsNull {
-        let value = if NUMERIC_I64_RANGE.contains(self) {
-            json!(self)
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        if NUMERIC_I64_RANGE.contains(self) {
+            buf.append(self);
         } else {
             // Large numbers get serialized as strings
-            Value::String(self.to_string())
+            buf.append(format_args!("{self}"));
         };
 
-        buf.push([value]);
         IsNull::No
     }
 

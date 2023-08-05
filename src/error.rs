@@ -10,6 +10,8 @@ use thiserror::Error as ThisError;
 /// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]
 pub enum ExaProtocolError {
+    #[error("expected {0} parameter sets; found at least a mismatch, length {1}")]
+    ParameterLengthMismatch(usize, usize),
     #[error("can't fetch more rows, no result set handle provided in response")]
     MissingResultHandle,
     #[error("invalid response from database, expecting {0}")]
