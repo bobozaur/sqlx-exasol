@@ -195,7 +195,7 @@ pub(crate) struct ExecutePreparedStmt<'a> {
     statement_handle: u16,
     num_columns: usize,
     num_rows: u8,
-    #[serde(skip_serializing_if = "Self::has_no_columns")]
+    #[serde(skip_serializing_if = "ExecutePreparedStmt::has_no_columns")]
     columns: &'a [ExaColumn],
     #[serde(skip_serializing_if = "Vec::is_empty")]
     data: Vec<[Value; 1]>,
