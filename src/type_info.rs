@@ -68,7 +68,7 @@ impl ExaTypeInfo {
             self.full_type(),
             ty.full_type()
         );
-        Err(SqlxError::Decode(msg.into()))
+        Err(SqlxError::Protocol(msg))
     }
 
     pub fn full_type(&self) -> String {
@@ -209,7 +209,7 @@ impl Decimal {
     pub const MAX_8BIT_PRECISION: u32 = 3;
     pub const MAX_16BIT_PRECISION: u32 = 5;
     pub const MAX_32BIT_PRECISION: u32 = 10;
-    pub const MAX_64BIT_PRECISION: u32 = 18;
+    pub const MAX_64BIT_PRECISION: u32 = 20;
     pub const MAX_PRECISION: u32 = 36;
     pub const MAX_SCALE: u32 = 35;
 
