@@ -12,7 +12,6 @@ use sqlx_core::connection::Connection;
 use sqlx_core::executor::Executor;
 use sqlx_core::pool::{Pool, PoolOptions};
 use sqlx_core::query::query;
-use sqlx_core::query_builder::QueryBuilder;
 use sqlx_core::query_scalar::query_scalar;
 use sqlx_core::testing::*;
 use sqlx_core::Error;
@@ -195,15 +194,10 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         }
     }
 
-    let mut query = QueryBuilder::new(r#"DELETE FROM "_sqlx_test_databases" WHERE db_id IN ("#);
-
-    let mut separated = query.separated(",");
-
-    for db_id in &deleted_db_ids {
-        separated.push(db_id);
-    }
-
-    query.push(")").build().execute(&mut *conn).await?;
+    query(r#"DELETE FROM "_sqlx_test_databases" WHERE db_id = ?;"#)
+        .bind(&deleted_db_ids)
+        .execute(&mut *conn)
+        .await?;
 
     Ok(deleted_db_ids.len())
 }
