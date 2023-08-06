@@ -106,7 +106,7 @@ impl ExaWebSocket {
 
     pub(crate) async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_close_result(handle).try_into()?;
-        self.send_cmd(cmd).await?;
+        self.send_cmd_ignore_response(cmd).await?;
         Ok(())
     }
 
@@ -354,7 +354,7 @@ impl ExaWebSocket {
         T: DeserializeOwned + Debug,
     {
         let cmd = cmd.into_inner();
-        tracing::trace!("sending command to database: {cmd}");
+        tracing::debug!("sending command to database: {cmd}");
 
         #[allow(unreachable_patterns)]
         let response = match self.attributes.compression_enabled {
@@ -373,7 +373,7 @@ impl ExaWebSocket {
         };
 
         if let Some(attributes) = attributes {
-            tracing::trace!("updating connection attributes using:\n{attributes:#?}");
+            tracing::debug!("updating connection attributes using:\n{attributes:#?}");
             self.attributes.update(attributes)
         }
 

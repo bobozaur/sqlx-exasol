@@ -3,9 +3,9 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::column::ExaColumn;
+use crate::{column::ExaColumn, error::ExaProtocolError};
 
-use super::{columns::ExaColumns, fetched::DataChunk};
+use super::columns::ExaColumns;
 
 /// The `results` field returned by Exasol after executing a query.
 /// We only work with one statement at a time, so we only ever expect a single
@@ -39,37 +39,57 @@ pub enum QueryResult {
 
 impl QueryResult {
     pub fn handle(&self) -> Option<u16> {
-        match self {
-            QueryResult::ResultSet { result_set } => result_set.result_set_handle,
-            QueryResult::RowCount { .. } => None,
+        let result_set = match self {
+            QueryResult::ResultSet { result_set } => result_set,
+            QueryResult::RowCount { .. } => return None,
+        };
+
+        match result_set.output {
+            ResultSetOutput::Handle(handle) => Some(handle),
+            ResultSetOutput::Data(_) => None,
         }
     }
 }
 
 /// Struct representing a database result set.
 #[derive(Debug, Deserialize)]
-#[serde(from = "ResultSetDe")]
+#[serde(try_from = "ResultSetDe")]
 pub struct ResultSet {
     pub(crate) total_rows_num: usize,
-    pub(crate) result_set_handle: Option<u16>,
+    pub(crate) total_rows_pos: usize,
+    pub(crate) output: ResultSetOutput,
     pub(crate) columns: Arc<[ExaColumn]>,
-    pub(crate) data_chunk: DataChunk,
 }
 
-impl From<ResultSetDe> for ResultSet {
-    fn from(value: ResultSetDe) -> Self {
-        let data_chunk = DataChunk {
-            num_rows: value.num_rows_in_message,
-            data: value.data,
+impl TryFrom<ResultSetDe> for ResultSet {
+    type Error = ExaProtocolError;
+
+    fn try_from(value: ResultSetDe) -> Result<Self, Self::Error> {
+        let data = match (value.result_set_handle, value.data) {
+            (None, Some(data)) => ResultSetOutput::Data(data),
+            (Some(handle), None) => ResultSetOutput::Handle(handle),
+            _ => return Err(ExaProtocolError::BadResultSetOutput),
         };
 
-        Self {
+        let result_set = Self {
             total_rows_num: value.num_rows,
-            result_set_handle: value.result_set_handle,
+            total_rows_pos: value.num_rows_in_message,
+            output: data,
             columns: value.columns.0.into(),
-            data_chunk,
-        }
+        };
+
+        Ok(result_set)
     }
+}
+
+/// A result set's data.
+/// Exasol will send all the data if the query outputs less than [1000 rows](<https://github.com/exasol/websocket-api/blob/master/docs/commands/executeV1.md>).
+/// Otherwise, it returns a handle using which the data can be fetched.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResultSetOutput {
+    Handle(u16),
+    Data(Vec<Vec<Value>>),
 }
 
 /// Deserialization helper for [`ResultSet`].
@@ -78,8 +98,7 @@ impl From<ResultSetDe> for ResultSet {
 struct ResultSetDe {
     num_rows: usize,
     result_set_handle: Option<u16>,
+    data: Option<Vec<Vec<Value>>>,
     columns: ExaColumns,
     num_rows_in_message: usize,
-    #[serde(default)]
-    data: Vec<Vec<Value>>,
 }

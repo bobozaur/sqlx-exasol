@@ -3,7 +3,7 @@
 mod attributes;
 mod columns;
 mod error;
-mod fetched;
+mod fetch;
 mod hosts;
 mod prepared_stmt;
 mod public_key;
@@ -14,11 +14,11 @@ use serde::Deserialize;
 
 pub use attributes::{Attributes, ExaAttributes};
 pub use error::ExaDatabaseError;
-pub use fetched::DataChunk;
+pub use fetch::DataChunk;
 pub use hosts::Hosts;
 pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;
-pub use result::{QueryResult, ResultSet, Results};
+pub use result::{QueryResult, ResultSet, ResultSetOutput, Results};
 pub use session_info::SessionInfo;
 
 /// A response from the Exasol server.

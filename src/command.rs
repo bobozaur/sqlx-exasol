@@ -55,10 +55,10 @@ impl<'a> ExaCommand<'a> {
         })
     }
 
-    pub fn new_fetch(result_set_handle: u16, start_position: usize, num_bytes: usize) -> Self {
+    pub fn new_fetch(handle: u16, pos: usize, num_bytes: usize) -> Self {
         Self::Fetch(Fetch {
-            result_set_handle,
-            start_position,
+            result_set_handle: handle,
+            start_position: pos,
             num_bytes,
         })
     }
@@ -206,18 +206,18 @@ impl<'a> ExecutePreparedStmt<'a> {
     fn new(
         handle: u16,
         columns: &'a [ExaColumn],
-        mut buf: ExaBuffer,
+        mut data: ExaBuffer,
         attributes: &'a ExaAttributes,
     ) -> Result<Self, SqlxError> {
-        buf.end();
+        data.end();
 
         let prepared = Self {
             attributes,
             statement_handle: handle,
             num_columns: columns.len(),
-            num_rows: buf.num_rows()?,
+            num_rows: data.num_rows()?,
             columns,
-            data: buf,
+            data,
         };
 
         Ok(prepared)

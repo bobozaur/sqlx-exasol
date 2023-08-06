@@ -12,8 +12,8 @@ use thiserror::Error as ThisError;
 pub enum ExaProtocolError {
     #[error("expected {0} parameter sets; found at least a mismatch, length {1}")]
     ParameterLengthMismatch(usize, usize),
-    #[error("can't fetch more rows, no result set handle provided in response")]
-    MissingResultHandle,
+    #[error("both or neither 'data' and 'result_set_handle' returned")]
+    BadResultSetOutput,
     #[error("invalid response from database, expecting {0}")]
     UnexpectedResponse(&'static str),
     #[error("transaction already open")]
