@@ -18,7 +18,6 @@ use sqlx_core::{logger::QueryLogger, Error as SqlxError, HashMap};
 
 use crate::{
     column::ExaColumn,
-    command::{Command, ExaCommand},
     connection::websocket::ExaWebSocket,
     query_result::ExaQueryResult,
     responses::{DataChunk, QueryResult, ResultSet, ResultSetOutput},
@@ -30,7 +29,7 @@ use crate::{
 #[pin_project]
 pub struct ResultStream<'a, C, F1, F2>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F1, SqlxError>,
     F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
@@ -42,7 +41,7 @@ where
 
 impl<'a, C, F1, F2> ResultStream<'a, C, F1, F2>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F1, SqlxError>,
     F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
@@ -76,7 +75,7 @@ where
 
 impl<'a, C, F1, F2> Stream for ResultStream<'a, C, F1, F2>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F1, SqlxError>,
     F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
@@ -109,7 +108,7 @@ where
 #[pin_project(project = ResultStreamStateProj)]
 enum ResultStreamState<'a, C, F1, F2>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F1,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F1, SqlxError>,
     F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
@@ -122,7 +121,7 @@ where
 #[pin_project(project = QueryResultStreamProj)]
 pub enum QueryResultStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     ResultSet(#[pin] ResultSetStream<'a, C, F>),
@@ -131,16 +130,19 @@ where
 
 impl<'a, C, F> QueryResultStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    pub fn new(
+    pub fn new<CM>(
         ws: &'a mut ExaWebSocket,
         query_result: QueryResult,
-        fetcher_maker: C,
-    ) -> Result<Self, SqlxError> {
+        closure_maker: CM,
+    ) -> Result<Self, SqlxError>
+    where
+        CM: Fn(u16) -> C,
+    {
         let stream = match query_result {
-            QueryResult::ResultSet { result_set: rs } => Self::result_set(rs, ws, fetcher_maker)?,
+            QueryResult::ResultSet { result_set: rs } => Self::result_set(rs, ws, closure_maker)?,
             QueryResult::RowCount { row_count } => Self::row_count(row_count),
         };
 
@@ -153,19 +155,22 @@ where
         Self::RowCount(stream)
     }
 
-    fn result_set(
+    fn result_set<CM>(
         rs: ResultSet,
         ws: &'a mut ExaWebSocket,
-        fetcher_maker: C,
-    ) -> Result<Self, SqlxError> {
-        let stream = ResultSetStream::new(rs, ws, fetcher_maker)?;
+        closure_maker: CM,
+    ) -> Result<Self, SqlxError>
+    where
+        CM: Fn(u16) -> C,
+    {
+        let stream = ResultSetStream::new(rs, ws, closure_maker)?;
         Ok(Self::ResultSet(stream))
     }
 }
 
 impl<'a, C, F> Stream for QueryResultStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     type Item = Result<Either<ExaQueryResult, ExaRow>, SqlxError>;
@@ -192,7 +197,7 @@ where
 #[pin_project]
 pub struct ResultSetStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     chunk_iter: ChunkIter,
@@ -202,38 +207,49 @@ where
 
 impl<'a, C, F> ResultSetStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    fn new(
+    fn new<CM>(
         rs: ResultSet,
         ws: &'a mut ExaWebSocket,
-        mut fetcher_maker: C,
-    ) -> Result<Self, SqlxError> {
-        let (future, pos) = match rs.output {
+        closure_maker: CM,
+    ) -> Result<Self, SqlxError>
+    where
+        CM: Fn(u16) -> C,
+    {
+        let ResultSet {
+            total_rows_num,
+            total_rows_pos,
+            output,
+            columns,
+        } = rs;
+
+        let chunk_stream = match output {
             ResultSetOutput::Handle(handle) => {
-                let pos = rs.total_rows_pos;
-                let fetch_size = ws.attributes.fetch_size;
-                let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
-                let future = ChunkFuture::new_multi(&mut fetcher_maker, handle, ws, cmd);
-                (future, pos)
+                let fetcher_maker = closure_maker(handle);
+                let future = fetcher_maker(ws, total_rows_pos)?;
+                let future = ChunkFuture::Streaming(future);
+
+                let chunk_stream = MultiChunkStream {
+                    fetcher_maker,
+                    future,
+                    total_rows_num,
+                    total_rows_pos,
+                };
+
+                ChunkStream::Multi(chunk_stream)
             }
             ResultSetOutput::Data(data) => {
-                let num_rows = rs.total_rows_pos;
+                let num_rows = total_rows_pos;
                 let data_chunk = DataChunk { num_rows, data };
-                (ChunkFuture::new_single(data_chunk, ws), num_rows)
+                let chunk_stream = stream::once(std::future::ready(Ok(data_chunk)));
+                ChunkStream::Single(chunk_stream)
             }
-        };
-
-        let chunk_stream = ChunkStream {
-            fetcher_maker,
-            total_rows_num: rs.total_rows_num,
-            total_rows_pos: pos,
-            future,
         };
 
         let stream = Self {
-            chunk_iter: ChunkIter::new(rs.columns),
+            chunk_iter: ChunkIter::new(columns),
             chunk_stream,
         };
 
@@ -243,7 +259,7 @@ where
 
 impl<'a, C, F> Stream for ResultSetStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     type Item = Result<ExaRow, SqlxError>;
@@ -266,12 +282,41 @@ where
     }
 }
 
-/// A stream of chunks for a given result set.
-/// The chunks then get iterated over through [`ChunkIter`].
-#[pin_project]
-struct ChunkStream<'a, C, F>
+/// Enum keeping track of the data chunks we expect from the server.
+/// If there are less than 1000 rows in the result set, Exasol directly sends them.
+/// Hence, we have a single chunk stream variant.
+///
+/// If there are more, we need to fetch chunks one by one using a [`MultiChunkStream`].
+#[pin_project(project = ChunkStreamProj)]
+enum ChunkStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+{
+    Multi(#[pin] MultiChunkStream<'a, C, F>),
+    Single(#[pin] Once<Ready<Result<DataChunk, SqlxError>>>),
+}
+
+impl<'a, C, F> Stream for ChunkStream<'a, C, F>
+where
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+{
+    type Item = Result<DataChunk, SqlxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.project() {
+            ChunkStreamProj::Multi(s) => s.poll_next(cx),
+            ChunkStreamProj::Single(s) => s.poll_next(cx),
+        }
+    }
+}
+
+/// A stream of chunks for a given result set that was given a handle.
+#[pin_project]
+struct MultiChunkStream<'a, C, F>
+where
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     fetcher_maker: C,
@@ -281,38 +326,29 @@ where
     total_rows_pos: usize,
 }
 
-impl<'a, C, F> ChunkStream<'a, C, F>
+impl<'a, C, F> MultiChunkStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     fn update_future(
         self: Pin<&mut Self>,
         ws: &'a mut ExaWebSocket,
-        handle: Option<u16>,
     ) -> Result<ChunkFuture<'a, F>, SqlxError> {
-        let Some(handle) = handle else {return Ok(ChunkFuture::Finished)};
-
         if self.total_rows_pos < self.total_rows_num {
-            let num_bytes = ws.attributes.fetch_size;
-            let cmd = ExaCommand::new_fetch(handle, self.total_rows_pos, num_bytes);
-            let cmd = cmd.try_into()?;
-
-            Ok(ChunkFuture::new_multi(
-                self.project().fetcher_maker,
-                handle,
-                ws,
-                cmd,
-            ))
+            let this = self.project();
+            let fetcher_maker = this.fetcher_maker;
+            let future = fetcher_maker(ws, *this.total_rows_pos)?;
+            Ok(ChunkFuture::Streaming(future))
         } else {
             Ok(ChunkFuture::Finished)
         }
     }
 }
 
-impl<'a, C, F> Stream for ChunkStream<'a, C, F>
+impl<'a, C, F> Stream for MultiChunkStream<'a, C, F>
 where
-    C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+    C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     type Item = Result<DataChunk, SqlxError>;
@@ -320,13 +356,12 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.as_mut().project();
 
-        let ((chunk, ws), handle) = match this.future.as_mut().project() {
-            ChunkFutureProj::MultiChunk(h, f) => (ready!(f.poll(cx)?), Some(*h)),
-            ChunkFutureProj::SingleChunk(f) => (ready!(f.poll(cx)?), None),
+        let (chunk, ws) = match this.future.as_mut().project() {
+            ChunkFutureProj::Streaming(f) => ready!(f.poll(cx)?),
             ChunkFutureProj::Finished => return Poll::Ready(None),
         };
 
-        let future = self.as_mut().update_future(ws, handle)?;
+        let future = self.as_mut().update_future(ws)?;
 
         let mut this = self.project();
         *this.total_rows_pos += chunk.num_rows;
@@ -336,40 +371,16 @@ where
     }
 }
 
-/// Enum keeping track of the future we need to poll for the next chunk.
-/// If there are less than 1000 rows in the result set, Exasol directly sends them.
-/// Hence, we have a single chunk future variant.
-///
-/// If there are more, we need to fetch chunks one by one.
+/// Wrapper that allows us to know when to stop creating
+/// chunk fetching futures because we already streamed all chunks
+/// and don't expect any others.
 #[pin_project(project = ChunkFutureProj)]
 enum ChunkFuture<'a, F>
 where
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    MultiChunk(u16, #[pin] F),
-    SingleChunk(#[pin] Ready<Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>),
+    Streaming(#[pin] F),
     Finished,
-}
-
-impl<'a, F> ChunkFuture<'a, F>
-where
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
-{
-    fn new_single(data_chunk: DataChunk, ws: &'a mut ExaWebSocket) -> Self {
-        Self::SingleChunk(std::future::ready(Ok((data_chunk, ws))))
-    }
-
-    fn new_multi<C>(
-        fetcher_maker: &mut C,
-        handle: u16,
-        ws: &'a mut ExaWebSocket,
-        cmd: Command,
-    ) -> Self
-    where
-        C: FnMut(&'a mut ExaWebSocket, Command) -> F,
-    {
-        Self::MultiChunk(handle, fetcher_maker(ws, cmd))
-    }
 }
 
 // An iterator over a chunk of data from a result set.

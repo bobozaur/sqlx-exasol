@@ -77,14 +77,15 @@ impl ExaWebSocket {
     }
 
     /// Executes a [`Command`] and returns a [`QueryResultStream`].
-    pub(crate) async fn get_result_stream<'a, C, F>(
+    pub(crate) async fn get_result_stream<'a, CM, C, F>(
         &'a mut self,
         cmd: Command,
         rs_handle: &mut Option<u16>,
-        fetcher_maker: C,
+        closure_maker: CM,
     ) -> Result<QueryResultStream<'_, C, F>, SqlxError>
     where
-        C: FnMut(&'a mut ExaWebSocket, Command) -> F,
+        CM: Fn(u16) -> C,
+        C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         if let Some(handle) = rs_handle.take() {
@@ -94,7 +95,7 @@ impl ExaWebSocket {
         let query_result = self.get_query_result(cmd).await?;
         *rs_handle = query_result.handle();
 
-        QueryResultStream::new(self, query_result, fetcher_maker)
+        QueryResultStream::new(self, query_result, closure_maker)
     }
 
     pub(crate) async fn get_query_result(
