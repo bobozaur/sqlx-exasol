@@ -184,8 +184,7 @@ where
 }
 
 /// A stream over an entire result set.
-/// All result sets are sent by Exasol with the first data chunk.
-/// If there will be more, the stream will fetch them one by one,
+/// The stream will fetch the data chunks one by one,
 /// while repopulating the chunk iterator, which then gets
 /// iterated over to output rows.
 #[pin_project]
