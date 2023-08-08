@@ -194,9 +194,9 @@ where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
-    chunk_iter: ChunkIter,
     #[pin]
     chunk_stream: ChunkStream<'a, C, F>,
+    chunk_iter: ChunkIter,
 }
 
 impl<'a, C, F> ResultSetStream<'a, C, F>
@@ -215,7 +215,7 @@ where
         let chunk_stream = match output {
             ResultSetOutput::Handle(handle) => {
                 let future = future_maker(ws, handle, total_rows_pos)?;
-                let future = ChunkFuture::Streaming(future);
+                let future = Some(future);
 
                 let chunk_stream = MultiChunkStream {
                     handle,
@@ -307,7 +307,7 @@ where
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
 {
     #[pin]
-    future: ChunkFuture<'a, F>,
+    future: Option<F>,
     future_maker: C,
     handle: u16,
     total_rows_num: usize,
@@ -322,14 +322,14 @@ where
     fn update_future(
         self: Pin<&mut Self>,
         ws: &'a mut ExaWebSocket,
-    ) -> Result<ChunkFuture<'a, F>, SqlxError> {
+    ) -> Result<Option<F>, SqlxError> {
         if self.total_rows_pos >= self.total_rows_num {
-            return Ok(ChunkFuture::Finished);
+            return Ok(None);
         }
 
         let this = self.project();
         let future = (this.future_maker)(ws, *this.handle, *this.total_rows_pos)?;
-        Ok(ChunkFuture::Streaming(future))
+        Ok(Some(future))
     }
 }
 
@@ -341,11 +341,11 @@ where
     type Item = Result<DataChunk, SqlxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut this = self.as_mut().project();
+        let this = self.as_mut().project();
 
-        let (chunk, ws) = match this.future.as_mut().project() {
-            ChunkFutureProj::Streaming(f) => ready!(f.poll(cx)?),
-            ChunkFutureProj::Finished => return Poll::Ready(None),
+        let (chunk, ws) = match this.future.as_pin_mut() {
+            Some(f) => ready!(f.poll(cx)?),
+            None => return Poll::Ready(None),
         };
 
         let future = self.as_mut().update_future(ws)?;
@@ -356,18 +356,6 @@ where
 
         Poll::Ready(Some(Ok(chunk)))
     }
-}
-
-/// Wrapper that allows us to know when to stop creating
-/// chunk fetching futures because we already streamed all chunks
-/// and don't expect any others.
-#[pin_project(project = ChunkFutureProj)]
-enum ChunkFuture<'a, F>
-where
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
-{
-    Streaming(#[pin] F),
-    Finished,
 }
 
 // An iterator over a chunk of data from a result set.

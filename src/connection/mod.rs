@@ -239,13 +239,13 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
 
-        // This closure is a fairly short way of defining the concrete types that we need to pass around
-        // for the generics.
+        // This closure is for defining the concrete types that we need to pass around for the generics.
         //
         // What we're really interested in is defining the `F` future for retrieving the next data chunk in the result set.
         //
         // However, we in fact need a factory of these `F` future types, which is the closure here, aka the future maker.
-        // This is because we will generally have to retrieve chunks until a result set is depleted.
+        // This is because we will generally have to retrieve chunks until a result set is depleted, so we need
+        // the ability to create new ones.
         //
         // Since the future uses the exclusive mutable reference to the websocket, to satisfy the borrow checker
         // we return the mutable reference after the future is done it with, so it can be passed to the future maker again
