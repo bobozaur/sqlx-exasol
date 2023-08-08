@@ -242,16 +242,27 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
 
-        // We use this so we can capture the handle and not pass it around.
-        // This closure creates a future maker (another closure).
+        // This closure is a fairly short way of defining the concrete types that we need to pass around
+        // for the generics.
         //
-        // The future maker will not have to be bothered with the result set
-        // handle then, since it captures it.
+        // What we're really interested in is defining the `F` future for retrieving the next data chunk in the result set.
+        //
+        // However, we in fact need a factory of these `F` future types, which is the inner closure here, aka the future maker.
+        // This is because we will generally have to retrieve chunks until a result set is depleted.
+        //
+        // Since the future uses the exclusive mutable reference to the websocket, to satisfy the borrow checker
+        // we return the mutable reference after the future is done it with, so it can be passed to the future maker
+        // and create a new future.
+        //
+        // The outer closure, aka the closure maker, is really just for binding the result set handle to the inner closure, the future maker.
+        // This way we store it somewhere with very little effort so we don't have to do weirder things like returning
+        // it alongside the websocket reference.
         let closure_maker = |handle: u16| {
             move |ws: &'e mut ExaWebSocket, pos: usize| {
                 let fetch_size = ws.attributes.fetch_size;
                 let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
-                Ok(ExaWebSocket::fetch_chunk(ws, cmd))
+                let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
+                Ok(future)
             }
         };
 

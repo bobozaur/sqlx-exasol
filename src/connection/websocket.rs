@@ -123,11 +123,8 @@ impl ExaWebSocket {
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub(crate) async fn fetch_chunk(
-        &mut self,
-        cmd: Command,
-    ) -> Result<(DataChunk, &mut Self), SqlxError> {
-        self.send_cmd(cmd).await.map(|d| (d, self))
+    pub(crate) async fn fetch_chunk(&mut self, cmd: Command) -> Result<DataChunk, SqlxError> {
+        self.send_cmd(cmd).await
     }
 
     pub(crate) async fn set_attributes(&mut self) -> Result<(), SqlxError> {
