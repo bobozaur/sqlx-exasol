@@ -99,37 +99,35 @@ impl ExaConnection {
         Ok(con)
     }
 
-    async fn execute_query<'a, CM, C, F>(
+    async fn execute_query<'a, C, F>(
         &'a mut self,
         sql: &str,
         arguments: Option<ExaArguments>,
         persist: bool,
-        closure_maker: CM,
+        future_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
-        CM: Fn(u16) -> C,
-        C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
+        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         match arguments {
             Some(args) => {
-                self.execute_prepared(sql, args, persist, closure_maker)
+                self.execute_prepared(sql, args, persist, future_maker)
                     .await
             }
-            None => self.execute_plain(sql, closure_maker).await,
+            None => self.execute_plain(sql, future_maker).await,
         }
     }
 
-    async fn execute_prepared<'a, CM, C, F>(
+    async fn execute_prepared<'a, C, F>(
         &'a mut self,
         sql: &str,
         args: ExaArguments,
         persist: bool,
-        closure_maker: CM,
+        future_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
-        CM: Fn(u16) -> C,
-        C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
+        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         let prepared = self
@@ -151,23 +149,22 @@ impl ExaConnection {
         .try_into()?;
 
         self.ws
-            .get_result_stream(cmd, &mut self.last_rs_handle, closure_maker)
+            .get_result_stream(cmd, &mut self.last_rs_handle, future_maker)
             .await
     }
 
-    async fn execute_plain<'a, CM, C, F>(
+    async fn execute_plain<'a, C, F>(
         &'a mut self,
         sql: &str,
-        closure_maker: CM,
+        future_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
-        CM: Fn(u16) -> C,
-        C: Fn(&'a mut ExaWebSocket, usize) -> Result<F, SqlxError>,
+        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
         let cmd = ExaCommand::new_execute(sql, &self.ws.attributes).try_into()?;
         self.ws
-            .get_result_stream(cmd, &mut self.last_rs_handle, closure_maker)
+            .get_result_stream(cmd, &mut self.last_rs_handle, future_maker)
             .await
     }
 }
@@ -247,26 +244,20 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         //
         // What we're really interested in is defining the `F` future for retrieving the next data chunk in the result set.
         //
-        // However, we in fact need a factory of these `F` future types, which is the inner closure here, aka the future maker.
+        // However, we in fact need a factory of these `F` future types, which is the closure here, aka the future maker.
         // This is because we will generally have to retrieve chunks until a result set is depleted.
         //
         // Since the future uses the exclusive mutable reference to the websocket, to satisfy the borrow checker
-        // we return the mutable reference after the future is done it with, so it can be passed to the future maker
+        // we return the mutable reference after the future is done it with, so it can be passed to the future maker again
         // and create a new future.
-        //
-        // The outer closure, aka the closure maker, is really just for binding the result set handle to the inner closure, the future maker.
-        // This way we store it somewhere with very little effort so we don't have to do weirder things like returning
-        // it alongside the websocket reference.
-        let closure_maker = |handle: u16| {
-            move |ws: &'e mut ExaWebSocket, pos: usize| {
-                let fetch_size = ws.attributes.fetch_size;
-                let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
-                let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
-                Ok(future)
-            }
+        let future_maker = move |ws: &'e mut ExaWebSocket, handle: u16, pos: usize| {
+            let fetch_size = ws.attributes.fetch_size;
+            let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
+            let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
+            Ok(future)
         };
 
-        let future = self.execute_query(sql, arguments, persistent, closure_maker);
+        let future = self.execute_query(sql, arguments, persistent, future_maker);
         Box::pin(ResultStream::new(future, logger))
     }
 
