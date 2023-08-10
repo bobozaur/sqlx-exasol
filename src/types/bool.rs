@@ -8,10 +8,6 @@ use sqlx_core::{
 
 use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
 
-use super::ExaParameter;
-
-impl ExaParameter for bool {}
-
 impl Type<Exasol> for bool {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Boolean

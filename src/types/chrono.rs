@@ -20,8 +20,6 @@ use crate::{
     value::ExaValueRef,
 };
 
-use super::ExaParameter;
-
 impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Timestamp
@@ -149,8 +147,6 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
     }
 }
 
-impl ExaParameter for NaiveDate {}
-
 impl Type<Exasol> for NaiveDate {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Date
@@ -173,8 +169,6 @@ impl Decode<'_, Exasol> for NaiveDate {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
 }
-
-impl ExaParameter for NaiveDateTime {}
 
 impl Type<Exasol> for NaiveDateTime {
     fn type_info() -> ExaTypeInfo {

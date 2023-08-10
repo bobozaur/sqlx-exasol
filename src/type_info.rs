@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, fmt::Display};
 
 use serde::{Deserialize, Serialize};
-use sqlx_core::{type_info::TypeInfo, Error as SqlxError};
+use sqlx_core::type_info::TypeInfo;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -25,50 +25,40 @@ pub enum ExaTypeInfo {
 }
 
 impl ExaTypeInfo {
-    pub(crate) fn check_compatibility(&self, ty: &Self) -> Result<(), SqlxError> {
-        let flag = match self {
-            ExaTypeInfo::Boolean => matches!(ty, ExaTypeInfo::Boolean),
-            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => c.compatible(ty),
+    /// Returns `true` if this instance is compatible with the other one provided.
+    pub(crate) fn compatible(&self, other: &Self) -> bool {
+        match self {
+            ExaTypeInfo::Boolean => matches!(other, ExaTypeInfo::Boolean),
+            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => c.compatible(other),
             ExaTypeInfo::Date => matches!(
-                ty,
+                other,
                 ExaTypeInfo::Date | ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_)
             ),
-            ExaTypeInfo::Decimal(d) => d.compatible(ty),
-            ExaTypeInfo::Double => match ty {
+            ExaTypeInfo::Decimal(d) => d.compatible(other),
+            ExaTypeInfo::Double => match other {
                 ExaTypeInfo::Double => true,
                 ExaTypeInfo::Decimal(d) if d.scale > 0 => true,
                 _ => false,
             },
-            ExaTypeInfo::Geometry(g) => g.compatible(ty),
-            ExaTypeInfo::IntervalDayToSecond(ids) => ids.compatible(ty),
-            ExaTypeInfo::IntervalYearToMonth(iym) => iym.compatible(ty),
+            ExaTypeInfo::Geometry(g) => g.compatible(other),
+            ExaTypeInfo::IntervalDayToSecond(ids) => ids.compatible(other),
+            ExaTypeInfo::IntervalYearToMonth(iym) => iym.compatible(other),
             ExaTypeInfo::Timestamp => matches!(
-                ty,
+                other,
                 ExaTypeInfo::Timestamp
                     | ExaTypeInfo::TimestampWithLocalTimeZone
                     | ExaTypeInfo::Char(_)
                     | ExaTypeInfo::Varchar(_)
             ),
             ExaTypeInfo::TimestampWithLocalTimeZone => matches!(
-                ty,
+                other,
                 ExaTypeInfo::TimestampWithLocalTimeZone
                     | ExaTypeInfo::Timestamp
                     | ExaTypeInfo::Char(_)
                     | ExaTypeInfo::Varchar(_)
             ),
-            ExaTypeInfo::Hashtype(h) => h.compatible(ty),
-        };
-
-        if flag {
-            return Ok(());
+            ExaTypeInfo::Hashtype(h) => h.compatible(other),
         }
-
-        let msg = format!(
-            "type mismatch: expected SQL type `{}` but was provided `{}`",
-            self.full_type(),
-            ty.full_type()
-        );
-        Err(SqlxError::Protocol(msg))
     }
 
     pub fn full_type(&self) -> String {
@@ -330,7 +320,7 @@ impl IntervalYearToMonth {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub struct Hashtype {
     size: usize,

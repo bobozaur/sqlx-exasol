@@ -1,12 +1,9 @@
 use std::io::Write;
 
-use serde::{ser::Error, Serialize};
-use serde_json::value::RawValue;
+use serde::Serialize;
 use sqlx_core::{arguments::Arguments, encode::Encode, types::Type};
 
-use crate::{
-    database::Exasol, error::ExaProtocolError, type_info::ExaTypeInfo, types::ExaParameter,
-};
+use crate::{database::Exasol, error::ExaProtocolError, type_info::ExaTypeInfo};
 
 #[derive(Debug, Default)]
 pub struct ExaArguments {
@@ -27,51 +24,62 @@ impl<'q> Arguments<'q> for ExaArguments {
     {
         let ty = value.produces().unwrap_or_else(T::type_info);
         self.types.push(ty);
-        self.buf.add_encodable(value);
+
+        self.buf.start_seq();
+        let _ = value.encode(&mut self.buf);
+        self.buf.end_seq();
+        self.buf.add_separator();
+
+        self.buf.register_param_count();
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct ExaBuffer {
-    inner: Vec<u8>,
-    num_rows: NumRows,
+    pub(crate) inner: Vec<u8>,
+    pub(crate) num_param_sets: NumParamSets,
+    params_count: usize,
 }
 
 impl ExaBuffer {
-    /// Serializes and appends an [`ExaParameter`] to this buffer.
+    /// Serializes and appends a value to this buffer.
     pub fn append<T>(&mut self, value: T)
     where
-        T: ExaParameter,
+        T: Serialize,
     {
-        let num_rows = value.parameter_set_len();
-        self.track_num_rows(num_rows.unwrap_or(1));
-
-        match num_rows {
-            Some(_) => serde_json::to_writer(self, &value).unwrap(),
-            None => serde_json::to_writer(self, &[value]).unwrap(),
-        }
+        self.params_count += 1;
+        serde_json::to_writer(self, &value).unwrap()
     }
 
-    /// Outputs the numbers of parameter rows in the buffer.
+    /// Serializes and appends an iterator of values to this buffer.
+    pub fn append_iter<'q, I, T>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+        T: 'q + Encode<'q, Exasol> + Type<Exasol>,
+    {
+        for value in iter.into_iter() {
+            let _ = value.encode(self);
+            self.add_separator();
+        }
+
+        // Remove the trailing comma
+        self.inner.pop();
+    }
+
+    /// Outputs the numbers of parameter sets in the buffer.
     ///
     /// # Errors
     ///
     /// Will throw an error if a mismatch was recorded.
-    pub(crate) fn num_rows(&self) -> Result<usize, ExaProtocolError> {
-        match self.num_rows {
-            NumRows::NotSet => Ok(0),
-            NumRows::Set(n) => Ok(n),
-            NumRows::Mismatch(n, m) => Err(ExaProtocolError::ParameterLengthMismatch(n, m)),
+    pub(crate) fn num_param_sets(&self) -> Result<usize, ExaProtocolError> {
+        match self.num_param_sets {
+            NumParamSets::NotSet => Ok(0),
+            NumParamSets::Set(n) => Ok(n),
+            NumParamSets::Mismatch(n, m) => Err(ExaProtocolError::ParameterLengthMismatch(n, m)),
         }
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        matches!(self.num_rows, NumRows::NotSet)
-    }
-
-    /// Ends the parameter serialization in the buffer.
-    ///
-    /// *MUST* be called before serializing this type.
+    /// Ends the main sequence serialization in the buffer.
     ///
     /// We're technically always guaranteed to have at least
     /// one byte in the buffer as this type is only created
@@ -80,14 +88,27 @@ impl ExaBuffer {
     /// It will either overwrite the `[` set by default
     /// or a `,` separator automatically set when an element
     /// is encoded and added.
-    pub(crate) fn end(&mut self) {
+    pub(crate) fn finalize(&mut self) {
         let b = self.inner.last_mut().expect("buffer cannot be empty");
         *b = b']';
     }
 
-    /// Handles the number of rows we bind parameters for.
-    ///
-    /// This *MUST* be used in every single `Encode` implementation.
+    /// Adds the sequence serialization start to the buffer.
+    fn start_seq(&mut self) {
+        self.inner.push(b'[');
+    }
+
+    /// Adds the sequence serialization start to the buffer.
+    fn end_seq(&mut self) {
+        self.inner.push(b']');
+    }
+
+    /// Adds the sequence serialization separator to the buffer.
+    fn add_separator(&mut self) {
+        self.inner.push(b',');
+    }
+
+    /// Registers the number of rows we bound parameters for.
     ///
     /// The first time we add an argument, we store the number of rows
     /// we pass parameters for.
@@ -97,33 +118,31 @@ impl ExaBuffer {
     /// an error later (before sending data to the database).
     ///
     /// This is also due to `Encode` not throwing errors.
-    fn track_num_rows(&mut self, num_rows: usize) {
-        let new_num_rows = match self.num_rows {
-            NumRows::NotSet => NumRows::Set(num_rows),
-            NumRows::Set(n) if n != num_rows => NumRows::Mismatch(n, num_rows),
+    fn register_param_count(&mut self) {
+        let count = self.params_count;
+
+        self.num_param_sets = match self.num_param_sets {
+            NumParamSets::NotSet => NumParamSets::Set(count),
+            NumParamSets::Set(n) if n != count => NumParamSets::Mismatch(n, count),
             num_rows => num_rows,
         };
 
-        self.num_rows = new_num_rows;
-    }
-
-    /// Encodes the value and adds it to the buffer,
-    /// also appending the separator after it.
-    fn add_encodable<'q, T>(&mut self, value: T)
-    where
-        T: 'q + Send + Encode<'q, Exasol> + Type<Exasol>,
-    {
-        let _ = value.encode(self);
-        self.inner.push(b',');
+        // We must reset the count in preparation for the next parameter.
+        self.params_count = 0;
     }
 }
 
 impl Default for ExaBuffer {
     fn default() -> Self {
-        Self {
-            inner: vec![b'['],
-            num_rows: NumRows::NotSet,
-        }
+        let inner = Vec::with_capacity(1);
+        let mut buffer = Self {
+            inner,
+            num_param_sets: NumParamSets::NotSet,
+            params_count: 0,
+        };
+
+        buffer.start_seq();
+        buffer
     }
 }
 
@@ -137,18 +156,8 @@ impl Write for ExaBuffer {
     }
 }
 
-impl Serialize for ExaBuffer {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let raw_value: &RawValue = serde_json::from_slice(&self.inner).map_err(Error::custom)?;
-        raw_value.serialize(serializer)
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
-pub enum NumRows {
+pub(crate) enum NumParamSets {
     NotSet,
     Set(usize),
     Mismatch(usize, usize),

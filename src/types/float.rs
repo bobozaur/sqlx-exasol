@@ -10,10 +10,6 @@ use crate::database::Exasol;
 use crate::type_info::ExaTypeInfo;
 use crate::value::ExaValueRef;
 
-use super::ExaParameter;
-
-impl ExaParameter for f32 {}
-
 impl Type<Exasol> for f32 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Double
@@ -56,8 +52,6 @@ impl Decode<'_, Exasol> for f32 {
         }
     }
 }
-
-impl ExaParameter for f64 {}
 
 impl Type<Exasol> for f64 {
     fn type_info() -> ExaTypeInfo {

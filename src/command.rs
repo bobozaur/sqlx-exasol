@@ -1,10 +1,11 @@
 use std::net::IpAddr;
 
-use serde::Serialize;
+use serde::{ser::Error, Serialize};
+use serde_json::value::RawValue;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    arguments::ExaBuffer,
+    arguments::{ExaBuffer, NumParamSets},
     column::ExaColumn,
     options::{ExaConnectOptionsRef, ProtocolVersion},
     responses::ExaAttributes,
@@ -198,26 +199,24 @@ pub(crate) struct ExecutePreparedStmt<'a> {
     num_rows: usize,
     #[serde(skip_serializing_if = "<[ExaColumn]>::is_empty")]
     columns: &'a [ExaColumn],
-    #[serde(skip_serializing_if = "ExaBuffer::is_empty")]
-    data: ExaBuffer,
+    #[serde(skip_serializing_if = "PreparedStmtData::is_empty")]
+    data: PreparedStmtData,
 }
 
 impl<'a> ExecutePreparedStmt<'a> {
     fn new(
         handle: u16,
         columns: &'a [ExaColumn],
-        mut data: ExaBuffer,
+        data: ExaBuffer,
         attributes: &'a ExaAttributes,
     ) -> Result<Self, SqlxError> {
-        data.end();
-
         let prepared = Self {
             attributes,
             statement_handle: handle,
             num_columns: columns.len(),
-            num_rows: data.num_rows()?,
+            num_rows: data.num_param_sets()?,
             columns,
-            data,
+            data: data.into(),
         };
 
         Ok(prepared)
@@ -228,4 +227,42 @@ impl<'a> ExecutePreparedStmt<'a> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ClosePreparedStmt {
     statement_handle: u16,
+}
+
+/// Type containing the parameters data to be passed
+/// as part of executing a prepared statement.
+///
+/// The type ensures the parameter sequence in the
+/// [`ExaBuffer`] is appropriately ended.
+#[derive(Debug, Clone)]
+struct PreparedStmtData {
+    inner: Vec<u8>,
+    num_rows: NumParamSets,
+}
+
+impl PreparedStmtData {
+    fn is_empty(&self) -> bool {
+        matches!(self.num_rows, NumParamSets::NotSet | NumParamSets::Set(0))
+    }
+}
+
+impl Serialize for PreparedStmtData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let raw_value: &RawValue = serde_json::from_slice(&self.inner).map_err(Error::custom)?;
+        raw_value.serialize(serializer)
+    }
+}
+
+impl From<ExaBuffer> for PreparedStmtData {
+    fn from(mut value: ExaBuffer) -> Self {
+        value.finalize();
+
+        Self {
+            inner: value.inner,
+            num_rows: value.num_param_sets,
+        }
+    }
 }

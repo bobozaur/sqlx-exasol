@@ -10,13 +10,9 @@ use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
-use super::ExaParameter;
-
 /// Numbers below this threshold must be serialized/deserialized as integers.
 /// The ones above must be treated as strings.
 const MAX_U64_NUMERIC: u64 = 1000000000000000000;
-
-impl ExaParameter for u8 {}
 
 impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
@@ -46,8 +42,6 @@ impl Decode<'_, Exasol> for u8 {
     }
 }
 
-impl ExaParameter for u16 {}
-
 impl Type<Exasol> for u16 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0))
@@ -76,8 +70,6 @@ impl Decode<'_, Exasol> for u16 {
     }
 }
 
-impl ExaParameter for u32 {}
-
 impl Type<Exasol> for u32 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0))
@@ -105,8 +97,6 @@ impl Decode<'_, Exasol> for u32 {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
 }
-
-impl ExaParameter for u64 {}
 
 impl Type<Exasol> for u64 {
     fn type_info() -> ExaTypeInfo {

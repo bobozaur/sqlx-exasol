@@ -12,13 +12,11 @@ use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
-use super::{ExaParameter, MAX_I64_NUMERIC, MIN_I64_NUMERIC};
+use super::{MAX_I64_NUMERIC, MIN_I64_NUMERIC};
 
 /// Numbers within this range must be serialized/deserialized as integers.
 /// The ones above/under these thresholds are treated as strings.
 const NUMERIC_I64_RANGE: Range<i64> = MIN_I64_NUMERIC..MAX_I64_NUMERIC;
-
-impl ExaParameter for i8 {}
 
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {
@@ -48,8 +46,6 @@ impl Decode<'_, Exasol> for i8 {
     }
 }
 
-impl ExaParameter for i16 {}
-
 impl Type<Exasol> for i16 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0))
@@ -78,8 +74,6 @@ impl Decode<'_, Exasol> for i16 {
     }
 }
 
-impl ExaParameter for i32 {}
-
 impl Type<Exasol> for i32 {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0))
@@ -107,8 +101,6 @@ impl Decode<'_, Exasol> for i32 {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
 }
-
-impl ExaParameter for i64 {}
 
 impl Type<Exasol> for i64 {
     fn type_info() -> ExaTypeInfo {

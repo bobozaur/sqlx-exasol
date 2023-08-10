@@ -15,10 +15,6 @@ use crate::{
     value::ExaValueRef,
 };
 
-use super::ExaParameter;
-
-impl ExaParameter for &str {}
-
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Varchar(Default::default())
@@ -71,8 +67,6 @@ impl Type<Exasol> for String {
     }
 }
 
-impl ExaParameter for String {}
-
 impl Encode<'_, Exasol> for String {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         <&str as Encode<Exasol>>::encode(&**self, buf)
@@ -102,8 +96,6 @@ impl Decode<'_, Exasol> for String {
         <&str as Decode<Exasol>>::decode(value).map(ToOwned::to_owned)
     }
 }
-
-impl ExaParameter for Cow<'_, str> {}
 
 impl Type<Exasol> for Cow<'_, str> {
     fn type_info() -> ExaTypeInfo {

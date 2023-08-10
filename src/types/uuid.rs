@@ -9,10 +9,6 @@ use uuid::Uuid;
 
 use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
 
-use super::ExaParameter;
-
-impl ExaParameter for Uuid {}
-
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Hashtype(Default::default())

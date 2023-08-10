@@ -6,9 +6,9 @@ use sqlx_core::{
 
 use crate::{arguments::ExaBuffer, Exasol};
 
-impl<'q, T> Encode<'q, Exasol> for Option<T>
+impl<T> Encode<'_, Exasol> for Option<T>
 where
-    T: Encode<'q, Exasol> + Type<Exasol> + 'q,
+    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     #[inline]
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {

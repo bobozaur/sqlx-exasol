@@ -135,9 +135,19 @@ impl ExaConnection {
             .get_or_prepare(&mut self.statement_cache, sql, persist)
             .await?;
 
+        // Check the compatibility between provided parameter data types
+        // and the ones expected by the database.
         let column_types = prepared.columns.iter().map(Column::type_info);
         for (expected, provided) in iter::zip(column_types, &args.types) {
-            expected.check_compatibility(provided)?;
+            if !expected.compatible(provided) {
+                let msg = format!(
+                    "type mismatch: expected SQL type `{}` but was provided `{}`",
+                    expected.full_type(),
+                    provided.full_type()
+                );
+
+                return Err(SqlxError::Protocol(msg));
+            }
         }
 
         let cmd = ExaCommand::new_execute_prepared(

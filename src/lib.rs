@@ -34,6 +34,7 @@ pub use row::ExaRow;
 pub use statement::ExaStatement;
 pub use transaction::ExaTransactionManager;
 pub use type_info::ExaTypeInfo;
+pub use types::ExaIter;
 pub use value::{ExaValue, ExaValueRef};
 
 /// An alias for [`Pool`][crate::pool::Pool], specialized for Exasol.
