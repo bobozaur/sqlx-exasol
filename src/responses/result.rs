@@ -65,10 +65,9 @@ impl TryFrom<ResultSetDe> for ResultSet {
     type Error = ExaProtocolError;
 
     fn try_from(value: ResultSetDe) -> Result<Self, Self::Error> {
-        let data = match (value.result_set_handle, value.data) {
-            (None, Some(data)) => ResultSetOutput::Data(data),
-            (Some(handle), None) => ResultSetOutput::Handle(handle),
-            _ => return Err(ExaProtocolError::BadResultSetOutput),
+        let data = match value.result_set_handle {
+            None => ResultSetOutput::Data(value.data),
+            Some(handle) => ResultSetOutput::Handle(handle),
         };
 
         let result_set = Self {
@@ -98,7 +97,8 @@ pub enum ResultSetOutput {
 struct ResultSetDe {
     num_rows: usize,
     result_set_handle: Option<u16>,
-    data: Option<Vec<Vec<Value>>>,
+    #[serde(default)]
+    data: Vec<Vec<Value>>,
     columns: ExaColumns,
     num_rows_in_message: usize,
 }

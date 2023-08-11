@@ -5,6 +5,16 @@ use sqlx_core::{error::BoxDynError, pool::PoolConnection};
 const SOME_F32: f32 = 51_231.727;
 const SOME_F64: f64 = 651_231.727_376_231;
 const SOME_OTHER_F64: f64 = 234_351_231.727_364;
+#[sqlx::test]
+async fn test_f32_double(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    // let res = query("SELECT TYPEOF(?), ? FROM DUAL;")
+    //     .bind(100.24)
+    //     .bind(100.24)
+    //     .fetch_one(&mut *con)
+    //     .await?;
+    // println!("{res:?}");
+    Ok(())
+}
 
 #[sqlx::test]
 async fn test_f32(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
