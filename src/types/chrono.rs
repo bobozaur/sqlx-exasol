@@ -24,10 +24,6 @@ impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::Timestamp
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Timestamp)
-    }
 }
 
 impl Encode<'_, Exasol> for DateTime<Utc> {
@@ -50,10 +46,6 @@ impl<'r> Decode<'r, Exasol> for DateTime<Utc> {
 impl Type<Exasol> for DateTime<Local> {
     fn type_info() -> ExaTypeInfo {
         ExaTypeInfo::TimestampWithLocalTimeZone
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::TimestampWithLocalTimeZone)
     }
 }
 
@@ -79,7 +71,7 @@ impl Type<Exasol> for chrono::Duration {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::IntervalDayToSecond(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -214,7 +206,7 @@ impl Type<Exasol> for Months {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::IntervalYearToMonth(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

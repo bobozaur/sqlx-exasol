@@ -20,7 +20,7 @@ impl Type<Exasol> for u8 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -48,7 +48,7 @@ impl Type<Exasol> for u16 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -76,7 +76,7 @@ impl Type<Exasol> for u32 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -104,7 +104,7 @@ impl Type<Exasol> for u64 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

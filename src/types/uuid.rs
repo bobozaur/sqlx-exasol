@@ -15,10 +15,7 @@ impl Type<Exasol> for Uuid {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(
-            ty,
-            ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_) | ExaTypeInfo::Hashtype(_)
-        )
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

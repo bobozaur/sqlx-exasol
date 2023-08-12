@@ -106,7 +106,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";
 
         CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
-            db_id BIGINT IDENTITY,
+            db_id DECIMAL(20, 0) IDENTITY,
             test_path CLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );"#;
@@ -130,7 +130,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         .execute(&mut *conn)
         .await?;
 
-    let query_str = r#"SELECT ZEROIFNULL(MAX(db_id)) + 1 FROM "_sqlx_tests"."_sqlx_test_databases";"#;
+    let query_str = r#"SELECT CAST(ZEROIFNULL(MAX(db_id)) + 1 AS DECIMAL(20, 0)) FROM "_sqlx_tests"."_sqlx_test_databases";"#;
     let new_db_id: u64 = query_scalar(query_str).fetch_one(&mut *conn).await?;
     let new_db_name = db_name(new_db_id);
 

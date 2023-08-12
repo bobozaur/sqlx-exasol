@@ -1,2 +1,2 @@
-mod params;
 mod queries;
+mod types;

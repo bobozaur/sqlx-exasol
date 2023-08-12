@@ -8,12 +8,7 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{
-    arguments::ExaBuffer,
-    database::Exasol,
-    type_info::{Charset, ExaTypeInfo, StringLike},
-    value::ExaValueRef,
-};
+use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
@@ -21,13 +16,7 @@ impl Type<Exasol> for str {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(
-            ty,
-            ExaTypeInfo::Varchar(_)
-                | ExaTypeInfo::Char(_)
-                | ExaTypeInfo::Geometry(_)
-                | ExaTypeInfo::Hashtype(_)
-        )
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -41,13 +30,6 @@ impl Encode<'_, Exasol> for &'_ str {
 
         buf.append(self);
         IsNull::No
-    }
-
-    fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Varchar(StringLike::new(
-            self.chars().count(),
-            Charset::Utf8,
-        )))
     }
 }
 

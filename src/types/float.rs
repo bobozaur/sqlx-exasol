@@ -16,11 +16,7 @@ impl Type<Exasol> for f32 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        match ty {
-            ExaTypeInfo::Double => true,
-            ExaTypeInfo::Decimal(d) if d.scale() > 0 => true,
-            _ => false,
-        }
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -59,11 +55,7 @@ impl Type<Exasol> for f64 {
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        match ty {
-            ExaTypeInfo::Double => true,
-            ExaTypeInfo::Decimal(d) if d.scale() > 0 => true,
-            _ => false,
-        }
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

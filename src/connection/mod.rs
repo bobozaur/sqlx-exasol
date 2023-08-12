@@ -141,9 +141,7 @@ impl ExaConnection {
         for (expected, provided) in iter::zip(column_types, &args.types) {
             if !expected.compatible(provided) {
                 let msg = format!(
-                    "type mismatch: expected SQL type `{}` but was provided `{}`",
-                    expected.full_type(),
-                    provided.full_type()
+                    "type mismatch: expected SQL type `{expected}` but was provided `{provided}`",
                 );
 
                 return Err(SqlxError::Protocol(msg));

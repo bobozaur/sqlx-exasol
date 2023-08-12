@@ -23,11 +23,16 @@ const NUMERIC_DECIMAL_RANGE: Range<rust_decimal::Decimal> =
 
 impl Type<Exasol> for rust_decimal::Decimal {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_PRECISION, Decimal::MAX_SCALE))
+        // This is not a valid Exasol datatype defintion,
+        // but defining it like this means that we can acommodate
+        // any DECIMAL value in this Rust type.
+        ExaTypeInfo::Decimal(Decimal::new(
+            Decimal::MAX_PRECISION + Decimal::MAX_SCALE,
+            Decimal::MAX_SCALE,
+        ))
     }
-
     fn compatible(ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Decimal(_))
+        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -53,8 +58,7 @@ impl Encode<'_, Exasol> for rust_decimal::Decimal {
             .unsigned_abs()
             .checked_ilog10()
             .unwrap_or_default()
-            + 1
-            - scale;
+            + 1;
         Some(ExaTypeInfo::Decimal(Decimal::new(precision, scale)))
     }
 }
