@@ -4,7 +4,7 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{arguments::ExaBuffer, Exasol};
+use crate::{arguments::ExaBuffer, ExaTypeInfo, Exasol};
 
 impl<T> Encode<'_, Exasol> for Option<T>
 where
@@ -15,7 +15,7 @@ where
         if let Some(v) = self {
             v.produces()
         } else {
-            Some(T::type_info())
+            Some(ExaTypeInfo::Null)
         }
     }
 
@@ -41,6 +41,6 @@ where
 
     #[inline]
     fn size_hint(&self) -> usize {
-        self.as_ref().map_or(0, Encode::size_hint)
+        self.as_ref().map(Encode::size_hint).unwrap_or_default()
     }
 }

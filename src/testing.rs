@@ -201,11 +201,6 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         .execute(&mut *conn)
         .await?;
 
-    conn.execute(
-        r#"ALTER TABLE "_sqlx_tests"."_sqlx_test_databases" ALTER COLUMN db_id SET IDENTITY 0;"#,
-    )
-    .await?;
-
     Ok(deleted_db_ids.len())
 }
 

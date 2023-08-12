@@ -74,24 +74,30 @@ test_type_valid!(u8::"DECIMAL(3, 0)"::(u8::MIN, u8::MAX));
 test_type_valid!(u16::"DECIMAL(5, 0)"::(u16::MIN, u16::MAX, u16::from(u8::MAX)));
 test_type_valid!(u32::"DECIMAL(10, 0)"::(u32::MIN, u32::MAX, u32::from(u8::MAX), u32::from(u16::MAX)));
 test_type_valid!(u64::"DECIMAL(20, 0)"::(u64::MIN, u64::MAX, u64::from(u8::MAX), u64::from(u16::MAX), u64::from(u32::MAX), MAX_U64_NUMERIC, MAX_U64_NUMERIC - 1));
+test_type_valid!(u64_empty<Option<u64>>::"DECIMAL(20, 0)"::("NULL" => None::<u64>));
 
 // Signed integers
 test_type_valid!(i8::"DECIMAL(3, 0)"::(i8::MIN, i8::MAX));
 test_type_valid!(i16::"DECIMAL(5, 0)"::(i16::MIN, i16::MAX, i16::from(i8::MIN), i16::from(i8::MAX)));
 test_type_valid!(i32::"DECIMAL(10, 0)"::(i32::MIN, i32::MAX, i32::from(i8::MIN), i32::from(i8::MAX), i32::from(i16::MIN), i32::from(i16::MAX)));
 test_type_valid!(i64::"DECIMAL(20, 0)"::(i64::MIN, i64::MAX, i64::from(i8::MIN), i64::from(i8::MAX), i64::from(i16::MIN), i64::from(i16::MAX), i64::from(i32::MIN), i64::from(i32::MAX), MIN_I64_NUMERIC, MIN_I64_NUMERIC - 1, MAX_I64_NUMERIC, MAX_I64_NUMERIC - 1));
+test_type_valid!(i64_empty<Option<i64>>::"DECIMAL(20, 0)"::("NULL" => None::<i64>));
 
 // Floats (and their weirdness)
 test_type_valid!(f32::"DOUBLE PRECISION"::(f32::MIN, f32::MAX));
 test_type_valid!(f64::"DOUBLE PRECISION"::(-3.40282346638529e38f64, 3.40282346638529e38f64));
 test_type_valid!(f32_decimal<f32>::"DECIMAL(36, 16)"::(-1005.0456, 1005.0456, -7462.0, 7462.0));
 test_type_valid!(f64_decimal<f64>::"DECIMAL(36, 16)"::(-1005213.0456543, 1005213.0456543, -1005.0456, 1005.0456, -7462.0, 7462.0));
+test_type_valid!(f64_empty<Option<f64>>::"DECIMAL(36, 16)"::("NULL" => None::<f64>));
 
 // Strings
 test_type_valid!(varchar_ascii<String>::"VARCHAR(100) ASCII"::("'first value'" => "first value", "'second value'" => "second value"));
 test_type_valid!(varchar_utf8<String>::"VARCHAR(100) UTF8"::("'first value 🦀'" => "first value 🦀", "'second value 🦀'" => "second value 🦀"));
 test_type_valid!(char_ascii<String>::"CHAR(10) ASCII"::("'first     '" => "first     ", "'second'" => "second    "));
 test_type_valid!(char_utf8<String>::"CHAR(10) UTF8"::("'first 🦀   '" => "first 🦀   ", "'second 🦀'" => "second 🦀  "));
+
+test_type_valid!(varchar_empty<Option<String>>::"VARCHAR(100) UTF8"::("''" => None::<String>, "NULL" => None::<String>));
+test_type_valid!(char_empty<Option<String>>::"CHAR(100) UTF8"::("''" => None::<String>, "NULL" => None::<String>));
 
 #[cfg(feature = "rust_decimal")]
 mod rust_decimal_tests {
@@ -101,4 +107,5 @@ mod rust_decimal_tests {
     test_type_valid!(rust_decimal_i64<Decimal>::"DECIMAL(36, 16)"::(Decimal::new(i64::MIN, 16), Decimal::new(i64::MAX, 16), Decimal::new(i64::MAX, 10), Decimal::new(i64::MAX, 5), Decimal::new(i64::MAX, 0)));
     test_type_valid!(rust_decimal_i16<Decimal>::"DECIMAL(36, 16)"::(Decimal::new(i64::from(i16::MIN), 5), Decimal::new(i64::from(i16::MAX), 5), Decimal::new(i64::from(i16::MIN), 0), Decimal::new(i64::from(i16::MAX), 0)));
     test_type_valid!(rust_decimal_no_scale<Decimal>::"DECIMAL(36, 0)"::(Decimal::new(-340282346638529, 0), Decimal::new(340282346638529, 0), Decimal::new(0, 0)));
+    test_type_valid!(rust_decimal_empty<Option<Decimal>>::"DECIMAL(36, 0)"::("NULL" => None::<Decimal>));
 }

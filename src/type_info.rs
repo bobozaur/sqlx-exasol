@@ -7,6 +7,7 @@ use sqlx_core::type_info::TypeInfo;
 #[serde(rename_all = "UPPERCASE")]
 #[serde(tag = "type")]
 pub enum ExaTypeInfo {
+    Null,
     Boolean,
     Char(StringLike),
     Date,
@@ -25,6 +26,7 @@ pub enum ExaTypeInfo {
 }
 
 impl ExaTypeInfo {
+    const NULL: &str = "NULL";
     const BOOLEAN: &str = "BOOLEAN";
     const CHAR: &str = "CHAR";
     const DATE: &str = "DATE";
@@ -41,15 +43,19 @@ impl ExaTypeInfo {
     /// Returns `true` if this instance is compatible with the other one provided.
     pub(crate) fn compatible(&self, other: &Self) -> bool {
         match self {
-            ExaTypeInfo::Boolean => matches!(other, ExaTypeInfo::Boolean),
+            ExaTypeInfo::Null => true,
+            ExaTypeInfo::Boolean => matches!(other, ExaTypeInfo::Boolean | ExaTypeInfo::Null),
             ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => c.compatible(other),
             ExaTypeInfo::Date => matches!(
                 other,
-                ExaTypeInfo::Date | ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_)
+                ExaTypeInfo::Date
+                    | ExaTypeInfo::Char(_)
+                    | ExaTypeInfo::Varchar(_)
+                    | ExaTypeInfo::Null
             ),
             ExaTypeInfo::Decimal(d) => d.compatible(other),
             ExaTypeInfo::Double => match other {
-                ExaTypeInfo::Double => true,
+                ExaTypeInfo::Double | ExaTypeInfo::Null => true,
                 ExaTypeInfo::Decimal(d) if d.scale > 0 => true,
                 _ => false,
             },
@@ -62,6 +68,7 @@ impl ExaTypeInfo {
                     | ExaTypeInfo::TimestampWithLocalTimeZone
                     | ExaTypeInfo::Char(_)
                     | ExaTypeInfo::Varchar(_)
+                    | ExaTypeInfo::Null
             ),
             ExaTypeInfo::TimestampWithLocalTimeZone => matches!(
                 other,
@@ -69,6 +76,7 @@ impl ExaTypeInfo {
                     | ExaTypeInfo::Timestamp
                     | ExaTypeInfo::Char(_)
                     | ExaTypeInfo::Varchar(_)
+                    | ExaTypeInfo::Null
             ),
             ExaTypeInfo::Hashtype(h) => h.compatible(other),
         }
@@ -78,6 +86,7 @@ impl ExaTypeInfo {
 impl AsRef<str> for ExaTypeInfo {
     fn as_ref(&self) -> &str {
         match self {
+            ExaTypeInfo::Null => Self::NULL,
             ExaTypeInfo::Boolean => Self::BOOLEAN,
             ExaTypeInfo::Char(_) => Self::CHAR,
             ExaTypeInfo::Date => Self::DATE,
@@ -107,7 +116,8 @@ impl TypeInfo for ExaTypeInfo {
 impl Display for ExaTypeInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExaTypeInfo::Boolean
+            ExaTypeInfo::Null
+            | ExaTypeInfo::Boolean
             | ExaTypeInfo::Date
             | ExaTypeInfo::Double
             | ExaTypeInfo::Timestamp
@@ -163,7 +173,10 @@ impl StringLike {
     ///
     /// So just let the database do its thing and throw an error.
     pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
-        matches!(ty, ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_))
+        matches!(
+            ty,
+            ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_) | ExaTypeInfo::Null
+        )
     }
 }
 
@@ -229,6 +242,7 @@ impl Decimal {
         match ty {
             ExaTypeInfo::Decimal(d) => self >= d,
             ExaTypeInfo::Double => self.scale > 0,
+            ExaTypeInfo::Null => true,
             _ => false,
         }
     }
@@ -288,7 +302,7 @@ impl Geometry {
     pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
         match ty {
             ExaTypeInfo::Geometry(g) => self.srid == g.srid,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) => true,
+            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
             _ => false,
         }
     }
@@ -329,7 +343,7 @@ impl IntervalDayToSecond {
     pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
         match ty {
             ExaTypeInfo::IntervalDayToSecond(i) => self >= i,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) => true,
+            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
             _ => false,
         }
     }
@@ -359,7 +373,7 @@ impl IntervalYearToMonth {
     pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
         match ty {
             ExaTypeInfo::IntervalYearToMonth(i) => self >= i,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) => true,
+            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
             _ => false,
         }
     }
@@ -389,7 +403,7 @@ impl Hashtype {
     pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
         match ty {
             ExaTypeInfo::Hashtype(h) => self.size >= h.size,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) => true,
+            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
             _ => false,
         }
     }
