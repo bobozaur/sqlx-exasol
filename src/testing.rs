@@ -130,7 +130,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         .execute(&mut *conn)
         .await?;
 
-    let query_str = r#"SELECT CAST(ZEROIFNULL(MAX(db_id)) + 1 AS DECIMAL(20, 0)) FROM "_sqlx_tests"."_sqlx_test_databases";"#;
+    let query_str = r#"SELECT MAX(db_id) FROM "_sqlx_tests"."_sqlx_test_databases";"#;
     let new_db_id: u64 = query_scalar(query_str).fetch_one(&mut *conn).await?;
     let new_db_name = db_name(new_db_id);
 
@@ -200,6 +200,11 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         .bind(&deleted_db_ids)
         .execute(&mut *conn)
         .await?;
+
+    conn.execute(
+        r#"ALTER TABLE "_sqlx_tests"."_sqlx_test_databases" ALTER COLUMN db_id SET IDENTITY 0;"#,
+    )
+    .await?;
 
     Ok(deleted_db_ids.len())
 }

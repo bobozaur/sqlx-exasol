@@ -13,6 +13,3 @@ mod uint;
 mod uuid;
 
 pub use iter::ExaIter;
-
-const MIN_I64_NUMERIC: i64 = -999999999999999999;
-const MAX_I64_NUMERIC: i64 = 1000000000000000000;

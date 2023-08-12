@@ -20,16 +20,10 @@ mod macros {
                         .await?;
 
                     assert_eq!(query_result.rows_affected(), 1);
+                    let query_str = format!("INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));", $provided, $datatype);
+                    eprintln!("{query_str}");
 
-                    let query_result = con
-                        .execute(
-                            format!(
-                                "INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));",
-                                $provided, $datatype
-                            )
-                            .as_str(),
-                        )
-                        .await?;
+                    let query_result = con.execute(query_str.as_str()).await?;
 
                     assert_eq!(query_result.rows_affected(), 1);
 
@@ -40,9 +34,9 @@ mod macros {
                     let first_value = values.pop().unwrap();
                     let second_value = values.pop().unwrap();
 
-                    assert_eq!(first_value, second_value);
-                    assert_eq!(first_value, $expected);
-                    assert_eq!(second_value, $expected);
+                    assert_eq!(first_value, second_value, "prepared and unprepared types");
+                    assert_eq!(first_value, $expected, "prepared and expected values");
+                    assert_eq!(second_value, $expected, "unprepared and expected values");
 
                     con.execute("DELETE FROM sqlx_test_type;").await?;
                 )+
@@ -90,11 +84,21 @@ test_type_valid!(i64::"DECIMAL(20, 0)"(i64::MIN, i64::MAX, i64::from(i8::MIN), i
 // Floats (and their weirdness)
 test_type_valid!(f32::"DOUBLE PRECISION"(f32::MIN, f32::MAX));
 test_type_valid!(f64::"DOUBLE PRECISION"(-3.40282346638529e38f64, 3.40282346638529e38f64));
-test_type_valid!(f32_decimal<f32>::"DECIMAL(36, 15)"(-1005.0456, 1005.0456));
-test_type_valid!(f64_decimal<f64>::"DECIMAL(36, 15)"(-1005213.0456543, 1005213.0456543, -1005.0456, 1005.0456));
+test_type_valid!(f32_decimal<f32>::"DECIMAL(36, 16)"(-1005.0456, 1005.0456, -7462.0, 7462.0));
+test_type_valid!(f64_decimal<f64>::"DECIMAL(36, 16)"(-1005213.0456543, 1005213.0456543, -1005.0456, 1005.0456, -7462.0, 7462.0));
 
 // Strings
 test_type_valid!(varchar_ascii<String>::"VARCHAR(100) ASCII"("'first value'" => "first value", "'second value'" => "second value"));
 test_type_valid!(varchar_utf8<String>::"VARCHAR(100) UTF8"("'first value 🦀'" => "first value 🦀", "'second value 🦀'" => "second value 🦀"));
 test_type_valid!(char_ascii<String>::"CHAR(10) ASCII"("'first     '" => "first     ", "'second'" => "second    "));
 test_type_valid!(char_utf8<String>::"CHAR(10) UTF8"("'first 🦀   '" => "first 🦀   ", "'second 🦀'" => "second 🦀  "));
+
+#[cfg(feature = "rust_decimal")]
+mod rust_decimal_tests {
+    use super::*;
+    use rust_decimal::Decimal;
+
+    test_type_valid!(rust_decimal_i64<Decimal>::"DECIMAL(36, 16)"(Decimal::new(i64::MIN, 16), Decimal::new(i64::MAX, 16), Decimal::new(i64::MAX, 10), Decimal::new(i64::MAX, 5), Decimal::new(i64::MAX, 0)));
+    test_type_valid!(rust_decimal_i16<Decimal>::"DECIMAL(36, 16)"(Decimal::new(i64::from(i16::MIN), 5), Decimal::new(i64::from(i16::MAX), 5), Decimal::new(i64::from(i16::MIN), 0), Decimal::new(i64::from(i16::MAX), 0)));
+    test_type_valid!(rust_decimal_no_scale<Decimal>::"DECIMAL(36, 0)"(Decimal::new(-340282346638529, 0), Decimal::new(340282346638529, 0), Decimal::new(0, 0)));
+}

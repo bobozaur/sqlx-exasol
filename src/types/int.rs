@@ -12,7 +12,8 @@ use crate::database::Exasol;
 use crate::type_info::{Decimal, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
-use super::{MAX_I64_NUMERIC, MIN_I64_NUMERIC};
+const MIN_I64_NUMERIC: i64 = -999999999999999999;
+const MAX_I64_NUMERIC: i64 = 1000000000000000000;
 
 /// Numbers within this range must be serialized/deserialized as integers.
 /// The ones above/under these thresholds are treated as strings.
