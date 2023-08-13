@@ -2,107 +2,9 @@ use std::collections::HashSet;
 
 use exasol::ExaIter;
 
-pub(crate) use macros::test_type_array;
-pub(crate) use macros::test_type_valid;
-
-mod macros {
-    macro_rules! test_type_valid {
-    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
-        paste::item! {
-            #[sqlx::test]
-            async fn [< test_type_ $name >] (
-                mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
-            ) -> Result<(), sqlx_core::error::BoxDynError> {
-                use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
-
-                let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
-                con.execute(create_sql).await?;
-
-                $(
-                    let query_result = query("INSERT INTO sqlx_test_type VALUES (?)")
-                        .bind($prepared)
-                        .execute(&mut *con)
-                        .await?;
-
-                    assert_eq!(query_result.rows_affected(), 1);
-                    let query_str = format!("INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));", $unprepared, $datatype);
-                    eprintln!("{query_str}");
-
-                    let query_result = con.execute(query_str.as_str()).await?;
-
-                    assert_eq!(query_result.rows_affected(), 1);
-
-                    let mut values: Vec<$ty> = query_scalar("SELECT * FROM sqlx_test_type;")
-                        .fetch_all(&mut *con)
-                        .await?;
-
-                    let first_value = values.pop().unwrap();
-                    let second_value = values.pop().unwrap();
-
-                    assert_eq!(first_value, second_value, "prepared and unprepared types");
-                    assert_eq!(first_value, $prepared, "provided and expected values");
-                    assert_eq!(second_value, $prepared, "provided and expected values");
-
-                    con.execute("DELETE FROM sqlx_test_type;").await?;
-                )+
-
-                Ok(())
-            }
-        }
-    };
-
-    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr),+)) => {
-        $crate::types::test_type_valid!($name<$ty>::$datatype::($($unprepared => $unprepared),+));
-    };
-
-    ($name:ident::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
-        $crate::types::test_type_valid!($name<$name>::$datatype::($($unprepared => $prepared),+));
-    };
-
-    ($name:ident::$datatype:literal::($($unprepared:expr),+)) => {
-        $crate::types::test_type_valid!($name::$datatype::($($unprepared => $unprepared),+));
-    };
-}
-
-    macro_rules! test_type_array {
-    ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
-        paste::item! {
-            #[sqlx::test]
-            async fn [< test_type_array_ $name >] (
-                mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
-            ) -> Result<(), sqlx_core::error::BoxDynError> {
-                use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
-
-                let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
-                con.execute(create_sql).await?;
-
-                $(
-                    let query_result = query("INSERT INTO sqlx_test_type VALUES (?)")
-                        .bind($prepared)
-                        .execute(&mut *con)
-                        .await?;
-
-                    let values: Vec<$ty> = query_scalar("SELECT * FROM sqlx_test_type;")
-                        .fetch_all(&mut *con)
-                        .await?;
-
-                    assert_eq!(query_result.rows_affected() as usize, values.len());
-                    con.execute("DELETE FROM sqlx_test_type;").await?;
-                )+
-
-                Ok(())
-            }
-        }
-    };
-
-    ($name:ident::$datatype:literal::($($expected:expr),+)) => {
-        $crate::types::test_type_array!($name<$name>::$datatype::($($expected),+));
-    };
-}
-
-    pub(crate) use test_type_array;
-    pub(crate) use test_type_valid;
-}
+use macros::test_type_array;
+use macros::test_type_invalid;
+use macros::test_type_valid;
 
 const MAX_U64_NUMERIC: u64 = 1000000000000000000;
 const MIN_I64_NUMERIC: i64 = -999999999999999999;
@@ -117,16 +19,28 @@ test_type_array!(bool_array_option<Option<bool>>::"BOOLEAN"::(vec![Some(true), S
 // Unsigned integers
 test_type_valid!(u8::"DECIMAL(3, 0)"::(u8::MIN, u8::MAX));
 test_type_valid!(u16::"DECIMAL(5, 0)"::(u16::MIN, u16::MAX, u16::from(u8::MAX)));
+test_type_valid!(u8_in_u16<u16>::"DECIMAL(5, 0)"::(u8::MIN => u16::from(u8::MIN), u8::MAX => u16::from(u8::MAX)));
 test_type_valid!(u32::"DECIMAL(10, 0)"::(u32::MIN, u32::MAX, u32::from(u8::MAX), u32::from(u16::MAX)));
+test_type_valid!(u8_in_u32<u32>::"DECIMAL(10, 0)"::(u8::MIN => u32::from(u8::MIN), u8::MAX => u32::from(u8::MAX)));
+test_type_valid!(u16_in_u32<u32>::"DECIMAL(10, 0)"::(u16::MIN => u32::from(u16::MIN), u16::MAX => u32::from(u16::MAX)));
 test_type_valid!(u64::"DECIMAL(20, 0)"::(u64::MIN, u64::MAX, u64::from(u8::MAX), u64::from(u16::MAX), u64::from(u32::MAX), MAX_U64_NUMERIC, MAX_U64_NUMERIC - 1));
+test_type_valid!(u8_in_u64<u64>::"DECIMAL(20, 0)"::(u8::MIN => u64::from(u8::MIN), u8::MAX => u64::from(u8::MAX)));
+test_type_valid!(u16_in_u64<u64>::"DECIMAL(20, 0)"::(u16::MIN => u64::from(u16::MIN), u16::MAX => u64::from(u16::MAX)));
+test_type_valid!(u32_in_u64<u64>::"DECIMAL(20, 0)"::(u32::MIN => u64::from(u32::MIN), u32::MAX => u64::from(u32::MAX)));
 test_type_valid!(u64_option<Option<u64>>::"DECIMAL(20, 0)"::("NULL" => None::<u64>, u64::MAX => Some(u64::MAX)));
 test_type_array!(u64_array<u64>::"DECIMAL(20, 0)"::(vec![u64::MIN, u64::MAX, 1234567]));
 
 // Signed integers
 test_type_valid!(i8::"DECIMAL(3, 0)"::(i8::MIN, i8::MAX));
 test_type_valid!(i16::"DECIMAL(5, 0)"::(i16::MIN, i16::MAX, i16::from(i8::MIN), i16::from(i8::MAX)));
+test_type_valid!(i8_in_i16<i16>::"DECIMAL(5, 0)"::(i8::MIN => i16::from(i8::MIN), i8::MAX => i16::from(i8::MAX)));
 test_type_valid!(i32::"DECIMAL(10, 0)"::(i32::MIN, i32::MAX, i32::from(i8::MIN), i32::from(i8::MAX), i32::from(i16::MIN), i32::from(i16::MAX)));
+test_type_valid!(i8_in_i32<i32>::"DECIMAL(10, 0)"::(i8::MIN => i32::from(i8::MIN), i8::MAX => i32::from(i8::MAX)));
+test_type_valid!(i16_in_i32<i32>::"DECIMAL(10, 0)"::(i16::MIN => i32::from(i16::MIN), i16::MAX => i32::from(i16::MAX)));
 test_type_valid!(i64::"DECIMAL(20, 0)"::(i64::MIN, i64::MAX, i64::from(i8::MIN), i64::from(i8::MAX), i64::from(i16::MIN), i64::from(i16::MAX), i64::from(i32::MIN), i64::from(i32::MAX), MIN_I64_NUMERIC, MIN_I64_NUMERIC - 1, MAX_I64_NUMERIC, MAX_I64_NUMERIC - 1));
+test_type_valid!(i8_in_i64<i64>::"DECIMAL(20, 0)"::(i8::MIN => i64::from(i8::MIN), i8::MAX => i64::from(i8::MAX)));
+test_type_valid!(i16_in_i64<i64>::"DECIMAL(20, 0)"::(i16::MIN => i64::from(i16::MIN), i16::MAX => i64::from(i16::MAX)));
+test_type_valid!(i32_in_i64<i64>::"DECIMAL(20, 0)"::(i32::MIN => i64::from(i32::MIN), i32::MAX => i64::from(i32::MAX)));
 test_type_valid!(i64_option<Option<i64>>::"DECIMAL(20, 0)"::("NULL" => None::<i64>, i64::MAX => Some(i64::MAX)));
 test_type_array!(i64_array<i64>::"DECIMAL(20, 0)"::(vec![i64::MIN, i64::MAX, 1234567]));
 
@@ -218,4 +132,142 @@ mod chrono_tests {
     test_type_valid!(months_with_prec<Months>::"INTERVAL YEAR(4) TO MONTH"::("'1000-5'" => Months::new(12005), "'-1000-5'" => Months::new(-12005)));
     test_type_valid!(months_option<Option<Months>>::"INTERVAL YEAR TO MONTH"::("NULL" => None::<Months>, "''" => None::<Months>, "'1-5'" => Some(Months::new(17))));
     test_type_array!(months_array<Months>::"INTERVAL YEAR TO MONTH"::(vec!["1-5", "1-5", "1-5"]));
+}
+
+// Test incompatible types
+// test_type_invalid!()
+
+mod macros {
+    macro_rules! test_type_valid {
+    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
+        paste::item! {
+            #[sqlx::test]
+            async fn [< test_type_ $name >] (
+                mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+            ) -> Result<(), sqlx_core::error::BoxDynError> {
+                use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
+
+                let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
+                con.execute(create_sql).await?;
+
+                $(
+                    let query_result = query("INSERT INTO sqlx_test_type VALUES (?)")
+                        .bind($prepared)
+                        .execute(&mut *con)
+                        .await?;
+
+                    assert_eq!(query_result.rows_affected(), 1);
+                    let query_str = format!("INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));", $unprepared, $datatype);
+                    eprintln!("{query_str}");
+
+                    let query_result = con.execute(query_str.as_str()).await?;
+
+                    assert_eq!(query_result.rows_affected(), 1);
+
+                    let mut values: Vec<$ty> = query_scalar("SELECT * FROM sqlx_test_type;")
+                        .fetch_all(&mut *con)
+                        .await?;
+
+                    let first_value = values.pop().unwrap();
+                    let second_value = values.pop().unwrap();
+
+                    assert_eq!(first_value, second_value, "prepared and unprepared types");
+                    assert_eq!(first_value, $prepared, "provided and expected values");
+                    assert_eq!(second_value, $prepared, "provided and expected values");
+
+                    con.execute("DELETE FROM sqlx_test_type;").await?;
+                )+
+
+                Ok(())
+            }
+        }
+    };
+
+    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr),+)) => {
+        $crate::types::test_type_valid!($name<$ty>::$datatype::($($unprepared => $unprepared),+));
+    };
+
+    ($name:ident::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
+        $crate::types::test_type_valid!($name<$name>::$datatype::($($unprepared => $prepared),+));
+    };
+
+    ($name:ident::$datatype:literal::($($unprepared:expr),+)) => {
+        $crate::types::test_type_valid!($name::$datatype::($($unprepared => $unprepared),+));
+    };
+}
+
+    macro_rules! test_type_array {
+    ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
+        paste::item! {
+            #[sqlx::test]
+            async fn [< test_type_array_ $name >] (
+                mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+            ) -> Result<(), sqlx_core::error::BoxDynError> {
+                use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
+
+                let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
+                con.execute(create_sql).await?;
+
+                $(
+                    let query_result = query("INSERT INTO sqlx_test_type VALUES (?)")
+                        .bind($prepared)
+                        .execute(&mut *con)
+                        .await?;
+
+                    let values: Vec<$ty> = query_scalar("SELECT * FROM sqlx_test_type;")
+                        .fetch_all(&mut *con)
+                        .await?;
+
+                    assert_eq!(query_result.rows_affected() as usize, values.len());
+                    con.execute("DELETE FROM sqlx_test_type;").await?;
+                )+
+
+                Ok(())
+            }
+        }
+    };
+}
+
+    macro_rules! test_type_invalid {
+        ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
+            paste::item! {
+                #[sqlx::test]
+                async fn [< test_type_array_ $name >] (
+                    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+                ) -> Result<(), sqlx_core::error::BoxDynError> {
+                    use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
+
+                    let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
+                    con.execute(create_sql).await?;
+
+                    $(
+                        let query_result = query("INSERT INTO sqlx_test_type VALUES (?)")
+                            .bind($prepared)
+                            .execute(&mut *con)
+                            .await;
+
+                        if let Err(e) = query_result {
+                            println!("Error inserting value: {e}");
+                        } else {
+                            let values_result: Result<Vec<$ty>, _> = query_scalar("SELECT * FROM sqlx_test_type;")
+                                .fetch_all(&mut *con)
+                                .await;
+
+                            let error = values_result.unwrap_err();
+                            println!("Error retrieving value: {error}");
+
+                            con.execute("DELETE FROM sqlx_test_type;").await?;
+                        }
+                    )+
+
+                    Ok(())
+                }
+            }
+        };
+
+}
+
+    pub(crate) use test_type_array;
+    pub(crate) use test_type_invalid;
+    pub(crate) use test_type_valid;
 }
