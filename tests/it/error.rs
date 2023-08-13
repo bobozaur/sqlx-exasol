@@ -1,10 +1,9 @@
-use exasol::ExaPool;
+use exasol::Exasol;
 use sqlx::error::ErrorKind;
+use sqlx_core::pool::PoolConnection;
 
 #[sqlx::test(migrations = "tests/it/setup")]
-async fn it_fails_with_unique_violation(pool: ExaPool) -> anyhow::Result<()> {
-    let mut conn = pool.acquire().await?;
-
+async fn it_fails_with_unique_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     sqlx::query("INSERT INTO tweet(id, text, owner_id) VALUES (1, 'Foo', 1)")
         .execute(&mut *conn)
         .await?;
@@ -23,9 +22,9 @@ async fn it_fails_with_unique_violation(pool: ExaPool) -> anyhow::Result<()> {
 }
 
 #[sqlx::test(migrations = "tests/it/setup")]
-async fn it_fails_with_foreign_key_violation(pool: ExaPool) -> anyhow::Result<()> {
-    let mut conn = pool.acquire().await?;
-
+async fn it_fails_with_foreign_key_violation(
+    mut conn: PoolConnection<Exasol>,
+) -> anyhow::Result<()> {
     let res: Result<_, sqlx::Error> =
         sqlx::query("INSERT INTO tweet_reply (tweet_id, text) VALUES (1, 'Reply!');")
             .execute(&mut *conn)
@@ -41,9 +40,7 @@ async fn it_fails_with_foreign_key_violation(pool: ExaPool) -> anyhow::Result<()
 }
 
 #[sqlx::test(migrations = "tests/it/setup")]
-async fn it_fails_with_not_null_violation(pool: ExaPool) -> anyhow::Result<()> {
-    let mut conn = pool.acquire().await?;
-
+async fn it_fails_with_not_null_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let res: Result<_, sqlx::Error> = sqlx::query("INSERT INTO tweet (text) VALUES (null);")
         .execute(&mut *conn)
         .await;

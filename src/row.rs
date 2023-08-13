@@ -62,7 +62,7 @@ impl Row for ExaRow {
             .get(self.row_offset)
             .ok_or_else(|| SqlxError::RowNotFound)?;
 
-        let type_info = &self.columns.get(col_idx).ok_or_else(err_fn)?.datatype;
+        let type_info = &self.columns.get(col_idx).ok_or_else(err_fn)?.data_type;
         let val = ExaValueRef { value, type_info };
 
         Ok(val)

@@ -4,3 +4,4 @@ mod queries;
 mod test_attr;
 mod types;
 mod migrate;
+mod describe;

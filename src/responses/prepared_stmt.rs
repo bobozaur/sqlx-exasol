@@ -16,7 +16,7 @@ pub struct PreparedStatement {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PreparedStatementDe {
+struct PreparedStatementDe {
     statement_handle: u16,
     parameter_data: Option<Parameters>,
 }
@@ -37,6 +37,6 @@ impl From<PreparedStatementDe> for PreparedStatement {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Parameters {
-    pub(crate) columns: ExaColumns,
+struct Parameters {
+    columns: ExaColumns,
 }

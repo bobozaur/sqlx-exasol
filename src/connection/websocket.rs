@@ -26,8 +26,8 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
     },
     responses::{
-        DataChunk, ExaAttributes, Hosts, PreparedStatement, PublicKey, QueryResult, Response,
-        Results, SessionInfo,
+        DataChunk, DescribeStatement, ExaAttributes, Hosts, PreparedStatement, PublicKey,
+        QueryResult, Response, Results, SessionInfo,
     },
 };
 
@@ -114,6 +114,10 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<PreparedStatement, SqlxError> {
+        self.send_cmd(cmd).await
+    }
+
+    pub(crate) async fn describe(&mut self, cmd: Command) -> Result<DescribeStatement, SqlxError> {
         self.send_cmd(cmd).await
     }
 

@@ -24,7 +24,7 @@ use crate::{
     command::ExaCommand,
     database::Exasol,
     options::ExaConnectOptions,
-    responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
+    responses::{DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, SessionInfo},
     statement::{ExaStatement, ExaStatementMetadata},
 };
 
@@ -317,6 +317,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         })
     }
 
+    /// Exasol does not provide nullability information, unfortunately.
     fn describe<'e, 'q: 'e>(
         self,
         sql: &'q str,
@@ -327,22 +328,15 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         Box::pin(async move {
             let cmd = ExaCommand::new_create_prepared(sql).try_into()?;
 
-            let PreparedStatement {
-                statement_handle,
+            let DescribeStatement {
                 columns,
-            } = self.ws.create_prepared(cmd).await?;
+                parameters,
+                statement_handle,
+            } = self.ws.describe(cmd).await?;
 
             self.ws.close_prepared(statement_handle).await?;
 
-            let mut nullable = Vec::with_capacity(columns.len());
-            let mut parameters = Vec::with_capacity(columns.len());
-
-            for column in columns.as_ref() {
-                nullable.push(None);
-                parameters.push(column.datatype.clone())
-            }
-
-            let columns = columns.iter().map(ToOwned::to_owned).collect();
+            let nullable = (0..columns.len()).map(|_| None).collect();
 
             Ok(Describe {
                 parameters: Some(Either::Left(parameters)),

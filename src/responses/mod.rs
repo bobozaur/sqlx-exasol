@@ -2,6 +2,7 @@
 
 mod attributes;
 mod columns;
+mod describe;
 mod error;
 mod fetch;
 mod hosts;
@@ -13,6 +14,7 @@ mod session_info;
 use serde::Deserialize;
 
 pub use attributes::{Attributes, ExaAttributes};
+pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
 pub use fetch::DataChunk;
 pub use hosts::Hosts;

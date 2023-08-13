@@ -29,7 +29,12 @@ impl ExaStatementMetadata {
         let mut column_names = HashMap::with_capacity(columns.len());
         let mut parameters = Vec::with_capacity(columns.len());
 
-        for ExaColumn { name, datatype, .. } in columns.as_ref() {
+        for ExaColumn {
+            name,
+            data_type: datatype,
+            ..
+        } in columns.as_ref()
+        {
             column_names.insert(name.to_owned(), parameters.len());
             parameters.push(datatype.clone());
         }

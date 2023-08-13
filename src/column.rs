@@ -6,13 +6,13 @@ use sqlx_core::{column::Column, database::Database};
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExaColumn {
     #[serde(skip)]
     pub(crate) ordinal: usize,
     #[serde(deserialize_with = "ExaColumn::lowercase_name")]
     pub(crate) name: Arc<str>,
-    #[serde(rename = "dataType")]
-    pub(crate) datatype: ExaTypeInfo,
+    pub(crate) data_type: ExaTypeInfo,
 }
 
 impl ExaColumn {
@@ -27,7 +27,7 @@ impl ExaColumn {
 
 impl Display for ExaColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.name, self.datatype)
+        write!(f, "{}: {}", self.name, self.data_type)
     }
 }
 
@@ -43,6 +43,6 @@ impl Column for ExaColumn {
     }
 
     fn type_info(&self) -> &<Self::Database as Database>::TypeInfo {
-        &self.datatype
+        &self.data_type
     }
 }
