@@ -175,7 +175,16 @@ impl StringLike {
     pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
         matches!(
             ty,
-            ExaTypeInfo::Char(_) | ExaTypeInfo::Varchar(_) | ExaTypeInfo::Null
+            ExaTypeInfo::Char(_)
+                | ExaTypeInfo::Varchar(_)
+                | ExaTypeInfo::Null
+                | ExaTypeInfo::Date
+                | ExaTypeInfo::Geometry(_)
+                | ExaTypeInfo::Hashtype(_)
+                | ExaTypeInfo::IntervalDayToSecond(_)
+                | ExaTypeInfo::IntervalYearToMonth(_)
+                | ExaTypeInfo::Timestamp
+                | ExaTypeInfo::TimestampWithLocalTimeZone
         )
     }
 }

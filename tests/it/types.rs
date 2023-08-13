@@ -40,8 +40,8 @@ mod macros {
                     let second_value = values.pop().unwrap();
 
                     assert_eq!(first_value, second_value, "prepared and unprepared types");
-                    assert_eq!(first_value, $prepared, "unprepared and expected values");
-                    assert_eq!(second_value, $prepared, "prepared and expected values");
+                    assert_eq!(first_value, $prepared, "provided and expected values");
+                    assert_eq!(second_value, $prepared, "provided and expected values");
 
                     con.execute("DELETE FROM sqlx_test_type;").await?;
                 )+
@@ -150,6 +150,11 @@ test_type_valid!(char_option<Option<String>>::"CHAR(10) UTF8"::("''" => None::<S
 test_type_array!(varchar_array<String>::"VARCHAR(10) UTF8"::(vec!["abc".to_string(), "cde".to_string()]));
 test_type_array!(char_array<String>::"CHAR(10) UTF8"::(vec!["abc".to_string(), "cde".to_string()]));
 
+// Geometry
+test_type_valid!(geometry<String>::"GEOMETRY"::("'POINT (1 2)'" => "POINT (1 2)", "'POINT (3 4)'" => "POINT (3 4)"));
+test_type_valid!(geometry_option<Option<String>>::"GEOMETRY"::("''" => None::<String>, "NULL" => None::<String>, "'POINT (3 4)'" => Some("POINT (3 4)".to_owned())));
+test_type_array!(geometry_array<String>::"GEOMETRY"::(vec!["POINT (1 2)".to_owned(), "POINT (3 4)".to_owned()]));
+
 #[cfg(feature = "rust_decimal")]
 mod rust_decimal_tests {
     use super::*;
@@ -168,7 +173,7 @@ mod uuid_tests {
     use uuid::Uuid;
 
     test_type_valid!(uuid<Uuid>::"HASHTYPE(16 BYTE)"::(format!("'{}'", Uuid::from_u64_pair(12345789, 12345789)) => Uuid::from_u64_pair(12345789, 12345789)));
-    test_type_valid!(uuid_str<Uuid>::"HASHTYPE(16 BYTE)"::(format!("'{}'", Uuid::from_u64_pair(12345789, 12345789)) => Uuid::from_u64_pair(12345789, 12345789)));
+    test_type_valid!(uuid_str<String>::"HASHTYPE(16 BYTE)"::("'a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8'" => "a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8", "'a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8'" => "a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"));
     test_type_valid!(uuid_option<Option<Uuid>>::"HASHTYPE(16 BYTE)"::("NULL" => None::<Uuid>, "''" => None::<Uuid>, format!("'{}'", Uuid::from_u64_pair(12345789, 12345789)) => Some(Uuid::from_u64_pair(12345789, 12345789))));
     test_type_array!(uuid_array<Uuid>::"HASHTYPE(16 BYTE)"::(vec![Uuid::from_u64_pair(12345789, 12345789), Uuid::from_u64_pair(12345789, 12345789), Uuid::from_u64_pair(12345789, 12345789)]));
 }
@@ -179,31 +184,37 @@ mod chrono_tests {
     use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, Utc};
     use exasol::Months;
 
-    const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.3f";
+    const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f";
     const DATE_FMT: &str = "%Y-%m-%d";
 
-    test_type_valid!(naive_datetime<NaiveDateTime>::"TIMESTAMP"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap()));
-    test_type_valid!(naive_datetime_optional<Option<NaiveDateTime>>::"TIMESTAMP"::("NULL" => None::<NaiveDateTime>, "''" => None::<NaiveDateTime>, "'2023-08-12 19:22:36.591'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap())));
-    test_type_array!(naive_datetime_array<NaiveDateTime>::"TIMESTAMP"::(vec!["2023-08-12 19:22:36.591", "2023-08-12 19:22:36.591", "2023-08-12 19:22:36.591"]));
+    test_type_valid!(naive_datetime<NaiveDateTime>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap()));
+    test_type_valid!(naive_datetime_str<String>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'" => "2023-08-12 19:22:36.591000"));
+    test_type_valid!(naive_datetime_optional<Option<NaiveDateTime>>::"TIMESTAMP"::("NULL" => None::<NaiveDateTime>, "''" => None::<NaiveDateTime>, "'2023-08-12 19:22:36.591000'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap())));
+    test_type_array!(naive_datetime_array<NaiveDateTime>::"TIMESTAMP"::(vec!["2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000"]));
 
     test_type_valid!(naive_date<NaiveDate>::"DATE"::("'2023-08-12'" => NaiveDate::parse_from_str("2023-08-12", DATE_FMT).unwrap()));
+    test_type_valid!(naive_date_str<String>::"DATE"::("'2023-08-12'" => "2023-08-12"));
     test_type_valid!(naive_date_option<Option<NaiveDate>>::"DATE"::("NULL" => None::<NaiveDate>, "''" => None::<NaiveDate>, "'2023-08-12'" => Some(NaiveDate::parse_from_str("2023-08-12", DATE_FMT).unwrap())));
     test_type_array!(naive_date_array<NaiveDate>::"DATE"::(vec!["2023-08-12", "2023-08-12", "2023-08-12"]));
 
-    test_type_valid!(datetime_utc<DateTime<Utc>>::"TIMESTAMP"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_utc()));
-    test_type_valid!(datetime_utc_option<Option<DateTime<Utc>>>::"TIMESTAMP"::("NULL" => None::<DateTime<Utc>>, "''" => None::<DateTime<Utc>>, "'2023-08-12 19:22:36.591'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_utc())));
-    test_type_array!(datetime_utc_array<DateTime<Utc>>::"TIMESTAMP"::(vec!["2023-08-12 19:22:36.591", "2023-08-12 19:22:36.591", "2023-08-12 19:22:36.591"]));
+    test_type_valid!(datetime_utc<DateTime<Utc>>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_utc()));
+    test_type_valid!(datetime_utc_str<String>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'" => "2023-08-12 19:22:36.591000"));
+    test_type_valid!(datetime_utc_option<Option<DateTime<Utc>>>::"TIMESTAMP"::("NULL" => None::<DateTime<Utc>>, "''" => None::<DateTime<Utc>>, "'2023-08-12 19:22:36.591000'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_utc())));
+    test_type_array!(datetime_utc_array<DateTime<Utc>>::"TIMESTAMP"::(vec!["2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000"]));
 
-    test_type_valid!(datetime_local<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap()));
-    test_type_valid!(datetime_local_option<Option<DateTime<Local>>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("NULL" => None::<DateTime<Local>>, "''" => None::<DateTime<Local>>, "'2023-08-12 19:22:36.591'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap())));
-    test_type_array!(datetime_local_array<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::(vec!["2023-08-12 19:22:36.591", "2023-08-12 19:22:36.591", "2023-08-12 19:22:36.591"]));
+    test_type_valid!(datetime_local<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591000'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap()));
+    test_type_valid!(datetime_local_str<String>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591000'" => "2023-08-12 19:22:36.591000"));
+    test_type_valid!(datetime_local_option<Option<DateTime<Local>>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("NULL" => None::<DateTime<Local>>, "''" => None::<DateTime<Local>>, "'2023-08-12 19:22:36.591000'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap())));
+    test_type_array!(datetime_local_array<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::(vec!["2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000"]));
 
     test_type_valid!(duration<Duration>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
+    test_type_valid!(duration_str<String>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => "+10 20:45:50.123"));
     test_type_valid!(duration_with_prec<Duration>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
     test_type_valid!(duration_option<Option<Duration>>::"INTERVAL DAY TO SECOND"::("NULL" => None::<Duration>, "''" => None::<Duration>, "'10 20:45:50.123'" => Some(Duration::milliseconds(938750123))));
     test_type_array!(duration_array<Duration>::"INTERVAL DAY TO SECOND"::(vec!["10 20:45:50.123", "10 20:45:50.123", "10 20:45:50.123"]));
 
     test_type_valid!(months<Months>::"INTERVAL YEAR TO MONTH"::("'1-5'" => Months::new(17), "'-1-5'" => Months::new(-17)));
+    test_type_valid!(months_str<String>::"INTERVAL YEAR TO MONTH"::("'1-5'" => "+01-05"));
     test_type_valid!(months_with_prec<Months>::"INTERVAL YEAR(4) TO MONTH"::("'1000-5'" => Months::new(12005), "'-1000-5'" => Months::new(-12005)));
     test_type_valid!(months_option<Option<Months>>::"INTERVAL YEAR TO MONTH"::("NULL" => None::<Months>, "''" => None::<Months>, "'1-5'" => Some(Months::new(17))));
     test_type_array!(months_array<Months>::"INTERVAL YEAR TO MONTH"::(vec!["1-5", "1-5", "1-5"]));

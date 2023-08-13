@@ -19,7 +19,7 @@ use crate::{
     value::ExaValueRef,
 };
 
-const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.3f";
+const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
 impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
