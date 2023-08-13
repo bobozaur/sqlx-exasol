@@ -35,6 +35,8 @@ pub use statement::ExaStatement;
 pub use transaction::ExaTransactionManager;
 pub use type_info::ExaTypeInfo;
 pub use types::ExaIter;
+#[cfg(feature = "chrono")]
+pub use types::Months;
 pub use value::{ExaValue, ExaValueRef};
 
 /// An alias for [`Pool`][crate::pool::Pool], specialized for Exasol.

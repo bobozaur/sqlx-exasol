@@ -124,12 +124,18 @@ mod uuid_tests {
 #[cfg(feature = "chrono")]
 mod chrono_tests {
     use super::*;
-    use chrono::{DateTime, Duration, Local, NaiveDateTime, Utc};
+    use chrono::{DateTime, Duration, Local, NaiveDateTime, Utc, NaiveDate};
+    use exasol::Months;
 
     const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.3f";
+    const DATE_FMT: &str = "%Y-%m-%d";
 
+    test_type_valid!(naive_datetime<NaiveDateTime>::"TIMESTAMP"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap()));
+    test_type_valid!(naive_date<NaiveDate>::"DATE"::("'2023-08-12'" => NaiveDate::parse_from_str("2023-08-12", DATE_FMT).unwrap()));
     test_type_valid!(datetime_utc<DateTime<Utc>>::"TIMESTAMP"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_utc()));
     test_type_valid!(datetime_local<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap()));
     test_type_valid!(duration<Duration>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
     test_type_valid!(duration_with_prec<Duration>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
+    test_type_valid!(months<Months>::"INTERVAL YEAR TO MONTH"::("'1-5'" => Months::new(17), "'-1-5'" => Months::new(-17)));
+    test_type_valid!(months_with_prec<Months>::"INTERVAL YEAR(4) TO MONTH"::("'1000-5'" => Months::new(12005), "'-1000-5'" => Months::new(-12005)));
 }

@@ -386,11 +386,15 @@ pub struct IntervalYearToMonth {
 
 impl Default for IntervalYearToMonth {
     fn default() -> Self {
-        Self { precision: 2 }
+        Self {
+            precision: Self::MAX_PRECISION,
+        }
     }
 }
 
 impl IntervalYearToMonth {
+    const MAX_PRECISION: u32 = 9;
+
     pub fn new(precision: u32) -> Self {
         Self { precision }
     }

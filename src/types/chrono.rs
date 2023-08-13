@@ -219,7 +219,7 @@ impl Type<Exasol> for Months {
 impl Encode<'_, Exasol> for Months {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         let years = self.0 / 12;
-        let months = self.0 % 12;
+        let months = (self.0 % 12).abs();
         buf.append(format_args!("{}-{}", years, months));
 
         IsNull::No
@@ -242,7 +242,6 @@ impl Encode<'_, Exasol> for Months {
 impl<'r> Decode<'r, Exasol> for Months {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
         let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
-
         let input_err_fn = || format!("could not parse {input} as INTERVAL YEAR TO MONTH");
 
         let (years, months) = input.rsplit_once('-').ok_or_else(input_err_fn)?;
