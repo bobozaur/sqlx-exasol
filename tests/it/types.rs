@@ -179,6 +179,74 @@ test_type_invalid!(array_i32_into_string<u64>::"VARCHAR(100)"::(vec![1, 2, 3]));
 test_type_invalid!(null_in_non_nullable<Option<i32>>::"DECIMAL(10,0) NOT NULL"::(vec![None, Some(1), Some(2), Some(3)]));
 test_type_invalid!(null_without_option<i32>::"DECIMAL(10,0)"::(vec![None, Some(1), Some(2), Some(3)]));
 
+#[sqlx::test]
+async fn test_equal_arrays(
+    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+) -> Result<(), sqlx_core::error::BoxDynError> {
+    use sqlx_core::{executor::Executor, query::query, query_as::query_as};
+    use std::iter::zip;
+
+    con.execute(
+        "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
+    )
+    .await?;
+
+    let bools = vec![false, true, false];
+    let ints = vec![1, 2, 3];
+    let mut strings = vec![Some("one".to_owned()), None, Some(String::new())];
+
+    let query_result = query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
+        .bind(&bools)
+        .bind(&ints)
+        .bind(&strings)
+        .execute(&mut *con)
+        .await?;
+
+    assert_eq!(query_result.rows_affected(), 3);
+
+    let values: Vec<(bool, u32, Option<String>)> = query_as("SELECT * FROM sqlx_test_type;")
+        .fetch_all(&mut *con)
+        .await?;
+
+    // Exasol treats empty strings as NULL
+    strings.pop();
+    strings.push(None);
+
+    let expected = zip(zip(bools, ints), strings).map(|((b, i), s)| (b, i, s));
+
+    for (v, e) in zip(values, expected) {
+        assert_eq!(v, e);
+    }
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_unequal_arrays(
+    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+) -> Result<(), sqlx_core::error::BoxDynError> {
+    use sqlx_core::{executor::Executor, query::query};
+
+    con.execute(
+        "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
+    )
+    .await?;
+
+    let bools = vec![false, true, false];
+    let ints = vec![1, 2, 3, 4];
+    let strings = vec![Some("one".to_owned()), Some(String::new())];
+
+    query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
+        .bind(&bools)
+        .bind(&ints)
+        .bind(&strings)
+        .execute(&mut *con)
+        .await
+        .unwrap_err();
+
+    Ok(())
+}
+
 mod macros {
     macro_rules! test_type_valid {
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
