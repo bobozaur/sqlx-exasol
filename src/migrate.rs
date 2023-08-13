@@ -79,15 +79,13 @@ impl Migrate for ExaConnection {
     fn ensure_migrations_table(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
         Box::pin(async move {
             let query = r#"
-            CREATE SCHEMA IF NOT EXISTS "_sqlx_migrations";
-
-            CREATE TABLE IF NOT EXISTS "_sqlx_migrations".migrations (
-                version BIGINT,
+            CREATE TABLE IF NOT EXISTS "_sqlx_migrations" (
+                version DECIMAL(20, 0),
                 description CLOB NOT NULL,
                 installed_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 success BOOLEAN NOT NULL,
                 checksum CLOB NOT NULL,
-                execution_time BIGINT NOT NULL
+                execution_time DECIMAL(20, 0) NOT NULL
             );"#;
 
             self.ws.execute_batch(query).await?;
@@ -100,7 +98,7 @@ impl Migrate for ExaConnection {
         Box::pin(async move {
             let query = r#"
             SELECT version 
-            FROM "_sqlx_migrations".migrations
+            FROM "_sqlx_migrations"
             WHERE success = false 
             ORDER BY version 
             LIMIT 1
@@ -118,7 +116,7 @@ impl Migrate for ExaConnection {
         Box::pin(async move {
             let query = r#"
                 SELECT version, checksum 
-                FROM "_sqlx_migrations".migrations 
+                FROM "_sqlx_migrations" 
                 ORDER BY version
                 "#;
 
@@ -170,7 +168,7 @@ impl Migrate for ExaConnection {
             let checksum = hex::encode(&*migration.checksum);
 
             let query_str = r#"
-            INSERT INTO "_sqlx_migrations".migrations ( version, description, success, checksum, execution_time )
+            INSERT INTO "_sqlx_migrations" ( version, description, success, checksum, execution_time )
             VALUES ( ?, ?, TRUE, ?, -1 );
             "#;
 
@@ -186,7 +184,7 @@ impl Migrate for ExaConnection {
             let elapsed = start.elapsed();
 
             let query_str = r#"
-                UPDATE "_sqlx_migrations".migrations 
+                UPDATE "_sqlx_migrations" 
                 SET execution_time = ? 
                 WHERE version = ?
                 "#;
@@ -215,7 +213,7 @@ impl Migrate for ExaConnection {
                 .map_err(From::from)
                 .map_err(MigrateError::Source)?;
 
-            let query_str = r#" DELETE FROM "_sqlx_migrations".migrations WHERE version = ? "#;
+            let query_str = r#" DELETE FROM "_sqlx_migrations" WHERE version = ? "#;
             let _ = query(query_str)
                 .bind(migration.version)
                 .execute(&mut *tx)

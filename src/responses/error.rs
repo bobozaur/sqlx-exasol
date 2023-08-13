@@ -42,11 +42,16 @@ impl error::DatabaseError for ExaDatabaseError {
         self
     }
 
+    /// Uniqueness is only available to PRIMARY KEY columns in Exasol.
+    /// Additionally, there's no distinction between the PRIMARY and FOREIGN key
+    /// constraint violation codes, so we have to rely on the message as well.
+    ///
+    /// Furthermore, there's no CHECK constraint in Exasol.
     fn kind(&self) -> ErrorKind {
         match self.code.as_str() {
             "27001" => ErrorKind::NotNullViolation,
-            "27002" => ErrorKind::UniqueViolation,
-            "27003" => ErrorKind::ForeignKeyViolation,
+            "42X91" if self.text.contains("primary key") => ErrorKind::UniqueViolation,
+            "42X91" if self.text.contains("foreign key") => ErrorKind::ForeignKeyViolation,
             _ => ErrorKind::Other,
         }
     }

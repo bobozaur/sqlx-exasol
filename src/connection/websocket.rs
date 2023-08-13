@@ -271,27 +271,39 @@ impl ExaWebSocket {
         let mut position = 0;
         let mut sql_start = 0;
 
+        let handle_err_fn = |err: SqlxError, result: &mut Result<(), SqlxError>| {
+            // Exasol doesn't seem to have a dedicated code for malformed queries.
+            // There's `42000` but it does not look to only be related to syntax errors.
+            //
+            // So we at least check if this is a database error and continue if so.
+            // Otherwise something else is wrong and we can fail early.
+            let db_err = match &err {
+                SqlxError::Database(_) => err,
+                _ => return Err(err),
+            };
+
+            tracing::warn!("error running statement: {db_err}; perhaps it's incomplete?");
+
+            // We wanna store the first error occurred.
+            // If at some point, after further concatenations, the query
+            // succeeds, then we'll set the result to `Ok`.
+            if result.is_ok() {
+                *result = Err(db_err);
+            }
+
+            Ok(())
+        };
+
         while let Some(sql_end) = sql[position..].find(';') {
             // Found a separator, split the SQL.
-            let sql = &sql[sql_start..position + sql_end];
+            let sql = sql[sql_start..position + sql_end].trim();
 
             let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
             // Next lookup will be after the just encountered separator.
             position += sql_end + 1;
 
             if let Err(err) = self.send_cmd_ignore_response(cmd).await {
-                // Exasol doesn't seem to have a dedicated code for malformed queries.
-                // There's `42000` but it does not look to only be related to syntax errors.
-                //
-                // So we at least check if this is a database error and continue if so.
-                // Otherwise something else is wrong and we can fail early.
-                match &err {
-                    SqlxError::Database(e) => {
-                        tracing::warn!("error running statement: {e}; perhaps it's incomplete?");
-                        result = Err(err);
-                    }
-                    _ => return Err(err),
-                }
+                handle_err_fn(err, &mut result)?;
             } else {
                 // Yay!!!
                 sql_start = position;
@@ -300,11 +312,15 @@ impl ExaWebSocket {
         }
 
         // We need to run the remaining statement, if any.
-        let sql = &sql[sql_start..];
+        let sql = sql[sql_start..].trim();
 
         if !sql.is_empty() {
             let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
-            self.send_cmd_ignore_response(cmd).await?;
+            if let Err(err) = self.send_cmd_ignore_response(cmd).await {
+                handle_err_fn(err, &mut result)?;
+            } else {
+                result = Ok(());
+            }
         }
 
         result

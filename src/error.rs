@@ -60,7 +60,7 @@ impl<T> ExaResultExt<T> for Result<T, WsError> {
             WsError::Tls(e) => SqlxError::Tls(e.into()),
             WsError::Capacity(e) => SqlxError::Protocol(e.to_string()),
             WsError::Protocol(e) => SqlxError::Protocol(e.to_string()),
-            WsError::SendQueueFull(e) => SqlxError::Protocol(e.to_string()),
+            WsError::WriteBufferFull(e) => SqlxError::Protocol(e.to_string()),
             WsError::Utf8 => SqlxError::Protocol(WsError::Utf8.to_string()),
             WsError::Url(e) => SqlxError::Configuration(e.into()),
             WsError::Http(r) => SqlxError::Protocol(format!("HTTP error: {}", r.status())),
