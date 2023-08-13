@@ -35,8 +35,8 @@ mod macros {
                     let second_value = values.pop().unwrap();
 
                     assert_eq!(first_value, second_value, "prepared and unprepared types");
-                    assert_eq!(first_value, $prepared, "prepared and expected values");
-                    assert_eq!(second_value, $prepared, "unprepared and expected values");
+                    assert_eq!(first_value, $prepared, "unprepared and expected values");
+                    assert_eq!(second_value, $prepared, "prepared and expected values");
 
                     con.execute("DELETE FROM sqlx_test_type;").await?;
                 )+
@@ -119,4 +119,17 @@ mod uuid_tests {
     test_type_valid!(uuid<Uuid>::"HASHTYPE(16 BYTE)"::(format!("'{}'", Uuid::from_u64_pair(12345789, 12345789)) => Uuid::from_u64_pair(12345789, 12345789)));
     test_type_valid!(uuid_str<Uuid>::"HASHTYPE(16 BYTE)"::(format!("'{}'", Uuid::from_u64_pair(12345789, 12345789)) => Uuid::from_u64_pair(12345789, 12345789)));
     test_type_valid!(uuid_option<Option<Uuid>>::"HASHTYPE(16 BYTE)"::("NULL" => None::<Uuid>, "''" => None::<Uuid>, format!("'{}'", Uuid::from_u64_pair(12345789, 12345789)) => Some(Uuid::from_u64_pair(12345789, 12345789))));
+}
+
+#[cfg(feature = "chrono")]
+mod chrono_tests {
+    use super::*;
+    use chrono::{DateTime, Duration, Local, NaiveDateTime, Utc};
+
+    const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.3f";
+
+    test_type_valid!(datetime_utc<DateTime<Utc>>::"TIMESTAMP"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_utc()));
+    test_type_valid!(datetime_local<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap()));
+    test_type_valid!(duration<Duration>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
+    test_type_valid!(duration_with_prec<Duration>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
 }

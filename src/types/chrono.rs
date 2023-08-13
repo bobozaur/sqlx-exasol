@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    cmp,
     ops::{Add, Sub},
 };
 
@@ -19,6 +18,8 @@ use crate::{
     type_info::{ExaTypeInfo, IntervalDayToSecond, IntervalYearToMonth},
     value::ExaValueRef,
 };
+
+const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.3f";
 
 impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
@@ -51,7 +52,7 @@ impl Type<Exasol> for DateTime<Local> {
 
 impl Encode<'_, Exasol> for DateTime<Local> {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        Encode::<Exasol>::encode(self.naive_utc(), buf)
+        Encode::<Exasol>::encode(self.naive_local(), buf)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -61,7 +62,38 @@ impl Encode<'_, Exasol> for DateTime<Local> {
 
 impl<'r> Decode<'r, Exasol> for DateTime<Local> {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        Self::deserialize(value.value).map_err(From::from)
+        let naive: NaiveDateTime = Decode::<Exasol>::decode(value)?;
+        naive
+            .and_local_timezone(Local)
+            .single()
+            .ok_or("cannot uniquely determine timezone offset")
+            .map_err(From::from)
+    }
+}
+
+impl Type<Exasol> for NaiveDateTime {
+    fn type_info() -> ExaTypeInfo {
+        ExaTypeInfo::Timestamp
+    }
+}
+
+impl Encode<'_, Exasol> for NaiveDateTime {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        buf.append(format_args!("{}", self.format(TIMESTAMP_FMT)));
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaTypeInfo::Timestamp)
+    }
+}
+
+impl Decode<'_, Exasol> for NaiveDateTime {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
+        Self::parse_from_str(&input, TIMESTAMP_FMT)
+            .map_err(Box::new)
+            .map_err(From::from)
     }
 }
 
@@ -80,10 +112,10 @@ impl Encode<'_, Exasol> for chrono::Duration {
         buf.append(format_args!(
             "{} {}:{}:{}.{}",
             self.num_days(),
-            self.num_hours(),
-            self.num_minutes(),
-            self.num_seconds(),
-            self.num_milliseconds()
+            self.num_hours().abs() % 24,
+            self.num_minutes().abs() % 60,
+            self.num_seconds().abs() % 60,
+            self.num_milliseconds().abs() % 1000
         ));
 
         IsNull::No
@@ -96,16 +128,12 @@ impl Encode<'_, Exasol> for chrono::Duration {
             .checked_ilog10()
             .unwrap_or_default()
             + 1;
-        let precision = cmp::min(precision, 9);
 
-        let fraction = self
-            .num_milliseconds()
+        let fraction = (self.num_milliseconds() % 1000)
             .unsigned_abs()
             .checked_ilog10()
             .map(|v| v + 1)
             .unwrap_or_default();
-
-        let fraction = cmp::min(fraction, 9);
 
         Some(ExaTypeInfo::IntervalDayToSecond(IntervalDayToSecond::new(
             precision, fraction,
@@ -123,17 +151,18 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
         let (minutes, rest) = rest.split_once(':').ok_or_else(input_err_fn)?;
         let (seconds, millis) = rest.split_once('.').ok_or_else(input_err_fn)?;
 
-        let days = days.parse().map_err(Box::new)?;
-        let hours = hours.parse().map_err(Box::new)?;
-        let minutes = minutes.parse().map_err(Box::new)?;
-        let seconds = seconds.parse().map_err(Box::new)?;
-        let millis = millis.parse().map_err(Box::new)?;
+        let days: i64 = days.parse().map_err(Box::new)?;
+        let hours: i64 = hours.parse().map_err(Box::new)?;
+        let minutes: i64 = minutes.parse().map_err(Box::new)?;
+        let seconds: i64 = seconds.parse().map_err(Box::new)?;
+        let millis: i64 = millis.parse().map_err(Box::new)?;
+        let sign = if days.is_negative() { -1 } else { 1 };
 
         let duration = chrono::Duration::days(days)
-            + chrono::Duration::hours(hours)
-            + chrono::Duration::minutes(minutes)
-            + chrono::Duration::seconds(seconds)
-            + chrono::Duration::milliseconds(millis);
+            + chrono::Duration::hours(hours * sign)
+            + chrono::Duration::minutes(minutes * sign)
+            + chrono::Duration::seconds(seconds * sign)
+            + chrono::Duration::milliseconds(millis * sign);
 
         Ok(duration)
     }
@@ -157,29 +186,6 @@ impl Encode<'_, Exasol> for NaiveDate {
 }
 
 impl Decode<'_, Exasol> for NaiveDate {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Type<Exasol> for NaiveDateTime {
-    fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Timestamp
-    }
-}
-
-impl Encode<'_, Exasol> for NaiveDateTime {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
-    }
-
-    fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Timestamp)
-    }
-}
-
-impl Decode<'_, Exasol> for NaiveDateTime {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
         <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }

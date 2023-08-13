@@ -308,7 +308,7 @@ impl Geometry {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalDayToSecond {
     precision: u32,
@@ -318,13 +318,42 @@ pub struct IntervalDayToSecond {
 impl Default for IntervalDayToSecond {
     fn default() -> Self {
         Self {
-            precision: 2,
-            fraction: 3,
+            precision: Self::MAX_PRECISION,
+            fraction: Self::MAX_SUPPORTED_FRACTION,
+        }
+    }
+}
+
+impl PartialOrd for IntervalDayToSecond {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let precision_cmp = self.precision.partial_cmp(&other.precision);
+        let fraction_cmp = self.fraction.partial_cmp(&other.fraction);
+
+        match (precision_cmp, fraction_cmp) {
+            (Some(Ordering::Equal), Some(Ordering::Equal)) => Some(Ordering::Equal),
+            (Some(Ordering::Equal), Some(Ordering::Less))
+            | (Some(Ordering::Less), Some(Ordering::Less))
+            | (Some(Ordering::Less), Some(Ordering::Equal)) => Some(Ordering::Less),
+            (Some(Ordering::Equal), Some(Ordering::Greater))
+            | (Some(Ordering::Greater), Some(Ordering::Greater))
+            | (Some(Ordering::Greater), Some(Ordering::Equal)) => Some(Ordering::Greater),
+            _ => None,
         }
     }
 }
 
 impl IntervalDayToSecond {
+    /// The fraction has the weird behavior of shifting the milliseconds up
+    /// value and mixing it with the seconds, minutes, hours or even the days
+    /// when the value exceeds 3 (the max milliseconds digits limit).
+    ///
+    /// See: https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval
+    ///
+    /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't
+    /// even know how to handle values above that
+    const MAX_SUPPORTED_FRACTION: u32 = 3;
+    const MAX_PRECISION: u32 = 9;
+
     pub fn new(precision: u32, fraction: u32) -> Self {
         Self {
             precision,
