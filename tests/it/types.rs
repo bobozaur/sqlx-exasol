@@ -79,6 +79,16 @@ mod rust_decimal_tests {
     test_type_valid!(rust_decimal_no_scale<Decimal>::"DECIMAL(36, 0)"::(Decimal::new(-340282346638529, 0), Decimal::new(340282346638529, 0), Decimal::new(0, 0)));
     test_type_valid!(rust_decimal_option<Option<Decimal>>::"DECIMAL(36, 16)"::("NULL" => None::<Decimal>, Decimal::new(i64::from(i16::MIN), 5) => Some(Decimal::new(i64::from(i16::MIN), 5))));
     test_type_array!(rust_decimal_array<Decimal>::"DECIMAL(36, 16)"::(vec![Decimal::new(i64::MIN, 16), Decimal::new(i64::MAX, 16), Decimal::new(i64::MAX, 10), Decimal::new(i64::MAX, 5), Decimal::new(i64::MAX, 0)]));
+
+    test_type_valid!(u8_decimal_scale<Decimal>::"DECIMAL(5, 2)"::(u8::MAX => Decimal::from(u8::MAX)));
+    test_type_valid!(u16_decimal_scale<Decimal>::"DECIMAL(7, 2)"::(u16::MAX => Decimal::from(u16::MAX)));
+    test_type_valid!(u32_decimal_scale<Decimal>::"DECIMAL(12, 2)"::(u32::MAX => Decimal::from(u32::MAX)));
+    test_type_valid!(u64_decimal_scale<Decimal>::"DECIMAL(22, 2)"::(u64::MAX => Decimal::from(u64::MAX)));
+
+    test_type_valid!(i8_decimal_scale<Decimal>::"DECIMAL(5, 2)"::(i8::MIN => Decimal::from(i8::MIN), i8::MAX => Decimal::from(i8::MAX)));
+    test_type_valid!(i16_decimal_scale<Decimal>::"DECIMAL(7, 2)"::(i16::MIN => Decimal::from(i16::MIN), i16::MAX => Decimal::from(i16::MAX)));
+    test_type_valid!(i32_decimal_scale<Decimal>::"DECIMAL(12, 2)"::(i32::MIN => Decimal::from(i32::MIN), i32::MAX => Decimal::from(i32::MAX)));
+    test_type_valid!(i64_decimal_scale<Decimal>::"DECIMAL(22, 2)"::(i64::MIN => Decimal::from(i64::MIN), i64::MAX => Decimal::from(i64::MAX)));
 }
 
 #[cfg(feature = "uuid")]
@@ -135,14 +145,34 @@ mod chrono_tests {
 }
 
 // Test incompatible types
-// test_type_invalid!()
+test_type_invalid!(u16_into_u8<u16>::"DECIMAL(3,0)"::(u16::MAX));
+test_type_invalid!(u32_into_u8<u32>::"DECIMAL(3,0)"::(u32::MAX));
+test_type_invalid!(u32_into_u16<u32>::"DECIMAL(5,0)"::(u32::MAX));
+test_type_invalid!(u64_into_u8<u64>::"DECIMAL(3,0)"::(u64::MAX));
+test_type_invalid!(u64_into_u16<u64>::"DECIMAL(5,0)"::(u64::MAX));
+test_type_invalid!(u64_into_u32<u64>::"DECIMAL(10,0)"::(u64::MAX));
+
+test_type_invalid!(i16_into_i8<i16>::"DECIMAL(3,0)"::(i16::MAX));
+test_type_invalid!(i32_into_i8<i32>::"DECIMAL(3,0)"::(i32::MAX));
+test_type_invalid!(i32_into_i16<i32>::"DECIMAL(5,0)"::(i32::MAX));
+test_type_invalid!(i64_into_i8<i64>::"DECIMAL(3,0)"::(i64::MAX));
+test_type_invalid!(i64_into_i16<i64>::"DECIMAL(5,0)"::(i64::MAX));
+test_type_invalid!(i64_into_i32<i64>::"DECIMAL(10,0)"::(i64::MAX));
+
+// Not enough room
+test_type_invalid!(u16_no_room<u16>::"DECIMAL(5,2)"::(u16::MAX));
+test_type_invalid!(u32_no_room<u32>::"DECIMAL(10,2)"::(u32::MAX));
+test_type_invalid!(u64_no_room<u64>::"DECIMAL(20,2)"::(u64::MAX));
+test_type_invalid!(i16_no_room<i16>::"DECIMAL(5,2)"::(i16::MAX));
+test_type_invalid!(i32_no_room<i32>::"DECIMAL(10,2)"::(i32::MAX));
+test_type_invalid!(i64_no_room<i64>::"DECIMAL(20,2)"::(i64::MAX));
 
 mod macros {
     macro_rules! test_type_valid {
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
         paste::item! {
             #[sqlx::test]
-            async fn [< test_type_ $name >] (
+            async fn [< test_type_valid_ $name >] (
                 mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
             ) -> Result<(), sqlx_core::error::BoxDynError> {
                 use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
@@ -232,7 +262,7 @@ mod macros {
         ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
             paste::item! {
                 #[sqlx::test]
-                async fn [< test_type_array_ $name >] (
+                async fn [< test_type_invalid_ $name >] (
                     mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
                 ) -> Result<(), sqlx_core::error::BoxDynError> {
                     use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
