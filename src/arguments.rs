@@ -57,13 +57,16 @@ impl ExaBuffer {
         I: IntoIterator<Item = T>,
         T: 'q + Encode<'q, Exasol> + Type<Exasol>,
     {
-        for value in iter.into_iter() {
+        let mut iter = iter.into_iter();
+
+        if let Some(value) = iter.next() {
             let _ = value.encode(self);
-            self.add_separator();
         }
 
-        // Remove the trailing comma
-        self.inner.pop();
+        for value in iter {
+            self.add_separator();
+            let _ = value.encode(self);
+        }
     }
 
     /// Outputs the numbers of parameter sets in the buffer.

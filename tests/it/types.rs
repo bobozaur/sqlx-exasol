@@ -1,3 +1,7 @@
+use std::collections::HashSet;
+
+use exasol::ExaIter;
+
 pub(crate) use macros::test_type_array;
 pub(crate) use macros::test_type_valid;
 
@@ -104,10 +108,11 @@ const MAX_U64_NUMERIC: u64 = 1000000000000000000;
 const MIN_I64_NUMERIC: i64 = -999999999999999999;
 const MAX_I64_NUMERIC: i64 = 1000000000000000000;
 
-// BOOLEAN
+// Bool
 test_type_valid!(bool::"BOOLEAN"::(false, true));
 test_type_valid!(bool_option<Option<bool>>::"BOOLEAN"::("NULL" => None::<bool>, "true" => Some(true)));
-test_type_array!(bool_array<bool>::"BOOLEAN"::(vec![true, false]));
+test_type_array!(bool_array<bool>::"BOOLEAN"::(vec![true, false], Vec::<bool>::new(), Some(vec![true, false]), [false; 4], &[false; 4], vec![true, false].into_boxed_slice(), ExaIter::from(HashSet::from([true, false, true]).iter())));
+test_type_array!(bool_array_option<Option<bool>>::"BOOLEAN"::(vec![Some(true), Some(false), None]));
 
 // Unsigned integers
 test_type_valid!(u8::"DECIMAL(3, 0)"::(u8::MIN, u8::MAX));

@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use sqlx_core::{
     database::Database,
     encode::{Encode, IsNull},
@@ -8,39 +6,45 @@ use sqlx_core::{
 
 use crate::{arguments::ExaBuffer, Exasol};
 
-/// Wrapper over a type `A` that can be converted to an iterator through the
-/// [`AsRef`] trait.
+/// Adapter allowing any iterator of encodable values to be passed
+/// as a parameter set / array to Exasol.
 ///
-/// This acts like an adapter allowing all iterators over types implementing
-/// [`Encode`] to be passed as an array of parameters to Exasol.
-pub struct ExaIter<A, I, T>
+/// Note that the iterator must implement [`Clone`] because
+/// it's used in multiple places. Therefore, prefer using iterators over
+/// references than owning variants
+///
+/// ```rust
+/// use exasol::ExaIter;
+///
+/// // Don't do this, as the iterator gets cloned internally.
+/// let vector = vec![1, 2, 3];
+/// let owned_iter = ExaIter::from(vector);
+///
+/// // Rather, prefer using something cheaper to clone, like:
+/// let vector = vec![1, 2, 3];
+/// let borrowed_iter = ExaIter::from(vector.as_slice());
+/// ```
+pub struct ExaIter<I, T>
 where
-    A: AsRef<I>,
-    I: IntoIterator<Item = T> + Copy,
+    I: IntoIterator<Item = T> + Clone,
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
-    value: A,
-    iter_maker: PhantomData<fn() -> I>,
+    value: I,
 }
 
-impl<A, I, T> From<A> for ExaIter<A, I, T>
+impl<I, T> From<I> for ExaIter<I, T>
 where
-    A: AsRef<I>,
-    I: IntoIterator<Item = T> + Copy,
+    I: IntoIterator<Item = T> + Clone,
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
-    fn from(value: A) -> Self {
-        Self {
-            value,
-            iter_maker: PhantomData,
-        }
+    fn from(value: I) -> Self {
+        Self { value }
     }
 }
 
-impl<A, T, I> Type<Exasol> for ExaIter<A, I, T>
+impl<T, I> Type<Exasol> for ExaIter<I, T>
 where
-    A: AsRef<I>,
-    I: IntoIterator<Item = T> + Copy,
+    I: IntoIterator<Item = T> + Clone,
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
@@ -52,16 +56,15 @@ where
     }
 }
 
-impl<A, T, I> Encode<'_, Exasol> for ExaIter<A, I, T>
+impl<T, I> Encode<'_, Exasol> for ExaIter<I, T>
 where
-    A: AsRef<I>,
-    I: IntoIterator<Item = T> + Copy,
+    I: IntoIterator<Item = T> + Clone,
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self.value.as_ref().into_iter() {
+        for value in self.value.clone().into_iter() {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
@@ -73,13 +76,13 @@ where
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.value.as_ref().into_iter());
+        buf.append_iter(self.value.clone().into_iter());
         IsNull::No
     }
 
     fn size_hint(&self) -> usize {
         self.value
-            .as_ref()
+            .clone()
             .into_iter()
             .fold(0, |sum, item| sum + item.size_hint())
     }
