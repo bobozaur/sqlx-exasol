@@ -19,12 +19,16 @@ test_type_array!(bool_empty_array<Option<bool>>::"BOOLEAN"::(Vec::<bool>::new())
 
 // Unsigned integers
 test_type_valid!(u8::"DECIMAL(3, 0)"::(u8::MIN, u8::MAX));
+test_type_valid!(u8_into_smaller<u8>::"DECIMAL(1, 0)"::(u8::MIN, 5));
 test_type_valid!(u16::"DECIMAL(5, 0)"::(u16::MIN, u16::MAX, u16::from(u8::MAX)));
+test_type_valid!(u16_into_smaller<u16>::"DECIMAL(3, 0)"::(u16::MIN, 20));
 test_type_valid!(u8_in_u16<u16>::"DECIMAL(5, 0)"::(u8::MIN => u16::from(u8::MIN), u8::MAX => u16::from(u8::MAX)));
 test_type_valid!(u32::"DECIMAL(10, 0)"::(u32::MIN, u32::MAX, u32::from(u8::MAX), u32::from(u16::MAX)));
+test_type_valid!(u32_into_smaller<u32>::"DECIMAL(7, 0)"::(u32::MIN, 12345));
 test_type_valid!(u8_in_u32<u32>::"DECIMAL(10, 0)"::(u8::MIN => u32::from(u8::MIN), u8::MAX => u32::from(u8::MAX)));
 test_type_valid!(u16_in_u32<u32>::"DECIMAL(10, 0)"::(u16::MIN => u32::from(u16::MIN), u16::MAX => u32::from(u16::MAX)));
 test_type_valid!(u64::"DECIMAL(20, 0)"::(u64::MIN, u64::MAX, u64::from(u8::MAX), u64::from(u16::MAX), u64::from(u32::MAX), MAX_U64_NUMERIC, MAX_U64_NUMERIC - 1));
+test_type_valid!(u64_into_smaller<u64>::"DECIMAL(15, 0)"::(u64::MIN, 1234567890));
 test_type_valid!(u8_in_u64<u64>::"DECIMAL(20, 0)"::(u8::MIN => u64::from(u8::MIN), u8::MAX => u64::from(u8::MAX)));
 test_type_valid!(u16_in_u64<u64>::"DECIMAL(20, 0)"::(u16::MIN => u64::from(u16::MIN), u16::MAX => u64::from(u16::MAX)));
 test_type_valid!(u32_in_u64<u64>::"DECIMAL(20, 0)"::(u32::MIN => u64::from(u32::MIN), u32::MAX => u64::from(u32::MAX)));
@@ -33,12 +37,16 @@ test_type_array!(u64_array<u64>::"DECIMAL(20, 0)"::(vec![u64::MIN, u64::MAX, 123
 
 // Signed integers
 test_type_valid!(i8::"DECIMAL(3, 0)"::(i8::MIN, i8::MAX));
+test_type_valid!(i8_into_smaller<i8>::"DECIMAL(1, 0)"::(-5, 5));
 test_type_valid!(i16::"DECIMAL(5, 0)"::(i16::MIN, i16::MAX, i16::from(i8::MIN), i16::from(i8::MAX)));
+test_type_valid!(i16_into_smaller<i16>::"DECIMAL(3, 0)"::(-12, 12));
 test_type_valid!(i8_in_i16<i16>::"DECIMAL(5, 0)"::(i8::MIN => i16::from(i8::MIN), i8::MAX => i16::from(i8::MAX)));
 test_type_valid!(i32::"DECIMAL(10, 0)"::(i32::MIN, i32::MAX, i32::from(i8::MIN), i32::from(i8::MAX), i32::from(i16::MIN), i32::from(i16::MAX)));
+test_type_valid!(i32_into_smaller<i32>::"DECIMAL(7, 0)"::(-12345, 12345));
 test_type_valid!(i8_in_i32<i32>::"DECIMAL(10, 0)"::(i8::MIN => i32::from(i8::MIN), i8::MAX => i32::from(i8::MAX)));
 test_type_valid!(i16_in_i32<i32>::"DECIMAL(10, 0)"::(i16::MIN => i32::from(i16::MIN), i16::MAX => i32::from(i16::MAX)));
 test_type_valid!(i64::"DECIMAL(20, 0)"::(i64::MIN, i64::MAX, i64::from(i8::MIN), i64::from(i8::MAX), i64::from(i16::MIN), i64::from(i16::MAX), i64::from(i32::MIN), i64::from(i32::MAX), MIN_I64_NUMERIC, MIN_I64_NUMERIC - 1, MAX_I64_NUMERIC, MAX_I64_NUMERIC - 1));
+test_type_valid!(i64_into_smaller<i64>::"DECIMAL(15, 0)"::(-1234567890, 1234567890));
 test_type_valid!(i8_in_i64<i64>::"DECIMAL(20, 0)"::(i8::MIN => i64::from(i8::MIN), i8::MAX => i64::from(i8::MAX)));
 test_type_valid!(i16_in_i64<i64>::"DECIMAL(20, 0)"::(i16::MIN => i64::from(i16::MIN), i16::MAX => i64::from(i16::MAX)));
 test_type_valid!(i32_in_i64<i64>::"DECIMAL(20, 0)"::(i32::MIN => i64::from(i32::MIN), i32::MAX => i64::from(i32::MAX)));
