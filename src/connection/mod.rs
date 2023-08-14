@@ -3,7 +3,7 @@ mod stream;
 mod tls;
 mod websocket;
 
-use std::{future, iter};
+use std::iter;
 
 use lru::LruCache;
 use sqlx_core::{
@@ -209,11 +209,11 @@ impl Connection for ExaConnection {
     fn shrink_buffers(&mut self) {}
 
     fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(future::ready(Ok(())))
+        Box::pin(self.ws.rollback())
     }
 
     fn should_flush(&self) -> bool {
-        false
+        self.ws.pending_rollback
     }
 
     fn cached_statements_size(&self) -> usize
@@ -242,9 +242,9 @@ impl Connection for ExaConnection {
 #[cfg(test)]
 #[cfg(feature = "migrate")]
 mod tests {
-    use std::num::NonZeroUsize;
+    use std::{num::NonZeroUsize, time::Duration};
 
-    use sqlx::{query, Executor};
+    use sqlx::{query, Connection, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
     use crate::{ExaConnectOptions, Exasol};
@@ -361,6 +361,36 @@ mod tests {
             .await?;
 
         assert_eq!(orig_schema, new_schema);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_connection_flush_on_drop(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        // Set a low cache size
+        exa_opts.statement_cache_capacity = NonZeroUsize::new(1).unwrap();
+
+        let pool = pool_opts.connect_with(exa_opts).await?;
+
+        {
+            let mut conn = pool.acquire().await?;
+
+            {
+                let mut tx = conn.begin().await?;
+                tx.execute("select * from EXA_TIME_ZONES limit 1800")
+                    .await?;
+            }
+
+            assert!(conn.ws.pending_rollback);
+        }
+
+        // Should be plenty of time to execute the flush
+        // after the connection is dropped.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        assert!(!pool.acquire().await?.ws.pending_rollback);
 
         Ok(())
     }

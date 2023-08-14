@@ -191,6 +191,7 @@ impl ExaWebSocket {
         // we know the rollback was successful.
         self.attributes.autocommit = true;
         self.attributes.open_transaction = false;
+        self.pending_rollback = false;
         Ok(())
     }
 
