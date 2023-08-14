@@ -20,6 +20,8 @@ pub enum ExaProtocolError {
     MissingResponseData,
     #[error("no message received")]
     MissingMessage,
+    #[error("type mismatch: expected SQL type `{0}` but was provided `{1}`")]
+    DatatypeMismatch(String, String),
     #[error("server closed connection due to: {0}")]
     WebsocketClosed(String),
     #[error("feature 'flate2' must be enabled to use compression")]

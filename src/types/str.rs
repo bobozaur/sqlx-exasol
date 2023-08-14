@@ -31,6 +31,10 @@ impl Encode<'_, Exasol> for &'_ str {
         buf.append(self);
         IsNull::No
     }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(<Self as Type<Exasol>>::type_info())
+    }
 }
 
 impl<'r> Decode<'r, Exasol> for &'r str {
@@ -52,20 +56,6 @@ impl Type<Exasol> for String {
 impl Encode<'_, Exasol> for String {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         <&str as Encode<Exasol>>::encode(&**self, buf)
-    }
-
-    fn encode(self, buf: &mut ExaBuffer) -> IsNull
-    where
-        Self: Sized,
-    {
-        // Exasol treats empty strings as NULL
-        if self.is_empty() {
-            buf.append(());
-            return IsNull::Yes;
-        }
-
-        buf.append(self);
-        IsNull::No
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -97,18 +87,8 @@ impl Encode<'_, Exasol> for Cow<'_, str> {
         }
     }
 
-    fn encode(self, buf: &mut ExaBuffer) -> IsNull
-    where
-        Self: Sized,
-    {
-        // Exasol treats empty strings as NULL
-        if self.is_empty() {
-            buf.append(());
-            return IsNull::Yes;
-        }
-
-        buf.append(self);
-        IsNull::No
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        <&str as Encode<Exasol>>::produces(&&**self)
     }
 }
 

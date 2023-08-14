@@ -1,14 +1,17 @@
 use std::net::IpAddr;
 
-use serde::{ser::Error, Serialize};
+use serde::{
+    ser::{Error, SerializeSeq},
+    Serialize, Serializer,
+};
 use serde_json::value::RawValue;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
     arguments::{ExaBuffer, NumParamSets},
-    column::ExaColumn,
     options::{ExaConnectOptionsRef, ProtocolVersion},
     responses::ExaAttributes,
+    ExaTypeInfo,
 };
 
 /// Enum encapsulating database requests, differentiated by the `command` tag.
@@ -79,7 +82,7 @@ impl<'a> ExaCommand<'a> {
 
     pub fn new_execute_prepared(
         handle: u16,
-        columns: &'a [ExaColumn],
+        columns: &'a [ExaTypeInfo],
         buf: ExaBuffer,
         attributes: &'a ExaAttributes,
     ) -> Result<Self, SqlxError> {
@@ -197,8 +200,9 @@ pub(crate) struct ExecutePreparedStmt<'a> {
     statement_handle: u16,
     num_columns: usize,
     num_rows: usize,
-    #[serde(skip_serializing_if = "<[ExaColumn]>::is_empty")]
-    columns: &'a [ExaColumn],
+    #[serde(skip_serializing_if = "<[ExaTypeInfo]>::is_empty")]
+    #[serde(serialize_with = "ExecutePreparedStmt::serialize_parameters")]
+    columns: &'a [ExaTypeInfo],
     #[serde(skip_serializing_if = "PreparedStmtData::is_empty")]
     data: PreparedStmtData,
 }
@@ -206,7 +210,7 @@ pub(crate) struct ExecutePreparedStmt<'a> {
 impl<'a> ExecutePreparedStmt<'a> {
     fn new(
         handle: u16,
-        columns: &'a [ExaColumn],
+        columns: &'a [ExaTypeInfo],
         data: ExaBuffer,
         attributes: &'a ExaAttributes,
     ) -> Result<Self, SqlxError> {
@@ -220,6 +224,33 @@ impl<'a> ExecutePreparedStmt<'a> {
         };
 
         Ok(prepared)
+    }
+
+    fn serialize_parameters<S>(parameters: &[ExaTypeInfo], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq_serializer = serializer.serialize_seq(Some(parameters.len()))?;
+        for param in parameters {
+            seq_serializer.serialize_element(&ExaParameter::from(param))?;
+        }
+        seq_serializer.end()
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExaParameter<'a> {
+    // name: &'static str,
+    data_type: &'a ExaTypeInfo,
+}
+
+impl<'a> From<&'a ExaTypeInfo> for ExaParameter<'a> {
+    fn from(value: &'a ExaTypeInfo) -> Self {
+        Self {
+            // name: "",
+            data_type: value,
+        }
     }
 }
 

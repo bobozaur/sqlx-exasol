@@ -5,7 +5,6 @@ use sqlx_core::pool::PoolConnection;
 #[sqlx::test(migrations = "tests/it/setup")]
 async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let d = conn.describe("SELECT * FROM tweet").await?;
-    println!("{d:?}");
 
     assert_eq!(d.columns()[0].name(), "id");
     assert_eq!(d.columns()[1].name(), "created_at");
@@ -43,7 +42,6 @@ CREATE TABLE with_hashtype_and_tinyint (
     let d = conn
         .describe("INSERT INTO with_hashtype_and_tinyint VALUES (?, ?, ?, ?, ?);")
         .await?;
-    println!("{d:?}");
 
     let parameters = d.parameters().unwrap().unwrap_left();
 

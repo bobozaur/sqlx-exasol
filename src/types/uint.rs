@@ -119,6 +119,11 @@ impl Encode<'_, Exasol> for u64 {
 
         IsNull::No
     }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self.checked_ilog10().unwrap_or_default() + 1;
+        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+    }
 }
 
 impl Decode<'_, Exasol> for u64 {

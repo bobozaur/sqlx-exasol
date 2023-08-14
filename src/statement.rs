@@ -21,22 +21,15 @@ pub struct ExaStatement<'q> {
 pub struct ExaStatementMetadata {
     pub(crate) columns: Arc<[ExaColumn]>,
     pub(crate) column_names: HashMap<Arc<str>, usize>,
-    pub(crate) parameters: Vec<ExaTypeInfo>,
+    pub(crate) parameters: Arc<[ExaTypeInfo]>,
 }
 
 impl ExaStatementMetadata {
-    pub fn new(columns: Arc<[ExaColumn]>) -> Self {
+    pub fn new(columns: Arc<[ExaColumn]>, parameters: Arc<[ExaTypeInfo]>) -> Self {
         let mut column_names = HashMap::with_capacity(columns.len());
-        let mut parameters = Vec::with_capacity(columns.len());
 
-        for ExaColumn {
-            name,
-            data_type: datatype,
-            ..
-        } in columns.as_ref()
-        {
-            column_names.insert(name.to_owned(), parameters.len());
-            parameters.push(datatype.clone());
+        for (idx, col) in columns.as_ref().iter().enumerate() {
+            column_names.insert(col.name.clone(), idx);
         }
 
         Self {

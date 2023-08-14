@@ -7,7 +7,6 @@ use std::{borrow::Cow, future, iter};
 use either::Either;
 use lru::LruCache;
 use sqlx_core::{
-    column::Column,
     connection::{Connection, LogSettings},
     database::{Database, HasStatement},
     describe::Describe,
@@ -23,6 +22,7 @@ use crate::{
     arguments::ExaArguments,
     command::ExaCommand,
     database::Exasol,
+    error::ExaProtocolError,
     options::ExaConnectOptions,
     responses::{DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, SessionInfo},
     statement::{ExaStatement, ExaStatementMetadata},
@@ -137,20 +137,18 @@ impl ExaConnection {
 
         // Check the compatibility between provided parameter data types
         // and the ones expected by the database.
-        let column_types = prepared.columns.iter().map(Column::type_info);
-        for (expected, provided) in iter::zip(column_types, &args.types) {
+        for (expected, provided) in iter::zip(prepared.parameters.as_ref(), &args.types) {
             if !expected.compatible(provided) {
-                let msg = format!(
-                    "type mismatch: expected SQL type `{expected}` but was provided `{provided}`",
-                );
-
-                return Err(SqlxError::Protocol(msg));
+                Err(ExaProtocolError::DatatypeMismatch(
+                    expected.to_string(),
+                    provided.to_string(),
+                ))?;
             }
         }
 
         let cmd = ExaCommand::new_execute_prepared(
             prepared.statement_handle,
-            &prepared.columns,
+            &prepared.parameters,
             args.buf,
             &self.ws.attributes,
         )?
@@ -221,6 +219,28 @@ impl Connection for ExaConnection {
 
     fn should_flush(&self) -> bool {
         false
+    }
+
+    fn cached_statements_size(&self) -> usize
+    where
+        Self::Database: sqlx_core::database::HasStatementCache,
+    {
+        self.statement_cache.len()
+    }
+
+    fn clear_cached_statements(
+        &mut self,
+    ) -> futures_core::future::BoxFuture<'_, Result<(), SqlxError>>
+    where
+        Self::Database: sqlx_core::database::HasStatementCache,
+    {
+        Box::pin(async {
+            while let Some((_, prep)) = self.statement_cache.pop_lru() {
+                self.ws.close_prepared(prep.statement_handle).await?
+            }
+
+            Ok(())
+        })
     }
 }
 
@@ -312,7 +332,10 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
             Ok(ExaStatement {
                 sql: Cow::Borrowed(sql),
-                metadata: ExaStatementMetadata::new(prepared.columns.clone()),
+                metadata: ExaStatementMetadata::new(
+                    prepared.columns.clone(),
+                    prepared.parameters.clone(),
+                ),
             })
         })
     }

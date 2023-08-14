@@ -50,3 +50,4 @@ sqlx = { version = "=0.7.1", features = [
 ] }
 paste = "1.0.14"
 anyhow = "1.0.72"
+env_logger = "0.10.0"

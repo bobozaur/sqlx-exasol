@@ -37,6 +37,7 @@ use super::{stream::QueryResultStream, tls};
 pub struct ExaWebSocket {
     pub(crate) ws: WebSocketStream<BufReader<RwSocket>>,
     pub(crate) attributes: ExaAttributes,
+    pub(crate) pending_rollback: bool,
 }
 
 impl ExaWebSocket {
@@ -64,6 +65,7 @@ impl ExaWebSocket {
         let mut ws = Self {
             ws,
             attributes: Default::default(),
+            pending_rollback: false,
         };
 
         ws.attributes.encryption_enabled = is_tls;
@@ -173,9 +175,11 @@ impl ExaWebSocket {
 
     pub(crate) async fn rollback(&mut self) -> Result<(), SqlxError> {
         self.attributes.autocommit = true;
+        self.pending_rollback = false;
 
         let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
-        self.send_cmd_ignore_response(cmd).await
+        self.send_cmd_impl::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
     }
 
     pub(crate) async fn ping(&mut self) -> Result<(), SqlxError> {
@@ -363,10 +367,19 @@ impl ExaWebSocket {
         self.send_cmd::<Option<IgnoredAny>>(cmd).await?;
         Ok(())
     }
+    async fn send_cmd<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
+    where
+        T: DeserializeOwned + Debug,
+    {
+        if self.pending_rollback {
+            self.rollback().await?;
+        }
+        self.send_cmd_impl(cmd).await
+    }
 
     /// Sends a [`Command`] to the database, processing the attributes the
     /// database responded with and returning the `response_data` field of the [`Response`].
-    async fn send_cmd<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
+    async fn send_cmd_impl<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
     {

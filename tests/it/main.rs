@@ -1,7 +1,7 @@
+mod common;
+mod describe;
 mod error;
-mod queries;
+mod migrate;
 #[path = "./test-attr.rs"]
 mod test_attr;
 mod types;
-mod migrate;
-mod describe;
