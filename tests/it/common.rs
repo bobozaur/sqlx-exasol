@@ -249,7 +249,6 @@ async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> anyhow
 
 #[sqlx::test]
 async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
-    env_logger::init();
     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
         .await?;
 
@@ -298,6 +297,37 @@ async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyh
         assert_eq!(count, 2);
         // tx is dropped
     }
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&mut *conn)
+        .await?;
+    assert_eq!(count, 1);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn it_can_rollback_and_continue(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
+        .await?;
+
+    // begin .. rollback
+
+    let mut tx = conn.begin().await?;
+    sqlx::query("INSERT INTO users (id) VALUES (?)")
+        .bind(vec![1, 2])
+        .execute(&mut *tx)
+        .await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(count, 2);
+    tx.rollback().await?;
+
+    sqlx::query("INSERT INTO users (id) VALUES (?)")
+        .bind(1)
+        .execute(&mut *conn)
+        .await?;
 
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&mut *conn)
