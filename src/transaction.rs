@@ -21,6 +21,9 @@ impl TransactionManager for ExaTransactionManager {
     }
 
     fn start_rollback(conn: &mut ExaConnection) {
-        conn.ws.pending_rollback = true;
+        // We only need to rollback if the transaction is still open.
+        if conn.ws.attributes.open_transaction {
+            conn.ws.pending_rollback = true;
+        }
     }
 }

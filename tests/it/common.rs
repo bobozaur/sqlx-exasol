@@ -264,6 +264,7 @@ async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyh
         .await?;
     assert_eq!(count, 1);
     tx.rollback().await?;
+
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&mut *conn)
         .await?;
@@ -276,6 +277,7 @@ async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyh
         .bind(1_i32)
         .execute(&mut *tx)
         .await?;
+
     tx.commit().await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&mut *conn)
@@ -291,6 +293,7 @@ async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyh
             .bind(2)
             .execute(&mut *tx)
             .await?;
+
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
             .fetch_one(&mut *tx)
             .await?;
@@ -336,3 +339,70 @@ async fn it_can_rollback_and_continue(mut conn: PoolConnection<Exasol>) -> anyho
 
     Ok(())
 }
+
+#[sqlx::test]
+async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+    // Trying to start a nested one will fail.
+    assert!(tx.begin().await.is_err());
+
+    Ok(())
+}
+
+// This cannot unfortunately be achieved without some async drop.
+//
+// We can either schedule the rollback to be sent on the next
+// async database interaction or pre-emptively start sending
+// the message, but in this case unless we get to flush it,
+// we're still not going to be getting a response until
+// we have some other database interaction.
+//
+// Therefore, if a transaction is dropped and will be rollbacked
+// but another connection starts a conflicting transaction, a deadlock
+// will occur.
+//
+// #[sqlx::test]
+// async fn it_can_drop_transaction_and_not_deadlock(
+//     pool_opts: PoolOptions<Exasol>,
+//     exa_opts: ExaConnectOptions,
+// ) -> anyhow::Result<()> {
+//     let pool_opts = pool_opts.max_connections(2);
+//     let pool = pool_opts.connect_with(exa_opts).await?;
+//     let mut conn1 = pool.acquire().await?;
+//     let mut conn2 = pool.acquire().await?;
+
+//     conn1
+//         .execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
+//         .await?;
+
+//     // begin .. drop
+
+//     {
+//         let mut tx = conn1.begin().await?;
+//         sqlx::query("INSERT INTO users (id) VALUES (?)")
+//             .bind(vec![1, 2])
+//             .execute(&mut *tx)
+//             .await?;
+//         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+//             .fetch_one(&mut *tx)
+//             .await?;
+//         assert_eq!(count, 2);
+
+//         sqlx::query("INSERT INTO users (id) VALUES (?)")
+//             .bind(vec![3, 4])
+//             .execute(&mut *tx)
+//             .await?;
+//     }
+
+//     sqlx::query("INSERT INTO users (id) VALUES (?)")
+//         .bind(5)
+//         .execute(&mut *conn2)
+//         .await?;
+
+//     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+//         .fetch_one(&mut *conn2)
+//         .await?;
+//     assert_eq!(count, 1);
+
+//     Ok(())
+// }

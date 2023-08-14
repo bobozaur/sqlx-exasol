@@ -1,23 +1,18 @@
-use std::{
-    borrow::Cow,
-    fmt::Debug,
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-};
+pub mod socket;
+
+#[cfg(feature = "flate2")]
+mod compressed;
+mod uncompressed;
+
+use std::{borrow::Cow, fmt::Debug};
 
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
-use futures_core::ready;
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{io::BufReader, Future, SinkExt, StreamExt};
+
+use futures_util::{io::BufReader, Future, SinkExt};
 use lru::LruCache;
 use rsa::RsaPublicKey;
 use serde::de::{DeserializeOwned, IgnoredAny};
-use sqlx_core::{
-    bytes::BufMut,
-    net::{Socket, WithSocket},
-    Error as SqlxError,
-};
+use sqlx_core::Error as SqlxError;
 
 use crate::{
     command::{Command, ExaCommand},
@@ -30,6 +25,8 @@ use crate::{
         QueryResult, Response, Results, SessionInfo,
     },
 };
+
+use socket::RwSocket;
 
 use super::{stream::QueryResultStream, tls};
 
@@ -71,8 +68,13 @@ impl ExaWebSocket {
         ws.attributes.encryption_enabled = is_tls;
         ws.attributes.fetch_size = options.fetch_size;
         ws.attributes.statement_cache_capacity = options.statement_cache_capacity;
+        let compression = options.compression;
 
+        // Login is always uncompressed
         let session_info = ws.login(options).await?;
+
+        // So we set compression afterwards, if needed.
+        ws.attributes.compression_enabled = compression;
         ws.get_attributes().await?;
 
         Ok((ws, session_info))
@@ -103,7 +105,7 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<QueryResult, SqlxError> {
-        self.send_cmd::<Results>(cmd).await.map(From::from)
+        self.send_and_recv::<Results>(cmd).await.map(From::from)
     }
 
     pub(crate) async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
@@ -116,11 +118,11 @@ impl ExaWebSocket {
         &mut self,
         cmd: Command,
     ) -> Result<PreparedStatement, SqlxError> {
-        self.send_cmd(cmd).await
+        self.send_and_recv(cmd).await
     }
 
     pub(crate) async fn describe(&mut self, cmd: Command) -> Result<DescribeStatement, SqlxError> {
-        self.send_cmd(cmd).await
+        self.send_and_recv(cmd).await
     }
 
     pub(crate) async fn close_prepared(&mut self, handle: u16) -> Result<(), SqlxError> {
@@ -129,7 +131,7 @@ impl ExaWebSocket {
     }
 
     pub(crate) async fn fetch_chunk(&mut self, cmd: Command) -> Result<DataChunk, SqlxError> {
-        self.send_cmd(cmd).await
+        self.send_and_recv(cmd).await
     }
 
     pub(crate) async fn set_attributes(&mut self) -> Result<(), SqlxError> {
@@ -142,7 +144,7 @@ impl ExaWebSocket {
     #[allow(clippy::diverging_sub_expression)]
     pub(crate) async fn get_hosts(&mut self) -> Result<Vec<String>, SqlxError> {
         let _cmd = ExaCommand::new_get_hosts(todo!()).try_into()?;
-        self.send_cmd::<Hosts>(_cmd).await.map(From::from)
+        self.send_and_recv::<Hosts>(_cmd).await.map(From::from)
     }
 
     pub(crate) async fn get_attributes(&mut self) -> Result<(), SqlxError> {
@@ -160,24 +162,35 @@ impl ExaWebSocket {
         // We could eagerly start it as well, but that implies one more
         // round-trip to the server and back with no benefit.
         self.attributes.autocommit = false;
+        self.attributes.open_transaction = true;
         Ok(())
     }
 
     pub(crate) async fn commit(&mut self) -> Result<(), SqlxError> {
+        // It's fine to set this before executing the command
+        // since we want to commit anyway.
         self.attributes.autocommit = true;
 
         // Just changing `autocommit` attribute implies a COMMIT,
         // but we would still have to send a command to the server
         // to update it, so we might as well be explicit.
         let cmd = ExaCommand::new_execute("COMMIT;", &self.attributes).try_into()?;
-        self.send_cmd_ignore_response(cmd).await
+        self.send_cmd_ignore_response(cmd).await?;
+
+        self.attributes.open_transaction = false;
+        Ok(())
     }
 
+    /// Sends a rollback to the database and awaits the response.
     pub(crate) async fn rollback(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
-        self.send_cmd_impl::<Option<IgnoredAny>>(cmd).await?;
+        self.send(cmd).await?;
+        self.recv::<Option<IgnoredAny>>().await?;
+
+        // We explicitly set the attribute after
+        // we know the rollback was successful.
         self.attributes.autocommit = true;
-        self.pending_rollback = false;
+        self.attributes.open_transaction = false;
         Ok(())
     }
 
@@ -353,44 +366,62 @@ impl ExaWebSocket {
         protocol_version: ProtocolVersion,
     ) -> Result<RsaPublicKey, SqlxError> {
         let cmd = ExaCommand::new_login(protocol_version).try_into()?;
-        self.send_cmd::<PublicKey>(cmd).await.map(From::from)
+        self.send_and_recv::<PublicKey>(cmd).await.map(From::from)
     }
 
     async fn get_session_info(&mut self, cmd: Command) -> Result<SessionInfo, SqlxError> {
-        self.send_cmd(cmd).await
+        self.send_and_recv(cmd).await
     }
 
     /// Utility method for when the `response_data` field of the [`Response`] is not of any interest.
     /// Note that attributes will still get updated.
     async fn send_cmd_ignore_response(&mut self, cmd: Command) -> Result<(), SqlxError> {
-        self.send_cmd::<Option<IgnoredAny>>(cmd).await?;
+        self.send_and_recv::<Option<IgnoredAny>>(cmd).await?;
         Ok(())
     }
-    async fn send_cmd<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
+
+    /// Sends a [`Command`] to the database and returns the `response_data` field of the [`Response`].
+    /// We will also await on the response from a previously started command, if needed.
+    async fn send_and_recv<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
     {
+        // If a rollback is pending, which really only happens when a transaction is dropped
+        // then we need to send that first before the actual command.
         if self.pending_rollback {
             self.rollback().await?;
+            self.pending_rollback = false;
         }
-        self.send_cmd_impl(cmd).await
+
+        self.send(cmd).await?;
+        self.recv().await
     }
 
-    /// Sends a [`Command`] to the database, processing the attributes the
-    /// database responded with and returning the `response_data` field of the [`Response`].
-    async fn send_cmd_impl<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
-    where
-        T: DeserializeOwned + Debug,
-    {
+    /// Sends a [`Command`] to the database.
+    async fn send(&mut self, cmd: Command) -> Result<(), SqlxError> {
         let cmd = cmd.into_inner();
         tracing::debug!("sending command to database: {cmd}");
 
         #[allow(unreachable_patterns)]
-        let response = match self.attributes.compression_enabled {
-            false => self.send_uncompressed_cmd(cmd).await?,
+        match self.attributes.compression_enabled {
+            false => self.send_uncompressed(cmd).await,
             #[cfg(feature = "flate2")]
-            true => self.send_compressed_cmd(cmd).await?,
-            _ => return Err(ExaProtocolError::CompressionDisabled)?,
+            true => self.send_compressed(cmd).await,
+            _ => Err(ExaProtocolError::CompressionDisabled)?,
+        }
+    }
+
+    /// Receives a [`Response<T>`] and processes the attributes, returning `T`.
+    async fn recv<T>(&mut self) -> Result<T, SqlxError>
+    where
+        T: DeserializeOwned + Debug,
+    {
+        #[allow(unreachable_patterns)]
+        let response = match self.attributes.compression_enabled {
+            false => self.recv_uncompressed().await?,
+            #[cfg(feature = "flate2")]
+            true => self.recv_compressed().await?,
+            _ => Err(ExaProtocolError::CompressionDisabled)?,
         };
 
         let (response_data, attributes) = match response {
@@ -409,136 +440,5 @@ impl ExaWebSocket {
         tracing::trace!("database response:\n{response_data:#?}");
 
         Ok(response_data)
-    }
-
-    /// Sends an uncompressed command and awaits a response
-    async fn send_uncompressed_cmd<T>(&mut self, cmd: String) -> Result<Response<T>, SqlxError>
-    where
-        T: DeserializeOwned,
-    {
-        self.ws.send(Message::Text(cmd)).await.to_sqlx_err()?;
-
-        while let Some(response) = self.ws.next().await {
-            let msg = response.to_sqlx_err()?;
-
-            return match msg {
-                Message::Text(s) => serde_json::from_str(&s).to_sqlx_err(),
-                Message::Binary(v) => serde_json::from_slice(&v).to_sqlx_err(),
-                Message::Close(c) => {
-                    self.close().await.ok();
-                    Err(ExaProtocolError::from(c))?
-                }
-                _ => continue,
-            };
-        }
-
-        Err(ExaProtocolError::MissingMessage)?
-    }
-
-    /// Compresses the command before sending and decodes the compressed response.
-    #[cfg(feature = "flate2")]
-    async fn send_compressed_cmd<T>(&mut self, cmd: String) -> Result<Response<T>, SqlxError>
-    where
-        T: DeserializeOwned,
-    {
-        use std::io::Write;
-
-        use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
-
-        let byte_cmd = cmd.as_bytes();
-        let mut compressed_cmd = Vec::new();
-        let mut enc = ZlibEncoder::new(&mut compressed_cmd, Compression::default());
-
-        enc.write_all(byte_cmd).and_then(|_| enc.finish())?;
-
-        self.ws
-            .send(Message::Binary(compressed_cmd))
-            .await
-            .to_sqlx_err()?;
-
-        while let Some(response) = self.ws.next().await {
-            let bytes = match response.to_sqlx_err()? {
-                Message::Text(s) => s.into_bytes(),
-                Message::Binary(v) => v,
-                Message::Close(c) => {
-                    self.close().await.ok();
-                    Err(ExaProtocolError::from(c))?
-                }
-                _ => continue,
-            };
-
-            let dec = ZlibDecoder::new(bytes.as_slice());
-            return serde_json::from_reader(dec).to_sqlx_err();
-        }
-
-        Err(ExaProtocolError::MissingMessage)?
-    }
-}
-
-/// Implementor of [`WithSocket`].
-pub struct WithRwSocket;
-
-impl WithSocket for WithRwSocket {
-    type Output = RwSocket;
-
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        RwSocket(Box::new(socket))
-    }
-}
-
-/// A wrapper so we can implement [`AsyncRead`] and [`AsyncWrite`]
-/// for the underlying TCP socket. The traits are needed by the
-/// [`WebSocketStream`] wrapper.
-pub struct RwSocket(Box<dyn Socket>);
-
-impl Debug for RwSocket {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", stringify!(RwSocket))
-    }
-}
-
-impl AsyncRead for RwSocket {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        mut buf: &mut [u8],
-    ) -> Poll<futures_io::Result<usize>> {
-        while buf.has_remaining_mut() {
-            match self.0.try_read(&mut buf) {
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    ready!(self.0.poll_read_ready(cx)?);
-                }
-                ready => return Poll::Ready(ready),
-            }
-        }
-
-        Poll::Ready(Ok(0))
-    }
-}
-
-impl AsyncWrite for RwSocket {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<futures_io::Result<usize>> {
-        while !buf.is_empty() {
-            match self.0.try_write(buf) {
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    ready!(self.0.poll_write_ready(cx)?)
-                }
-                ready => return Poll::Ready(ready),
-            }
-        }
-
-        Poll::Ready(Ok(0))
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
-        self.0.poll_flush(cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
-        self.0.poll_shutdown(cx)
     }
 }

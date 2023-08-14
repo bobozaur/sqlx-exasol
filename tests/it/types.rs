@@ -365,14 +365,14 @@ mod macros {
                             .await;
 
                         if let Err(e) = query_result {
-                            println!("Error inserting value: {e}");
+                            eprintln!("Error inserting value: {e}");
                         } else {
                             let values_result: Result<Vec<$ty>, _> = query_scalar("SELECT * FROM sqlx_test_type;")
                                 .fetch_all(&mut *con)
                                 .await;
 
                             let error = values_result.unwrap_err();
-                            println!("Error retrieving value: {error}");
+                            eprintln!("Error retrieving value: {error}");
 
                             con.execute("DELETE FROM sqlx_test_type;").await?;
                         }

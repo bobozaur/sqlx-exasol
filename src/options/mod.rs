@@ -250,3 +250,49 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(unused_imports)]
+mod tests {
+    use sqlx::Executor;
+    use sqlx_core::{error::BoxDynError, pool::PoolOptions};
+
+    use crate::{ExaConnectOptions, Exasol};
+
+    #[cfg(feature = "flate2")]
+    #[sqlx::test]
+    async fn test_compression_works(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        exa_opts.compression = true;
+
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+        let schema = "TEST_SWITCH_SCHEMA";
+
+        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
+            .await?;
+
+        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
+            .await?;
+
+        assert_eq!(schema, new_schema);
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "flate2"))]
+    #[sqlx::test]
+    async fn test_compression_no_flag(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) {
+        exa_opts.compression = true;
+        assert!(pool_opts.connect_with(exa_opts).await.is_err());
+    }
+}

@@ -24,7 +24,7 @@ use crate::{
 };
 
 use stream::QueryResultStream;
-use websocket::{ExaWebSocket, WithRwSocket};
+use websocket::{socket::WithRwSocket, ExaWebSocket};
 
 #[derive(Debug)]
 pub struct ExaConnection {
