@@ -244,7 +244,7 @@ impl Connection for ExaConnection {
 mod tests {
     use std::num::NonZeroUsize;
 
-    use sqlx::query;
+    use sqlx::{query, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
     use crate::{ExaConnectOptions, Exasol};
@@ -273,6 +273,94 @@ mod tests {
         query(sql2).execute(&mut *con).await?;
         assert!(!con.as_ref().statement_cache.contains(sql1));
         assert!(con.as_ref().statement_cache.contains(sql2));
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_schema_none_selected(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        exa_opts.schema = None;
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+
+        let schema: Option<String> = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        assert!(schema.is_none());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_schema_selected(
+        pool_opts: PoolOptions<Exasol>,
+        exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+
+        let schema: Option<String> = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        assert!(schema.is_some());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_schema_switch(
+        pool_opts: PoolOptions<Exasol>,
+        exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+        let schema = "TEST_SWITCH_SCHEMA";
+
+        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
+            .await?;
+
+        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
+            .await?;
+
+        assert_eq!(schema, new_schema);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_schema_switch_from_attr(
+        pool_opts: PoolOptions<Exasol>,
+        exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+
+        let orig_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        let schema = "TEST_SWITCH_SCHEMA";
+
+        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
+            .await?;
+
+        con.attributes_mut().set_current_schema(orig_schema.clone());
+        con.flush_attributes().await?;
+
+        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        assert_eq!(orig_schema, new_schema);
 
         Ok(())
     }
