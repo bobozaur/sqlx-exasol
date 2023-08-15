@@ -7,6 +7,7 @@ use arrayvec::ArrayString;
 use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
 
+/// Information about an Exasol data type.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(from = "ExaDataType")]
 pub struct ExaTypeInfo {
@@ -15,6 +16,10 @@ pub struct ExaTypeInfo {
 }
 
 impl ExaTypeInfo {
+    /// Checks compatibility with other data types.
+    ///
+    /// Returns true if the [`self`] instance is compatible/bigger/able to
+    /// accommodate the `other` instance.
     pub fn compatible(&self, other: &Self) -> bool {
         self.datatype.compatible(&other.datatype)
     }
@@ -53,6 +58,12 @@ impl TypeInfo for ExaTypeInfo {
         false
     }
 
+    /// We're going against `sqlx` here, but knowing the full data type definition
+    /// is actually very helpful when displaying error messages, so... ¯\_(ツ)_/¯.
+    ///
+    /// In fact, error messages seem to be the only place where this is being used,
+    /// particularly when trying to decode a value but the data type provided by the
+    /// database does not match/fit inside the Rust data type.
     fn name(&self) -> &str {
         self.name.as_ref()
     }
@@ -96,7 +107,10 @@ impl ExaDataType {
     const HASHTYPE: &str = "HASHTYPE";
 
     /// Returns `true` if this instance is compatible with the other one provided.
-    pub(crate) fn compatible(&self, other: &Self) -> bool {
+    ///
+    /// Compatibility means that the [`self`] instance is bigger/able to accommodate
+    /// the other instance.
+    pub fn compatible(&self, other: &Self) -> bool {
         match self {
             ExaDataType::Null => true,
             ExaDataType::Boolean => matches!(other, ExaDataType::Boolean | ExaDataType::Null),
@@ -188,6 +202,9 @@ impl AsRef<str> for ExaDataType {
     }
 }
 
+/// A data type's name.
+/// For performance's sake, since data type names are small,
+/// we either store them statically or as inlined strings.
 #[derive(Debug, Clone)]
 enum DataTypeName {
     Static(&'static str),
