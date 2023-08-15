@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
 
 /// Information about an Exasol data type.
+///
+/// Note that the [`DataTypeName`] is automatically constructed
+/// from the provided [`ExaDataType`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(from = "ExaDataType")]
 pub struct ExaTypeInfo {
@@ -69,6 +72,15 @@ impl TypeInfo for ExaTypeInfo {
     }
 }
 
+/// Datatype definitions enum, as Exasol sees them.
+///
+/// If you manually construct them, be aware that there is a [`DataTypeName`]
+/// automatically constructed when converting to [`ExaTypeInfo`] and there
+/// are compatibility checks set in place.
+///
+/// In case of incompatibility, the definition is displayed for troubleshooting.
+///
+///
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 #[serde(tag = "type")]
@@ -167,17 +179,14 @@ impl ExaDataType {
             }
             ExaDataType::Geometry(g) => format_args!("{}({})", self.as_ref(), g.srid).into(),
             ExaDataType::IntervalDayToSecond(ids) => format_args!(
-                "INTERVAL DAY ({}) TO SECOND ({})",
+                "INTERVAL DAY({}) TO SECOND({})",
                 ids.precision, ids.fraction
             )
             .into(),
             ExaDataType::IntervalYearToMonth(iym) => {
-                format_args!("INTERVAL YEAR ({}) TO MONTH", iym.precision).into()
+                format_args!("INTERVAL YEAR({}) TO MONTH", iym.precision).into()
             }
-            // For HASHTYPE the database returns the size as doubled.
-            ExaDataType::Hashtype(h) => {
-                format_args!("{}({} BYTE)", self.as_ref(), h.size / 2).into()
-            }
+            ExaDataType::Hashtype(h) => format_args!("{}({} BYTE)", self.as_ref(), h.size()).into(),
         }
     }
 }
@@ -202,9 +211,12 @@ impl AsRef<str> for ExaDataType {
     }
 }
 
-/// A data type's name.
+/// A data type's name, composed from an instance of [`ExaDataType`].
 /// For performance's sake, since data type names are small,
 /// we either store them statically or as inlined strings.
+///
+/// *IMPORTANT*: Creating absurd [`ExaDataType`] can result in panics
+/// if the name exceeds the inlined strings max capacity. Valid values always fit.
 #[derive(Debug, Clone)]
 enum DataTypeName {
     Static(&'static str),
@@ -246,7 +258,8 @@ pub struct StringLike {
 }
 
 impl StringLike {
-    pub const MAX_STR_LEN: usize = 2_000_000;
+    pub const MAX_VARCHAR_LEN: usize = 2_000_000;
+    pub const MAX_CHAR_LEN: usize = 2000;
 
     pub fn new(size: usize, character_set: Charset) -> Self {
         Self {
@@ -281,15 +294,6 @@ impl StringLike {
                 | ExaDataType::Timestamp
                 | ExaDataType::TimestampWithLocalTimeZone
         )
-    }
-}
-
-impl Default for StringLike {
-    fn default() -> Self {
-        Self {
-            size: Self::MAX_STR_LEN,
-            character_set: Charset::Utf8,
-        }
     }
 }
 
@@ -419,15 +423,6 @@ pub struct IntervalDayToSecond {
     fraction: u32,
 }
 
-impl Default for IntervalDayToSecond {
-    fn default() -> Self {
-        Self {
-            precision: Self::MAX_PRECISION,
-            fraction: Self::MAX_SUPPORTED_FRACTION,
-        }
-    }
-}
-
 impl PartialOrd for IntervalDayToSecond {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let precision_cmp = self.precision.partial_cmp(&other.precision);
@@ -488,16 +483,8 @@ pub struct IntervalYearToMonth {
     precision: u32,
 }
 
-impl Default for IntervalYearToMonth {
-    fn default() -> Self {
-        Self {
-            precision: Self::MAX_PRECISION,
-        }
-    }
-}
-
 impl IntervalYearToMonth {
-    const MAX_PRECISION: u32 = 9;
+    pub const MAX_PRECISION: u32 = 9;
 
     pub fn new(precision: u32) -> Self {
         Self { precision }
@@ -516,25 +503,29 @@ impl IntervalYearToMonth {
     }
 }
 
+/// The Exasol `HASHTYPE` data type.
+/// Note that Exasol returns the size doubled, as by default the HASHTYPE_FORMAT is HEX.
+/// This is handled internally and should not be a concern for any consumer
+/// of this type.
+///
+/// Therefore, for a datatype such as [`uuid::Uuid`] which is `16` bytes long,
+/// the `size` field will be `32`, but the [`HashType::new()`] or [`HashType::size()`]
+/// will accept/return `16` to make it easier to reason with.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub struct Hashtype {
-    size: usize,
-}
-
-impl Default for Hashtype {
-    fn default() -> Self {
-        Self { size: 32 }
-    }
+    size: u16,
 }
 
 impl Hashtype {
-    pub fn new(size: usize) -> Self {
-        Self { size }
+    pub const MAX_HASHTYPE_SIZE: u16 = 1024;
+
+    pub fn new(size: u16) -> Self {
+        Self { size: size * 2 }
     }
 
-    pub fn size(&self) -> usize {
-        self.size
+    pub fn size(&self) -> u16 {
+        self.size / 2
     }
 
     pub fn compatible(&self, ty: &ExaDataType) -> bool {
@@ -543,5 +534,137 @@ impl Hashtype {
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
+    }
+}
+
+/// Mainly adding these so that we ensure the inlined type names
+/// won't panic when created with their max values.
+///
+/// If the max values work, the lower ones inherently will too.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_null_name() {
+        let data_type = ExaDataType::Null;
+        assert_eq!(data_type.full_name().as_ref(), "NULL");
+    }
+
+    #[test]
+    fn test_boolean_name() {
+        let data_type = ExaDataType::Boolean;
+        assert_eq!(data_type.full_name().as_ref(), "BOOLEAN");
+    }
+
+    #[test]
+    fn test_max_char_name() {
+        let string_like = StringLike::new(StringLike::MAX_CHAR_LEN, Charset::Ascii);
+        let data_type = ExaDataType::Char(string_like);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!("CHAR({}) ASCII", StringLike::MAX_CHAR_LEN)
+        );
+    }
+
+    #[test]
+    fn test_date_name() {
+        let data_type = ExaDataType::Date;
+        assert_eq!(data_type.full_name().as_ref(), "DATE");
+    }
+
+    #[test]
+    fn test_max_decimal_name() {
+        let decimal = Decimal::new(Decimal::MAX_PRECISION, Decimal::MAX_SCALE);
+        let data_type = ExaDataType::Decimal(decimal);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!(
+                "DECIMAL({}, {})",
+                Decimal::MAX_PRECISION,
+                Decimal::MAX_SCALE
+            )
+        );
+    }
+
+    #[test]
+    fn test_double_name() {
+        let data_type = ExaDataType::Double;
+        assert_eq!(data_type.full_name().as_ref(), "DOUBLE PRECISION");
+    }
+
+    #[test]
+    fn test_max_geometry_name() {
+        let geometry = Geometry::new(u16::MAX);
+        let data_type = ExaDataType::Geometry(geometry);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!("GEOMETRY({})", u16::MAX)
+        );
+    }
+
+    #[test]
+    fn test_max_interval_day_name() {
+        let ids = IntervalDayToSecond::new(
+            IntervalDayToSecond::MAX_PRECISION,
+            IntervalDayToSecond::MAX_SUPPORTED_FRACTION,
+        );
+        let data_type = ExaDataType::IntervalDayToSecond(ids);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!(
+                "INTERVAL DAY({}) TO SECOND({})",
+                IntervalDayToSecond::MAX_PRECISION,
+                IntervalDayToSecond::MAX_SUPPORTED_FRACTION
+            )
+        );
+    }
+
+    #[test]
+    fn test_max_interval_year_name() {
+        let iym = IntervalYearToMonth::new(IntervalYearToMonth::MAX_PRECISION);
+        let data_type = ExaDataType::IntervalYearToMonth(iym);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!(
+                "INTERVAL YEAR({}) TO MONTH",
+                IntervalYearToMonth::MAX_PRECISION,
+            )
+        );
+    }
+
+    #[test]
+    fn test_timestamp_name() {
+        let data_type = ExaDataType::Timestamp;
+        assert_eq!(data_type.full_name().as_ref(), "TIMESTAMP");
+    }
+
+    #[test]
+    fn test_timestamp_with_tz_name() {
+        let data_type = ExaDataType::TimestampWithLocalTimeZone;
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            "TIMESTAMP WITH LOCAL TIME ZONE"
+        );
+    }
+
+    #[test]
+    fn test_max_varchar_name() {
+        let string_like = StringLike::new(StringLike::MAX_VARCHAR_LEN, Charset::Ascii);
+        let data_type = ExaDataType::Varchar(string_like);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!("VARCHAR({}) ASCII", StringLike::MAX_VARCHAR_LEN)
+        );
+    }
+
+    #[test]
+    fn test_max_hashtype_name() {
+        let hashtype = Hashtype::new(Hashtype::MAX_HASHTYPE_SIZE);
+        let data_type = ExaDataType::Hashtype(hashtype);
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!("HASHTYPE({} BYTE)", Hashtype::MAX_HASHTYPE_SIZE)
+        );
     }
 }

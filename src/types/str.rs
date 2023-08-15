@@ -11,13 +11,14 @@ use sqlx_core::{
 use crate::{
     arguments::ExaBuffer,
     database::Exasol,
-    type_info::{ExaDataType, ExaTypeInfo},
+    type_info::{Charset, ExaDataType, ExaTypeInfo, StringLike},
     value::ExaValueRef,
 };
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::Varchar(Default::default()).into()
+        let string_like = StringLike::new(StringLike::MAX_VARCHAR_LEN, Charset::Utf8);
+        ExaDataType::Varchar(string_like).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {

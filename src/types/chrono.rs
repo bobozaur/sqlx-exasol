@@ -99,7 +99,11 @@ impl Decode<'_, Exasol> for NaiveDateTime {
 
 impl Type<Exasol> for chrono::Duration {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::IntervalDayToSecond(Default::default()).into()
+        let ids = IntervalDayToSecond::new(
+            IntervalDayToSecond::MAX_PRECISION,
+            IntervalDayToSecond::MAX_SUPPORTED_FRACTION,
+        );
+        ExaDataType::IntervalDayToSecond(ids).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -206,7 +210,8 @@ impl Months {
 
 impl Type<Exasol> for Months {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::IntervalYearToMonth(Default::default()).into()
+        let iym = IntervalYearToMonth::new(IntervalYearToMonth::MAX_PRECISION);
+        ExaDataType::IntervalYearToMonth(iym).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
