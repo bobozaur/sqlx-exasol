@@ -7,11 +7,16 @@ use sqlx_core::{
 };
 use uuid::Uuid;
 
-use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+use crate::{
+    arguments::ExaBuffer,
+    database::Exasol,
+    type_info::{ExaDataType, ExaTypeInfo},
+    value::ExaValueRef,
+};
 
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Hashtype(Default::default())
+        ExaDataType::Hashtype(Default::default()).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -26,7 +31,7 @@ impl Encode<'_, Exasol> for Uuid {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Hashtype(Default::default()))
+        Some(ExaDataType::Hashtype(Default::default()).into())
     }
 }
 

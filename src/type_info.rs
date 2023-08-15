@@ -1,12 +1,67 @@
-use std::{cmp::Ordering, fmt::Display};
+use std::{
+    cmp::Ordering,
+    fmt::{Arguments, Display},
+};
 
+use arrayvec::ArrayString;
 use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(from = "ExaDataType")]
+pub struct ExaTypeInfo {
+    name: DataTypeName,
+    datatype: ExaDataType,
+}
+
+impl ExaTypeInfo {
+    pub fn compatible(&self, other: &Self) -> bool {
+        self.datatype.compatible(&other.datatype)
+    }
+}
+
+impl From<ExaDataType> for ExaTypeInfo {
+    fn from(datatype: ExaDataType) -> Self {
+        let name = datatype.full_name();
+        Self { name, datatype }
+    }
+}
+
+impl Serialize for ExaTypeInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.datatype.serialize(serializer)
+    }
+}
+
+impl PartialEq for ExaTypeInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.datatype == other.datatype
+    }
+}
+
+impl Display for ExaTypeInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl TypeInfo for ExaTypeInfo {
+    fn is_null(&self) -> bool {
+        false
+    }
+
+    fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 #[serde(tag = "type")]
-pub enum ExaTypeInfo {
+pub enum ExaDataType {
     Null,
     Boolean,
     Char(StringLike),
@@ -25,7 +80,7 @@ pub enum ExaTypeInfo {
     Hashtype(Hashtype),
 }
 
-impl ExaTypeInfo {
+impl ExaDataType {
     const NULL: &str = "NULL";
     const BOOLEAN: &str = "BOOLEAN";
     const CHAR: &str = "CHAR";
@@ -43,105 +98,128 @@ impl ExaTypeInfo {
     /// Returns `true` if this instance is compatible with the other one provided.
     pub(crate) fn compatible(&self, other: &Self) -> bool {
         match self {
-            ExaTypeInfo::Null => true,
-            ExaTypeInfo::Boolean => matches!(other, ExaTypeInfo::Boolean | ExaTypeInfo::Null),
-            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => c.compatible(other),
-            ExaTypeInfo::Date => matches!(
+            ExaDataType::Null => true,
+            ExaDataType::Boolean => matches!(other, ExaDataType::Boolean | ExaDataType::Null),
+            ExaDataType::Char(c) | ExaDataType::Varchar(c) => c.compatible(other),
+            ExaDataType::Date => matches!(
                 other,
-                ExaTypeInfo::Date
-                    | ExaTypeInfo::Char(_)
-                    | ExaTypeInfo::Varchar(_)
-                    | ExaTypeInfo::Null
+                ExaDataType::Date
+                    | ExaDataType::Char(_)
+                    | ExaDataType::Varchar(_)
+                    | ExaDataType::Null
             ),
-            ExaTypeInfo::Decimal(d) => d.compatible(other),
-            ExaTypeInfo::Double => match other {
-                ExaTypeInfo::Double | ExaTypeInfo::Null => true,
-                ExaTypeInfo::Decimal(d) if d.scale > 0 => true,
+            ExaDataType::Decimal(d) => d.compatible(other),
+            ExaDataType::Double => match other {
+                ExaDataType::Double | ExaDataType::Null => true,
+                ExaDataType::Decimal(d) if d.scale > 0 => true,
                 _ => false,
             },
-            ExaTypeInfo::Geometry(g) => g.compatible(other),
-            ExaTypeInfo::IntervalDayToSecond(ids) => ids.compatible(other),
-            ExaTypeInfo::IntervalYearToMonth(iym) => iym.compatible(other),
-            ExaTypeInfo::Timestamp => matches!(
+            ExaDataType::Geometry(g) => g.compatible(other),
+            ExaDataType::IntervalDayToSecond(ids) => ids.compatible(other),
+            ExaDataType::IntervalYearToMonth(iym) => iym.compatible(other),
+            ExaDataType::Timestamp => matches!(
                 other,
-                ExaTypeInfo::Timestamp
-                    | ExaTypeInfo::TimestampWithLocalTimeZone
-                    | ExaTypeInfo::Char(_)
-                    | ExaTypeInfo::Varchar(_)
-                    | ExaTypeInfo::Null
+                ExaDataType::Timestamp
+                    | ExaDataType::TimestampWithLocalTimeZone
+                    | ExaDataType::Char(_)
+                    | ExaDataType::Varchar(_)
+                    | ExaDataType::Null
             ),
-            ExaTypeInfo::TimestampWithLocalTimeZone => matches!(
+            ExaDataType::TimestampWithLocalTimeZone => matches!(
                 other,
-                ExaTypeInfo::TimestampWithLocalTimeZone
-                    | ExaTypeInfo::Timestamp
-                    | ExaTypeInfo::Char(_)
-                    | ExaTypeInfo::Varchar(_)
-                    | ExaTypeInfo::Null
+                ExaDataType::TimestampWithLocalTimeZone
+                    | ExaDataType::Timestamp
+                    | ExaDataType::Char(_)
+                    | ExaDataType::Varchar(_)
+                    | ExaDataType::Null
             ),
-            ExaTypeInfo::Hashtype(h) => h.compatible(other),
+            ExaDataType::Hashtype(h) => h.compatible(other),
         }
     }
-}
 
-impl AsRef<str> for ExaTypeInfo {
-    fn as_ref(&self) -> &str {
+    fn full_name(&self) -> DataTypeName {
         match self {
-            ExaTypeInfo::Null => Self::NULL,
-            ExaTypeInfo::Boolean => Self::BOOLEAN,
-            ExaTypeInfo::Char(_) => Self::CHAR,
-            ExaTypeInfo::Date => Self::DATE,
-            ExaTypeInfo::Decimal(_) => Self::DECIMAL,
-            ExaTypeInfo::Double => Self::DOUBLE,
-            ExaTypeInfo::Geometry(_) => Self::GEOMETRY,
-            ExaTypeInfo::IntervalDayToSecond(_) => Self::INTERVAL_DAY_TO_SECOND,
-            ExaTypeInfo::IntervalYearToMonth(_) => Self::INTERVAL_YEAR_TO_MONTH,
-            ExaTypeInfo::Timestamp => Self::TIMESTAMP,
-            ExaTypeInfo::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
-            ExaTypeInfo::Varchar(_) => Self::VARCHAR,
-            ExaTypeInfo::Hashtype(_) => Self::HASHTYPE,
-        }
-    }
-}
-
-impl TypeInfo for ExaTypeInfo {
-    fn is_null(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> &str {
-        self.as_ref()
-    }
-}
-
-impl Display for ExaTypeInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExaTypeInfo::Null
-            | ExaTypeInfo::Boolean
-            | ExaTypeInfo::Date
-            | ExaTypeInfo::Double
-            | ExaTypeInfo::Timestamp
-            | ExaTypeInfo::TimestampWithLocalTimeZone => write!(f, "{}", self.as_ref()),
-            ExaTypeInfo::Char(c) | ExaTypeInfo::Varchar(c) => {
-                write!(f, "{}({}) {}", self.as_ref(), c.size, c.character_set)
+            ExaDataType::Null => Self::NULL.into(),
+            ExaDataType::Boolean => Self::BOOLEAN.into(),
+            ExaDataType::Date => Self::DATE.into(),
+            ExaDataType::Double => Self::DOUBLE.into(),
+            ExaDataType::Timestamp => Self::TIMESTAMP.into(),
+            ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE.into(),
+            ExaDataType::Char(c) | ExaDataType::Varchar(c) => {
+                format_args!("{}({}) {}", self.as_ref(), c.size, c.character_set).into()
             }
-            ExaTypeInfo::Decimal(d) => write!(f, "{}({}, {})", self.as_ref(), d.precision, d.scale),
-            ExaTypeInfo::Geometry(g) => write!(f, "{}({})", self.as_ref(), g.srid),
-            ExaTypeInfo::IntervalDayToSecond(ids) => write!(
-                f,
+            ExaDataType::Decimal(d) => {
+                format_args!("{}({}, {})", self.as_ref(), d.precision, d.scale).into()
+            }
+            ExaDataType::Geometry(g) => format_args!("{}({})", self.as_ref(), g.srid).into(),
+            ExaDataType::IntervalDayToSecond(ids) => format_args!(
                 "INTERVAL DAY ({}) TO SECOND ({})",
                 ids.precision, ids.fraction
-            ),
-            ExaTypeInfo::IntervalYearToMonth(iym) => {
-                write!(f, "INTERVAL YEAR ({}) TO MONTH", iym.precision)
+            )
+            .into(),
+            ExaDataType::IntervalYearToMonth(iym) => {
+                format_args!("INTERVAL YEAR ({}) TO MONTH", iym.precision).into()
             }
             // For HASHTYPE the database returns the size as doubled.
-            ExaTypeInfo::Hashtype(h) => write!(f, "{}({} BYTE)", self.as_ref(), h.size / 2),
+            ExaDataType::Hashtype(h) => {
+                format_args!("{}({} BYTE)", self.as_ref(), h.size / 2).into()
+            }
         }
     }
 }
 
-impl Eq for ExaTypeInfo {}
+impl AsRef<str> for ExaDataType {
+    fn as_ref(&self) -> &str {
+        match self {
+            ExaDataType::Null => Self::NULL,
+            ExaDataType::Boolean => Self::BOOLEAN,
+            ExaDataType::Char(_) => Self::CHAR,
+            ExaDataType::Date => Self::DATE,
+            ExaDataType::Decimal(_) => Self::DECIMAL,
+            ExaDataType::Double => Self::DOUBLE,
+            ExaDataType::Geometry(_) => Self::GEOMETRY,
+            ExaDataType::IntervalDayToSecond(_) => Self::INTERVAL_DAY_TO_SECOND,
+            ExaDataType::IntervalYearToMonth(_) => Self::INTERVAL_YEAR_TO_MONTH,
+            ExaDataType::Timestamp => Self::TIMESTAMP,
+            ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+            ExaDataType::Varchar(_) => Self::VARCHAR,
+            ExaDataType::Hashtype(_) => Self::HASHTYPE,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum DataTypeName {
+    Static(&'static str),
+    Inline(ArrayString<30>),
+}
+
+impl AsRef<str> for DataTypeName {
+    fn as_ref(&self) -> &str {
+        match self {
+            DataTypeName::Static(s) => s,
+            DataTypeName::Inline(s) => s.as_str(),
+        }
+    }
+}
+
+impl Display for DataTypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+impl From<&'static str> for DataTypeName {
+    fn from(value: &'static str) -> Self {
+        Self::Static(value)
+    }
+}
+
+impl From<Arguments<'_>> for DataTypeName {
+    fn from(value: Arguments<'_>) -> Self {
+        Self::Inline(ArrayString::try_from(value).expect("inline data type name too large"))
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -151,7 +229,7 @@ pub struct StringLike {
 }
 
 impl StringLike {
-    const MAX_STR_LEN: usize = 2_000_000;
+    pub const MAX_STR_LEN: usize = 2_000_000;
 
     pub fn new(size: usize, character_set: Charset) -> Self {
         Self {
@@ -172,19 +250,19 @@ impl StringLike {
     /// a database column would imply a lot of overhead.
     ///
     /// So just let the database do its thing and throw an error.
-    pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
+    pub fn compatible(&self, ty: &ExaDataType) -> bool {
         matches!(
             ty,
-            ExaTypeInfo::Char(_)
-                | ExaTypeInfo::Varchar(_)
-                | ExaTypeInfo::Null
-                | ExaTypeInfo::Date
-                | ExaTypeInfo::Geometry(_)
-                | ExaTypeInfo::Hashtype(_)
-                | ExaTypeInfo::IntervalDayToSecond(_)
-                | ExaTypeInfo::IntervalYearToMonth(_)
-                | ExaTypeInfo::Timestamp
-                | ExaTypeInfo::TimestampWithLocalTimeZone
+            ExaDataType::Char(_)
+                | ExaDataType::Varchar(_)
+                | ExaDataType::Null
+                | ExaDataType::Date
+                | ExaDataType::Geometry(_)
+                | ExaDataType::Hashtype(_)
+                | ExaDataType::IntervalDayToSecond(_)
+                | ExaDataType::IntervalYearToMonth(_)
+                | ExaDataType::Timestamp
+                | ExaDataType::TimestampWithLocalTimeZone
         )
     }
 }
@@ -247,11 +325,11 @@ impl Decimal {
         self.scale
     }
 
-    pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
+    pub fn compatible(&self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaTypeInfo::Decimal(d) => self >= d,
-            ExaTypeInfo::Double => self.scale > 0,
-            ExaTypeInfo::Null => true,
+            ExaDataType::Decimal(d) => self >= d,
+            ExaDataType::Double => self.scale > 0,
+            ExaDataType::Null => true,
             _ => false,
         }
     }
@@ -308,10 +386,10 @@ impl Geometry {
         self.srid
     }
 
-    pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
+    pub fn compatible(&self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaTypeInfo::Geometry(g) => self.srid == g.srid,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
+            ExaDataType::Geometry(g) => self.srid == g.srid,
+            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
     }
@@ -360,8 +438,8 @@ impl IntervalDayToSecond {
     ///
     /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't
     /// even know how to handle values above that
-    const MAX_SUPPORTED_FRACTION: u32 = 3;
-    const MAX_PRECISION: u32 = 9;
+    pub const MAX_SUPPORTED_FRACTION: u32 = 3;
+    pub const MAX_PRECISION: u32 = 9;
 
     pub fn new(precision: u32, fraction: u32) -> Self {
         Self {
@@ -378,10 +456,10 @@ impl IntervalDayToSecond {
         self.fraction
     }
 
-    pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
+    pub fn compatible(&self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaTypeInfo::IntervalDayToSecond(i) => self >= i,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
+            ExaDataType::IntervalDayToSecond(i) => self >= i,
+            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
     }
@@ -412,10 +490,10 @@ impl IntervalYearToMonth {
         self.precision
     }
 
-    pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
+    pub fn compatible(&self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaTypeInfo::IntervalYearToMonth(i) => self >= i,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
+            ExaDataType::IntervalYearToMonth(i) => self >= i,
+            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
     }
@@ -442,10 +520,10 @@ impl Hashtype {
         self.size
     }
 
-    pub fn compatible(&self, ty: &ExaTypeInfo) -> bool {
+    pub fn compatible(&self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaTypeInfo::Hashtype(h) => self.size >= h.size,
-            ExaTypeInfo::Varchar(_) | ExaTypeInfo::Char(_) | ExaTypeInfo::Null => true,
+            ExaDataType::Hashtype(h) => self.size >= h.size,
+            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
     }

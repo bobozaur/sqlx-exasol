@@ -15,7 +15,7 @@ use sqlx_core::{
 use crate::{
     arguments::ExaBuffer,
     database::Exasol,
-    type_info::{ExaTypeInfo, IntervalDayToSecond, IntervalYearToMonth},
+    type_info::{ExaDataType, ExaTypeInfo, IntervalDayToSecond, IntervalYearToMonth},
     value::ExaValueRef,
 };
 
@@ -23,7 +23,7 @@ const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
 impl Type<Exasol> for DateTime<Utc> {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Timestamp
+        ExaDataType::Timestamp.into()
     }
 }
 
@@ -33,7 +33,7 @@ impl Encode<'_, Exasol> for DateTime<Utc> {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Timestamp)
+        Some(ExaDataType::Timestamp.into())
     }
 }
 
@@ -46,7 +46,7 @@ impl<'r> Decode<'r, Exasol> for DateTime<Utc> {
 
 impl Type<Exasol> for DateTime<Local> {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::TimestampWithLocalTimeZone
+        ExaDataType::TimestampWithLocalTimeZone.into()
     }
 }
 
@@ -56,7 +56,7 @@ impl Encode<'_, Exasol> for DateTime<Local> {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::TimestampWithLocalTimeZone)
+        Some(ExaDataType::TimestampWithLocalTimeZone.into())
     }
 }
 
@@ -73,7 +73,7 @@ impl<'r> Decode<'r, Exasol> for DateTime<Local> {
 
 impl Type<Exasol> for NaiveDateTime {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Timestamp
+        ExaDataType::Timestamp.into()
     }
 }
 
@@ -84,7 +84,7 @@ impl Encode<'_, Exasol> for NaiveDateTime {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Timestamp)
+        Some(ExaDataType::Timestamp.into())
     }
 }
 
@@ -99,7 +99,7 @@ impl Decode<'_, Exasol> for NaiveDateTime {
 
 impl Type<Exasol> for chrono::Duration {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::IntervalDayToSecond(Default::default())
+        ExaDataType::IntervalDayToSecond(Default::default()).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -135,9 +135,7 @@ impl Encode<'_, Exasol> for chrono::Duration {
             .map(|v| v + 1)
             .unwrap_or_default();
 
-        Some(ExaTypeInfo::IntervalDayToSecond(IntervalDayToSecond::new(
-            precision, fraction,
-        )))
+        Some(ExaDataType::IntervalDayToSecond(IntervalDayToSecond::new(precision, fraction)).into())
     }
 }
 
@@ -170,7 +168,7 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
 
 impl Type<Exasol> for NaiveDate {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Date
+        ExaDataType::Date.into()
     }
 }
 
@@ -181,7 +179,7 @@ impl Encode<'_, Exasol> for NaiveDate {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Date)
+        Some(ExaDataType::Date.into())
     }
 }
 
@@ -208,7 +206,7 @@ impl Months {
 
 impl Type<Exasol> for Months {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::IntervalYearToMonth(Default::default())
+        ExaDataType::IntervalYearToMonth(Default::default()).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -233,9 +231,7 @@ impl Encode<'_, Exasol> for Months {
             .unwrap_or_default()
             + 1;
 
-        Some(ExaTypeInfo::IntervalYearToMonth(IntervalYearToMonth::new(
-            precision,
-        )))
+        Some(ExaDataType::IntervalYearToMonth(IntervalYearToMonth::new(precision)).into())
     }
 }
 

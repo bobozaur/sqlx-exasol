@@ -7,7 +7,7 @@ use sqlx_core::types::Type;
 
 use crate::arguments::ExaBuffer;
 use crate::database::Exasol;
-use crate::type_info::{Decimal, ExaTypeInfo};
+use crate::type_info::{Decimal, ExaDataType, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
 /// Numbers below this threshold must be serialized/deserialized as integers.
@@ -16,7 +16,7 @@ const MAX_U64_NUMERIC: u64 = 1000000000000000000;
 
 impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_8BIT_PRECISION, 0))
+        ExaDataType::Decimal(Decimal::new(Decimal::MAX_8BIT_PRECISION, 0)).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -32,7 +32,7 @@ impl Encode<'_, Exasol> for u8 {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         let precision = self.checked_ilog10().unwrap_or_default() + 1;
-        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+        Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
     }
 }
 
@@ -44,7 +44,7 @@ impl Decode<'_, Exasol> for u8 {
 
 impl Type<Exasol> for u16 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0))
+        ExaDataType::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0)).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -60,7 +60,7 @@ impl Encode<'_, Exasol> for u16 {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         let precision = self.checked_ilog10().unwrap_or_default() + 1;
-        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+        Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
     }
 }
 
@@ -72,7 +72,7 @@ impl Decode<'_, Exasol> for u16 {
 
 impl Type<Exasol> for u32 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0))
+        ExaDataType::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0)).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -88,7 +88,7 @@ impl Encode<'_, Exasol> for u32 {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         let precision = self.checked_ilog10().unwrap_or_default() + 1;
-        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+        Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
     }
 }
 
@@ -100,7 +100,7 @@ impl Decode<'_, Exasol> for u32 {
 
 impl Type<Exasol> for u64 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Decimal(Decimal::new(Decimal::MAX_64BIT_PRECISION, 0))
+        ExaDataType::Decimal(Decimal::new(Decimal::MAX_64BIT_PRECISION, 0)).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -122,7 +122,7 @@ impl Encode<'_, Exasol> for u64 {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         let precision = self.checked_ilog10().unwrap_or_default() + 1;
-        Some(ExaTypeInfo::Decimal(Decimal::new(precision, 0)))
+        Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
     }
 }
 

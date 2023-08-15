@@ -3,7 +3,7 @@ CREATE TABLE tweet
 (
     id         INTEGER IDENTITY PRIMARY KEY,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    text       VARCHAR(200000) NOT NULL,
+    text       VARCHAR(2000000) NOT NULL,
     owner_id   INTEGER
 );
 
@@ -12,7 +12,7 @@ CREATE TABLE tweet_reply
     id         INTEGER IDENTITY,
     tweet_id   INTEGER NOT NULL CONSTRAINT tweet_id_fk REFERENCES tweet (id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    text       VARCHAR(200000) NOT NULL,
+    text       VARCHAR(2000000) NOT NULL,
     owner_id   INTEGER
 );
 

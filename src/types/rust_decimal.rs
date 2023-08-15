@@ -9,7 +9,7 @@ use sqlx_core::{
 use crate::{
     arguments::ExaBuffer,
     database::Exasol,
-    type_info::{Decimal, ExaTypeInfo},
+    type_info::{Decimal, ExaDataType, ExaTypeInfo},
     value::ExaValueRef,
 };
 
@@ -22,10 +22,9 @@ impl Type<Exasol> for rust_decimal::Decimal {
         // but defining it like this means that we can accommodate
         // almost any DECIMAL value when decoding
         // (considering `rust_decimal` scale limitations)
-        ExaTypeInfo::Decimal(Decimal::new(
-            Decimal::MAX_PRECISION + RUST_DECIMAL_MAX_SCALE,
-            RUST_DECIMAL_MAX_SCALE,
-        ))
+        let precision = Decimal::MAX_PRECISION + RUST_DECIMAL_MAX_SCALE;
+        let decimal = Decimal::new(precision, RUST_DECIMAL_MAX_SCALE);
+        ExaDataType::Decimal(decimal).into()
     }
     fn compatible(ty: &ExaTypeInfo) -> bool {
         <Self as Type<Exasol>>::type_info().compatible(ty)
@@ -46,7 +45,7 @@ impl Encode<'_, Exasol> for rust_decimal::Decimal {
             .checked_ilog10()
             .unwrap_or_default()
             + 1;
-        Some(ExaTypeInfo::Decimal(Decimal::new(precision, scale)))
+        Some(ExaDataType::Decimal(Decimal::new(precision, scale)).into())
     }
 }
 

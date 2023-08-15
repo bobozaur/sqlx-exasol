@@ -16,10 +16,10 @@ async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
     assert_eq!(d.nullable(2), None);
     assert_eq!(d.nullable(3), None);
 
-    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL");
+    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(18, 0)");
     assert_eq!(d.columns()[1].type_info().name(), "TIMESTAMP");
-    assert_eq!(d.columns()[2].type_info().name(), "VARCHAR");
-    assert_eq!(d.columns()[3].type_info().name(), "DECIMAL");
+    assert_eq!(d.columns()[2].type_info().name(), "VARCHAR(2000000) UTF8");
+    assert_eq!(d.columns()[3].type_info().name(), "DECIMAL(18, 0)");
 
     Ok(())
 }
@@ -45,11 +45,11 @@ CREATE TABLE with_hashtype_and_tinyint (
 
     let parameters = d.parameters().unwrap().unwrap_left();
 
-    assert_eq!(parameters[0].name(), "DECIMAL");
-    assert_eq!(parameters[1].name(), "HASHTYPE");
+    assert_eq!(parameters[0].name(), "DECIMAL(18, 0)");
+    assert_eq!(parameters[1].name(), "HASHTYPE(1 BYTE)");
     assert_eq!(parameters[2].name(), "BOOLEAN");
-    assert_eq!(parameters[3].name(), "HASHTYPE");
-    assert_eq!(parameters[4].name(), "DECIMAL");
+    assert_eq!(parameters[3].name(), "HASHTYPE(8 BYTE)");
+    assert_eq!(parameters[4].name(), "DECIMAL(3, 0)");
 
     Ok(())
 }
@@ -87,16 +87,16 @@ CREATE TABLE with_hashtype_and_tinyint (
     assert_eq!(d.nullable(3), None);
     assert_eq!(d.nullable(4), None);
 
-    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL");
-    assert_eq!(d.columns()[1].type_info().name(), "HASHTYPE");
+    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(18, 0)");
+    assert_eq!(d.columns()[1].type_info().name(), "HASHTYPE(1 BYTE)");
     assert_eq!(d.columns()[2].type_info().name(), "BOOLEAN");
-    assert_eq!(d.columns()[3].type_info().name(), "HASHTYPE");
-    assert_eq!(d.columns()[4].type_info().name(), "DECIMAL");
+    assert_eq!(d.columns()[3].type_info().name(), "HASHTYPE(8 BYTE)");
+    assert_eq!(d.columns()[4].type_info().name(), "DECIMAL(3, 0)");
 
     let parameters = d.parameters().unwrap().unwrap_left();
 
-    assert_eq!(parameters[0].name(), "HASHTYPE");
-    assert_eq!(parameters[1].name(), "DECIMAL");
+    assert_eq!(parameters[0].name(), "HASHTYPE(1 BYTE)");
+    assert_eq!(parameters[1].name(), "DECIMAL(3, 0)");
 
     Ok(())
 }
@@ -124,7 +124,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     assert_eq!(d.column(2).type_info().name(), "BOOLEAN");
 
     assert_eq!(d.column(1).name(), "value_hashtype_1");
-    assert_eq!(d.column(1).type_info().name(), "HASHTYPE");
+    assert_eq!(d.column(1).type_info().name(), "HASHTYPE(1 BYTE)");
 
     assert!(<bool as Type<Exasol>>::compatible(d.column(2).type_info()));
 

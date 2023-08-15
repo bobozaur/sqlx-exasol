@@ -8,11 +8,16 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+use crate::{
+    arguments::ExaBuffer,
+    database::Exasol,
+    type_info::{ExaDataType, ExaTypeInfo},
+    value::ExaValueRef,
+};
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Varchar(Default::default())
+        ExaDataType::Varchar(Default::default()).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {

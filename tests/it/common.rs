@@ -234,10 +234,13 @@ async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> anyhow
     assert_eq!(statement.column(2).name(), "text");
     assert_eq!(statement.column(3).name(), "owner_id");
 
-    assert_eq!(statement.column(0).type_info().name(), "DECIMAL");
+    assert_eq!(statement.column(0).type_info().name(), "DECIMAL(18, 0)");
     assert_eq!(statement.column(1).type_info().name(), "TIMESTAMP");
-    assert_eq!(statement.column(2).type_info().name(), "VARCHAR");
-    assert_eq!(statement.column(3).type_info().name(), "DECIMAL");
+    assert_eq!(
+        statement.column(2).type_info().name(),
+        "VARCHAR(2000000) UTF8"
+    );
+    assert_eq!(statement.column(3).type_info().name(), "DECIMAL(18, 0)");
 
     let row = statement.query().bind(tweet_id).fetch_one(&mut *tx).await?;
     let tweet_text: &str = row.try_get("text")?;

@@ -6,11 +6,16 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{arguments::ExaBuffer, database::Exasol, type_info::ExaTypeInfo, value::ExaValueRef};
+use crate::{
+    arguments::ExaBuffer,
+    database::Exasol,
+    type_info::{ExaDataType, ExaTypeInfo},
+    value::ExaValueRef,
+};
 
 impl Type<Exasol> for bool {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Boolean
+        ExaDataType::Boolean.into()
     }
 }
 
@@ -21,7 +26,7 @@ impl Encode<'_, Exasol> for bool {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Boolean)
+        Some(ExaDataType::Boolean.into())
     }
 }
 

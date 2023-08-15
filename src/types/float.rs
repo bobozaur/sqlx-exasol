@@ -7,12 +7,12 @@ use sqlx_core::types::Type;
 
 use crate::arguments::ExaBuffer;
 use crate::database::Exasol;
-use crate::type_info::ExaTypeInfo;
+use crate::type_info::{ExaDataType, ExaTypeInfo};
 use crate::value::ExaValueRef;
 
 impl Type<Exasol> for f32 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Double
+        ExaDataType::Double.into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -35,7 +35,7 @@ impl Encode<'_, Exasol> for f32 {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Double)
+        Some(ExaDataType::Double.into())
     }
 }
 
@@ -51,7 +51,7 @@ impl Decode<'_, Exasol> for f32 {
 
 impl Type<Exasol> for f64 {
     fn type_info() -> ExaTypeInfo {
-        ExaTypeInfo::Double
+        ExaDataType::Double.into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -74,7 +74,7 @@ impl Encode<'_, Exasol> for f64 {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaTypeInfo::Double)
+        Some(ExaDataType::Double.into())
     }
 }
 

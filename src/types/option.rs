@@ -1,21 +1,20 @@
 use sqlx_core::{
-    database::Database,
     encode::{Encode, IsNull},
     types::Type,
 };
 
-use crate::{arguments::ExaBuffer, ExaTypeInfo, Exasol};
+use crate::{arguments::ExaBuffer, type_info::ExaDataType, ExaTypeInfo, Exasol};
 
 impl<T> Encode<'_, Exasol> for Option<T>
 where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     #[inline]
-    fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
+    fn produces(&self) -> Option<ExaTypeInfo> {
         if let Some(v) = self {
             v.produces()
         } else {
-            Some(ExaTypeInfo::Null)
+            Some(ExaDataType::Null.into())
         }
     }
 
