@@ -35,6 +35,10 @@ impl Encode<'_, Exasol> for DateTime<Utc> {
     fn produces(&self) -> Option<ExaTypeInfo> {
         Some(ExaDataType::Timestamp.into())
     }
+
+    fn size_hint(&self) -> usize {
+        TIMESTAMP_FMT.len()
+    }
 }
 
 impl<'r> Decode<'r, Exasol> for DateTime<Utc> {
@@ -57,6 +61,10 @@ impl Encode<'_, Exasol> for DateTime<Local> {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         Some(ExaDataType::TimestampWithLocalTimeZone.into())
+    }
+
+    fn size_hint(&self) -> usize {
+        TIMESTAMP_FMT.len()
     }
 }
 
@@ -85,6 +93,10 @@ impl Encode<'_, Exasol> for NaiveDateTime {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         Some(ExaDataType::Timestamp.into())
+    }
+
+    fn size_hint(&self) -> usize {
+        TIMESTAMP_FMT.len()
     }
 }
 
@@ -141,6 +153,13 @@ impl Encode<'_, Exasol> for chrono::Duration {
 
         Some(ExaDataType::IntervalDayToSecond(IntervalDayToSecond::new(precision, fraction)).into())
     }
+
+    fn size_hint(&self) -> usize {
+        // 1 sign + max days precision + 1 space + 2 hours + 1 column + 2 minutes + 1 column + 2 seconds + 1 dot + max milliseconds fraction
+        1 + IntervalDayToSecond::MAX_PRECISION as usize
+            + 10
+            + IntervalDayToSecond::MAX_SUPPORTED_FRACTION as usize
+    }
 }
 
 impl<'r> Decode<'r, Exasol> for chrono::Duration {
@@ -184,6 +203,11 @@ impl Encode<'_, Exasol> for NaiveDate {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         Some(ExaDataType::Date.into())
+    }
+
+    fn size_hint(&self) -> usize {
+        // 4 year + 1 dash + 2 months + 1 dash + 2 days
+        10
     }
 }
 
@@ -237,6 +261,11 @@ impl Encode<'_, Exasol> for Months {
             + 1;
 
         Some(ExaDataType::IntervalYearToMonth(IntervalYearToMonth::new(precision)).into())
+    }
+
+    fn size_hint(&self) -> usize {
+        // 1 sign + max year precision + 1 dash + 2 months
+        1 + IntervalYearToMonth::MAX_PRECISION as usize + 1 + 2
     }
 }
 

@@ -28,6 +28,11 @@ impl Encode<'_, Exasol> for bool {
     fn produces(&self) -> Option<ExaTypeInfo> {
         Some(ExaDataType::Boolean.into())
     }
+
+    fn size_hint(&self) -> usize {
+        // length of true or false as strings
+        5
+    }
 }
 
 impl Decode<'_, Exasol> for bool {

@@ -29,6 +29,15 @@ impl Encode<'_, Exasol> for Uuid {
         buf.append(self.simple());
         IsNull::No
     }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        Some(ExaDataType::Hashtype(Hashtype::new(16)).into())
+    }
+
+    fn size_hint(&self) -> usize {
+        // 16 bytes encoded as HEX, so double
+        32
+    }
 }
 
 impl Decode<'_, Exasol> for Uuid {

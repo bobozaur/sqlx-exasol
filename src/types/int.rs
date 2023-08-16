@@ -39,6 +39,11 @@ impl Encode<'_, Exasol> for i8 {
         let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
         Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
     }
+
+    fn size_hint(&self) -> usize {
+        // sign + max num digits
+        1 + Decimal::MAX_8BIT_PRECISION as usize
+    }
 }
 
 impl Decode<'_, Exasol> for i8 {
@@ -67,6 +72,11 @@ impl Encode<'_, Exasol> for i16 {
         let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
         Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
     }
+
+    fn size_hint(&self) -> usize {
+        // sign + max num digits
+        1 + Decimal::MAX_16BIT_PRECISION as usize
+    }
 }
 
 impl Decode<'_, Exasol> for i16 {
@@ -94,6 +104,11 @@ impl Encode<'_, Exasol> for i32 {
     fn produces(&self) -> Option<ExaTypeInfo> {
         let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
         Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
+    }
+
+    fn size_hint(&self) -> usize {
+        // sign + max num digits
+        1 + Decimal::MAX_32BIT_PRECISION as usize
     }
 }
 
@@ -128,6 +143,11 @@ impl Encode<'_, Exasol> for i64 {
     fn produces(&self) -> Option<ExaTypeInfo> {
         let precision = self.unsigned_abs().checked_ilog10().unwrap_or_default() + 1;
         Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
+    }
+
+    fn size_hint(&self) -> usize {
+        // sign + max num digits
+        1 + Decimal::MAX_64BIT_PRECISION as usize
     }
 }
 

@@ -41,6 +41,11 @@ impl Encode<'_, Exasol> for &'_ str {
     fn produces(&self) -> Option<ExaTypeInfo> {
         Some(<Self as Type<Exasol>>::type_info())
     }
+
+    fn size_hint(&self) -> usize {
+        // 2 Quotes + length
+        2 + self.len()
+    }
 }
 
 impl<'r> Decode<'r, Exasol> for &'r str {
@@ -66,6 +71,10 @@ impl Encode<'_, Exasol> for String {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         <&str as Encode<Exasol>>::produces(&&**self)
+    }
+
+    fn size_hint(&self) -> usize {
+        <&str as Encode<Exasol>>::size_hint(&&**self)
     }
 }
 
@@ -95,6 +104,10 @@ impl Encode<'_, Exasol> for Cow<'_, str> {
 
     fn produces(&self) -> Option<ExaTypeInfo> {
         <&str as Encode<Exasol>>::produces(&&**self)
+    }
+
+    fn size_hint(&self) -> usize {
+        <&str as Encode<Exasol>>::size_hint(&&**self)
     }
 }
 

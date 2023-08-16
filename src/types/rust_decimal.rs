@@ -47,6 +47,17 @@ impl Encode<'_, Exasol> for rust_decimal::Decimal {
             + 1;
         Some(ExaDataType::Decimal(Decimal::new(precision, scale)).into())
     }
+
+    fn size_hint(&self) -> usize {
+        // 1 sign + max num digits + 1 dot + scale
+        1 + self
+            .mantissa()
+            .unsigned_abs()
+            .checked_ilog10()
+            .unwrap_or_default() as usize
+            + 1
+            + self.scale() as usize
+    }
 }
 
 impl Decode<'_, Exasol> for rust_decimal::Decimal {
