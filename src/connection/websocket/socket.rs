@@ -1,6 +1,7 @@
 use std::{
     fmt::Debug,
     io,
+    net::IpAddr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -13,37 +14,43 @@ use sqlx_core::{
 };
 
 /// Implementor of [`WithSocket`].
-pub struct WithRwSocket;
+pub struct WithExaSocket(pub IpAddr);
 
-impl WithSocket for WithRwSocket {
-    type Output = RwSocket;
+impl WithSocket for WithExaSocket {
+    type Output = ExaSocket;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        RwSocket(Box::new(socket))
+        ExaSocket {
+            ip_addr: self.0,
+            inner: Box::new(socket),
+        }
     }
 }
 
 /// A wrapper so we can implement [`AsyncRead`] and [`AsyncWrite`]
 /// for the underlying TCP socket. The traits are needed by the
 /// [`WebSocketStream`] wrapper.
-pub struct RwSocket(pub(crate) Box<dyn Socket>);
+pub struct ExaSocket {
+    pub ip_addr: IpAddr,
+    pub inner: Box<dyn Socket>,
+}
 
-impl Debug for RwSocket {
+impl Debug for ExaSocket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", stringify!(RwSocket))
     }
 }
 
-impl AsyncRead for RwSocket {
+impl AsyncRead for ExaSocket {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: &mut [u8],
     ) -> Poll<futures_io::Result<usize>> {
         while buf.has_remaining_mut() {
-            match self.0.try_read(&mut buf) {
+            match self.inner.try_read(&mut buf) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    ready!(self.0.poll_read_ready(cx)?);
+                    ready!(self.inner.poll_read_ready(cx)?);
                 }
                 ready => return Poll::Ready(ready),
             }
@@ -53,16 +60,16 @@ impl AsyncRead for RwSocket {
     }
 }
 
-impl AsyncWrite for RwSocket {
+impl AsyncWrite for ExaSocket {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<futures_io::Result<usize>> {
         while !buf.is_empty() {
-            match self.0.try_write(buf) {
+            match self.inner.try_write(buf) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    ready!(self.0.poll_write_ready(cx)?)
+                    ready!(self.inner.poll_write_ready(cx)?)
                 }
                 ready => return Poll::Ready(ready),
             }
@@ -72,10 +79,10 @@ impl AsyncWrite for RwSocket {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
-        self.0.poll_flush(cx)
+        self.inner.poll_flush(cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
-        self.0.poll_shutdown(cx)
+        self.inner.poll_shutdown(cx)
     }
 }

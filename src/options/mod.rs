@@ -5,6 +5,7 @@ mod protocol_version;
 mod serializable;
 mod ssl_mode;
 
+use std::net::IpAddr;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -47,7 +48,7 @@ pub(crate) const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
-    pub(crate) hosts: Vec<String>,
+    pub(crate) hosts: Vec<IpAddr>,
     pub(crate) port: u16,
     pub(crate) ssl_mode: ExaSslMode,
     pub(crate) ssl_ca: Option<CertificateInput>,

@@ -1,31 +1,26 @@
 use sqlx_core::{
-    net::{
-        tls::{self, TlsConfig},
-        Socket, WithSocket,
-    },
+    net::tls::{self, TlsConfig},
     Error as SqlxError,
 };
 
 use crate::{
-    connection::websocket::socket::{RwSocket, WithRwSocket},
+    connection::websocket::socket::{ExaSocket, WithExaSocket},
     options::{ExaConnectOptionsRef, ExaSslMode},
 };
 
-pub(crate) async fn maybe_upgrade<S: Socket>(
-    socket: S,
+pub(crate) async fn maybe_upgrade(
+    socket: ExaSocket,
     host: &str,
     options: ExaConnectOptionsRef<'_>,
-) -> Result<(RwSocket, bool), SqlxError> {
+) -> Result<(ExaSocket, bool), SqlxError> {
     match options.ssl_mode {
         ExaSslMode::Disabled => {
-            let socket = WithRwSocket::with_socket(WithRwSocket, socket);
             return Ok((socket, false));
         }
 
         ExaSslMode::Preferred => {
             if !tls::available() {
                 tracing::debug!("not performing TLS upgrade: TLS support not compiled in");
-                let socket = WithRwSocket::with_socket(WithRwSocket, socket);
                 return Ok((socket, false));
             }
         }
@@ -49,7 +44,10 @@ pub(crate) async fn maybe_upgrade<S: Socket>(
         client_key_path: options.ssl_client_key,
     };
 
-    tls::handshake(socket, tls_config, WithRwSocket)
+    let with_socket = WithExaSocket(socket.ip_addr);
+    let socket = socket.inner;
+
+    tls::handshake(socket, tls_config, with_socket)
         .await
         .map(|s| (s, true))
 }

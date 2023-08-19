@@ -26,13 +26,13 @@ use crate::{
     },
 };
 
-use socket::RwSocket;
+use socket::ExaSocket;
 
 use super::{stream::QueryResultStream, tls};
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub(crate) ws: WebSocketStream<BufReader<RwSocket>>,
+    pub(crate) ws: WebSocketStream<BufReader<ExaSocket>>,
     pub(crate) attributes: ExaAttributes,
     pub(crate) pending_rollback: bool,
 }
@@ -43,10 +43,10 @@ impl ExaWebSocket {
 
     pub(crate) async fn new(
         host: &str,
-        socket: RwSocket,
+        socket: ExaSocket,
         options: ExaConnectOptionsRef<'_>,
     ) -> Result<(Self, SessionInfo), SqlxError> {
-        let (socket, is_tls) = tls::maybe_upgrade(socket.0, host, options.clone()).await?;
+        let (socket, is_tls) = tls::maybe_upgrade(socket, host, options.clone()).await?;
 
         let scheme = match is_tls {
             true => Self::WSS_SCHEME,
@@ -139,11 +139,9 @@ impl ExaWebSocket {
         self.send_cmd_ignore_response(cmd).await
     }
 
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
-    #[allow(clippy::diverging_sub_expression)]
     pub(crate) async fn get_hosts(&mut self) -> Result<Vec<String>, SqlxError> {
-        let _cmd = ExaCommand::new_get_hosts(todo!()).try_into()?;
+        let host_ip = self.ws.get_ref().get_ref().ip_addr;
+        let _cmd = ExaCommand::new_get_hosts(host_ip).try_into()?;
         self.send_and_recv::<Hosts>(_cmd).await.map(From::from)
     }
 

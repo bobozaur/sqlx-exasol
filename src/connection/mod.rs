@@ -1,4 +1,5 @@
 mod executor;
+mod http_transport;
 mod stream;
 mod tls;
 mod websocket;
@@ -24,7 +25,7 @@ use crate::{
 };
 
 use stream::QueryResultStream;
-use websocket::{socket::WithRwSocket, ExaWebSocket};
+use websocket::{socket::WithExaSocket, ExaWebSocket};
 
 #[derive(Debug)]
 pub struct ExaConnection {
@@ -61,7 +62,9 @@ impl ExaConnection {
         let mut ws_result = Err(SqlxError::Configuration("No hosts found".into()));
 
         for host in &opts.hosts {
-            let socket_res = sqlx_core::net::connect_tcp(host, opts.port, WithRwSocket).await;
+            let str_host = host.to_string();
+            let with_socket = WithExaSocket(*host);
+            let socket_res = sqlx_core::net::connect_tcp(&str_host, opts.port, with_socket).await;
 
             let socket = match socket_res {
                 Ok(socket) => socket,
@@ -71,7 +74,7 @@ impl ExaConnection {
                 }
             };
 
-            match ExaWebSocket::new(host, socket, opts.into()).await {
+            match ExaWebSocket::new(&str_host, socket, opts.into()).await {
                 Ok(ws) => {
                     ws_result = Ok(ws);
                     break;

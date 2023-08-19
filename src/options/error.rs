@@ -3,10 +3,12 @@ use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
 // Error returned for configuration failures caused by invalid URL connection strings.
-#[derive(Debug, Clone, ThisError)]
+#[derive(Debug, ThisError)]
 pub enum ExaConfigError {
     #[error("no host provided")]
     MissingHost,
+    #[error("could not resolve hostname")]
+    CouldNotResolve(#[from] std::io::Error),
     #[error("multiple authentication methods provided")]
     MultipleAuthMethods,
     #[error("invalid URL scheme: {0}, expected: {}", URL_SCHEME)]
