@@ -18,7 +18,7 @@ use crate::{
 use arrayvec::ArrayString;
 use async_compression::futures::bufread::GzipDecoder;
 use futures_core::{future::BoxFuture, Future};
-use futures_io::{AsyncRead, ErrorKind};
+use futures_io::{AsyncBufRead, AsyncRead, ErrorKind};
 use futures_util::{
     future::{try_join, try_join_all},
     io::BufReader,
@@ -33,10 +33,10 @@ const TRANSPORT_BUFFER_SIZE: usize = 65536;
 
 /// Export options
 #[derive(Debug)]
-pub struct ExportOptions<'a, F, Fut>
+pub struct ExportOptions<'a, F, Fut, T>
 where
-    F: FnMut() -> Fut,
-    Fut: Future,
+    F: FnMut(ExaExportReader) -> Fut,
+    Fut: Future<Output = Result<T, SqlxError>>,
 {
     num_readers: usize,
     source: QueryOrTable<'a>,
@@ -49,10 +49,10 @@ where
     future_maker: F,
 }
 
-impl<'a, F, Fut> ExportOptions<'a, F, Fut>
+impl<'a, F, Fut, T> ExportOptions<'a, F, Fut, T>
 where
-    F: FnMut() -> Fut,
-    Fut: Future,
+    F: FnMut(ExaExportReader) -> Fut,
+    Fut: Future<Output = Result<T, SqlxError>>,
 {
     pub(crate) fn new(source: QueryOrTable<'a>, future_maker: F) -> Self {
         Self {
@@ -68,7 +68,7 @@ where
         }
     }
 
-    pub async fn execute(&self, con: &mut ExaConnection) -> Result<(), SqlxError> {
+    pub async fn execute(&mut self, con: &mut ExaConnection) -> Result<Vec<T>, SqlxError> {
         let ips = con.ws.get_hosts().await?;
         let port = con.ws.socket_addr().port();
         let is_encrypted = con.attributes().encryption_enabled;
@@ -76,8 +76,13 @@ where
         let (sockets, addrs) = self.start_jobs(ips, port).await?.into_iter().unzip();
         let query = self.make_query(addrs, is_encrypted, is_compressed);
 
-        try_join(con.execute(query.as_str()), Self::continue_jobs(sockets)).await?;
-        Ok(())
+        let (_, output) = try_join(
+            con.execute(query.as_str()),
+            Self::continue_jobs(sockets, &mut self.future_maker),
+        )
+        .await?;
+
+        Ok(output)
     }
 
     /// Sets the number of reader jobs that will be started.
@@ -213,8 +218,43 @@ where
             .map_err(From::from)
     }
 
-    async fn continue_jobs(sockets: Vec<ExaSocket>) -> Result<(), SqlxError> {
-        todo!()
+    async fn continue_jobs(
+        sockets: Vec<ExaSocket>,
+        future_maker: &mut F,
+    ) -> Result<Vec<T>, SqlxError> {
+        let futures_iter = sockets
+            .into_iter()
+            .map(|socket| Self::skip_headers(socket))
+            .collect::<Vec<_>>();
+
+        let exa_readers = try_join_all(futures_iter)
+            .await
+            .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?;
+
+        let futures_iter = exa_readers.into_iter().map(future_maker);
+
+        try_join_all(futures_iter)
+            .await
+            .map_err(|e| ExaDatabaseError::unknown(e.to_string()))
+            .map_err(From::from)
+    }
+
+    async fn skip_headers(socket: ExaSocket) -> Result<ExaExportReader, SqlxError> {
+        let socket = BufReader::new(socket);
+        let mut exa_reader = ExaExportReader {
+            socket,
+            compression: false,
+        };
+
+        let mut line = String::new();
+
+        // Read and ignore HTTP Request headers
+        while line != "\r\n" {
+            line.clear();
+            exa_reader.read_line(&mut line).await?;
+        }
+
+        Ok(exa_reader)
     }
 }
 
@@ -245,7 +285,7 @@ impl ExportReader {
     }
 }
 
-impl<'a> AsyncRead for ExportReader {
+impl AsyncRead for ExportReader {
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -315,11 +355,32 @@ impl<'a> AsyncRead for ExportReader {
     }
 }
 
+#[pin_project]
 #[derive(Debug)]
 pub struct ExaExportReader {
+    #[pin]
     socket: BufReader<ExaSocket>,
     compression: bool,
-    bytes_read: usize,
+}
+
+impl AsyncRead for ExaExportReader {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<IoResult<usize>> {
+        self.project().socket.poll_read(cx, buf)
+    }
+}
+
+impl AsyncBufRead for ExaExportReader {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
+        self.project().socket.poll_fill_buf(cx)
+    }
+
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        self.project().socket.consume(amt)
+    }
 }
 
 #[derive(Debug)]
