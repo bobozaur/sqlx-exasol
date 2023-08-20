@@ -11,7 +11,7 @@ exclude = ["tests/*"]
 categories = ["database"]
 
 [features]
-flate2 = ["dep:flate2"]
+compression = ["dep:async-compression", "dep:flate2"]
 uuid = ["dep:uuid"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
 
@@ -36,12 +36,16 @@ tracing = { version = "0.1.37", features = ["log"] }
 arrayvec = "0.7.4"
 
 # Feature flagged optional dependencies
-flate2 = { version = "1.0.22", optional = true }
 uuid = { version = "1.4.1", features = ["serde"], optional = true }
 chrono = { version = "0.4.26", features = ["serde"], optional = true }
 rust_decimal = { version = "1.30.0", optional = true }
 dotenvy = { version = "0.15.7", optional = true }
 hex = { version = "0.4.3", optional = true }
+flate2 = { version = "1.0.22", optional = true }
+async-compression = { version = "0.4.1", features = [
+    "futures-io",
+    "gzip",
+], optional = true }
 
 [dev-dependencies]
 sqlx = { version = "=0.7.1", features = [

@@ -12,6 +12,17 @@ pub struct ExaDatabaseError {
     code: String,
 }
 
+impl ExaDatabaseError {
+    const UNKNOWN_ERROR_CODE: &str = "00000";
+
+    pub(crate) fn unknown(text: String) -> Self {
+        Self {
+            text,
+            code: Self::UNKNOWN_ERROR_CODE.to_owned(),
+        }
+    }
+}
+
 impl Display for ExaDatabaseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Exasol error {}: {}", self.code, self.text)

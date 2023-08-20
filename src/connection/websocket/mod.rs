@@ -1,10 +1,14 @@
 pub mod socket;
 
-#[cfg(feature = "flate2")]
+#[cfg(feature = "compression")]
 mod compressed;
 mod uncompressed;
 
-use std::{borrow::Cow, fmt::Debug};
+use std::{
+    borrow::Cow,
+    fmt::Debug,
+    net::{IpAddr, SocketAddr},
+};
 
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 
@@ -32,9 +36,9 @@ use super::{stream::QueryResultStream, tls};
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub(crate) ws: WebSocketStream<BufReader<ExaSocket>>,
-    pub(crate) attributes: ExaAttributes,
-    pub(crate) pending_rollback: bool,
+    pub ws: WebSocketStream<BufReader<ExaSocket>>,
+    pub attributes: ExaAttributes,
+    pub pending_rollback: bool,
 }
 
 impl ExaWebSocket {
@@ -46,7 +50,7 @@ impl ExaWebSocket {
         socket: ExaSocket,
         options: ExaConnectOptionsRef<'_>,
     ) -> Result<(Self, SessionInfo), SqlxError> {
-        let (socket, is_tls) = tls::maybe_upgrade(socket, host, options.clone()).await?;
+        let (socket, is_tls) = tls::maybe_upgrade(socket, host, options.tls_opts).await?;
 
         let scheme = match is_tls {
             true => Self::WSS_SCHEME,
@@ -80,8 +84,23 @@ impl ExaWebSocket {
         Ok((ws, session_info))
     }
 
+    pub(crate) async fn login(
+        &mut self,
+        mut opts: ExaConnectOptionsRef<'_>,
+    ) -> Result<SessionInfo, SqlxError> {
+        match &mut opts.login {
+            LoginRef::Credentials(creds) => {
+                self.login_credentials(creds, opts.protocol_version).await?
+            }
+            _ => self.login_token(opts.protocol_version).await?,
+        }
+
+        let cmd = (&opts).try_into()?;
+        self.get_session_info(cmd).await
+    }
+
     /// Executes a [`Command`] and returns a [`QueryResultStream`].
-    pub(crate) async fn get_result_stream<'a, C, F>(
+    pub async fn get_result_stream<'a, C, F>(
         &'a mut self,
         cmd: Command,
         rs_handle: &mut Option<u16>,
@@ -101,56 +120,50 @@ impl ExaWebSocket {
         QueryResultStream::new(self, query_result, future_maker)
     }
 
-    pub(crate) async fn get_query_result(
-        &mut self,
-        cmd: Command,
-    ) -> Result<QueryResult, SqlxError> {
+    pub async fn get_query_result(&mut self, cmd: Command) -> Result<QueryResult, SqlxError> {
         self.send_and_recv::<Results>(cmd).await.map(From::from)
     }
 
-    pub(crate) async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
+    pub async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_close_result(handle).try_into()?;
         self.send_cmd_ignore_response(cmd).await?;
         Ok(())
     }
 
-    pub(crate) async fn create_prepared(
-        &mut self,
-        cmd: Command,
-    ) -> Result<PreparedStatement, SqlxError> {
+    pub async fn create_prepared(&mut self, cmd: Command) -> Result<PreparedStatement, SqlxError> {
         self.send_and_recv(cmd).await
     }
 
-    pub(crate) async fn describe(&mut self, cmd: Command) -> Result<DescribeStatement, SqlxError> {
+    pub async fn describe(&mut self, cmd: Command) -> Result<DescribeStatement, SqlxError> {
         self.send_and_recv(cmd).await
     }
 
-    pub(crate) async fn close_prepared(&mut self, handle: u16) -> Result<(), SqlxError> {
+    pub async fn close_prepared(&mut self, handle: u16) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_close_prepared(handle).try_into()?;
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub(crate) async fn fetch_chunk(&mut self, cmd: Command) -> Result<DataChunk, SqlxError> {
+    pub async fn fetch_chunk(&mut self, cmd: Command) -> Result<DataChunk, SqlxError> {
         self.send_and_recv(cmd).await
     }
 
-    pub(crate) async fn set_attributes(&mut self) -> Result<(), SqlxError> {
+    pub async fn set_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_set_attributes(&self.attributes).try_into()?;
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub(crate) async fn get_hosts(&mut self) -> Result<Vec<String>, SqlxError> {
-        let host_ip = self.ws.get_ref().get_ref().ip_addr;
+    pub async fn get_hosts(&mut self) -> Result<Vec<IpAddr>, SqlxError> {
+        let host_ip = self.socket_addr().ip();
         let _cmd = ExaCommand::new_get_hosts(host_ip).try_into()?;
         self.send_and_recv::<Hosts>(_cmd).await.map(From::from)
     }
 
-    pub(crate) async fn get_attributes(&mut self) -> Result<(), SqlxError> {
+    pub async fn get_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::GetAttributes.try_into()?;
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub(crate) async fn begin(&mut self) -> Result<(), SqlxError> {
+    pub async fn begin(&mut self) -> Result<(), SqlxError> {
         // Exasol does not have nested transactions.
         if self.attributes.open_transaction {
             return Err(ExaProtocolError::TransactionAlreadyOpen)?;
@@ -164,7 +177,7 @@ impl ExaWebSocket {
         Ok(())
     }
 
-    pub(crate) async fn commit(&mut self) -> Result<(), SqlxError> {
+    pub async fn commit(&mut self) -> Result<(), SqlxError> {
         // It's fine to set this before executing the command
         // since we want to commit anyway.
         self.attributes.autocommit = true;
@@ -180,7 +193,7 @@ impl ExaWebSocket {
     }
 
     /// Sends a rollback to the database and awaits the response.
-    pub(crate) async fn rollback(&mut self) -> Result<(), SqlxError> {
+    pub async fn rollback(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
         self.send(cmd).await?;
         self.recv::<Option<IgnoredAny>>().await?;
@@ -193,7 +206,7 @@ impl ExaWebSocket {
         Ok(())
     }
 
-    pub(crate) async fn ping(&mut self) -> Result<(), SqlxError> {
+    pub async fn ping(&mut self) -> Result<(), SqlxError> {
         self.ws
             .send(Message::Ping(Vec::new()))
             .await
@@ -202,17 +215,17 @@ impl ExaWebSocket {
         Ok(())
     }
 
-    pub(crate) async fn disconnect(&mut self) -> Result<(), SqlxError> {
+    pub async fn disconnect(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::Disconnect.try_into()?;
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub(crate) async fn close(&mut self) -> Result<(), SqlxError> {
+    pub async fn close(&mut self) -> Result<(), SqlxError> {
         self.ws.close(None).await.to_sqlx_err()?;
         Ok(())
     }
 
-    pub(crate) async fn get_or_prepare<'a>(
+    pub async fn get_or_prepare<'a>(
         &mut self,
         cache: &'a mut LruCache<String, PreparedStatement>,
         sql: &str,
@@ -239,21 +252,6 @@ impl ExaWebSocket {
         Ok(Cow::Owned(prepared))
     }
 
-    pub(crate) async fn login(
-        &mut self,
-        mut opts: ExaConnectOptionsRef<'_>,
-    ) -> Result<SessionInfo, SqlxError> {
-        match &mut opts.login {
-            LoginRef::Credentials(creds) => {
-                self.login_credentials(creds, opts.protocol_version).await?
-            }
-            _ => self.login_token(opts.protocol_version).await?,
-        }
-
-        let cmd = (&opts).try_into()?;
-        self.get_session_info(cmd).await
-    }
-
     /// Tries to take advance of the batch SQL execution command provided by Exasol.
     /// The command however implies splitting the SQL into an array of statements.
     ///
@@ -263,7 +261,7 @@ impl ExaWebSocket {
     /// If batch execution fails, we will try to separate statements and execute them
     /// one by one.
     #[cfg(feature = "migrate")]
-    pub(crate) async fn execute_batch(&mut self, sql: &str) -> Result<(), SqlxError> {
+    pub async fn execute_batch(&mut self, sql: &str) -> Result<(), SqlxError> {
         // Trim the query end so we don't have an empty statement at the end of the array.
         let sql = sql.trim_end();
         let sql = sql.strip_suffix(';').unwrap_or(sql);
@@ -345,6 +343,10 @@ impl ExaWebSocket {
         result
     }
 
+    pub fn socket_addr(&self) -> SocketAddr {
+        self.ws.get_ref().get_ref().sock_addr
+    }
+
     async fn login_credentials(
         &mut self,
         credentials: &mut CredentialsRef<'_>,
@@ -404,7 +406,7 @@ impl ExaWebSocket {
         #[allow(unreachable_patterns)]
         match self.attributes.compression_enabled {
             false => self.send_uncompressed(cmd).await,
-            #[cfg(feature = "flate2")]
+            #[cfg(feature = "compression")]
             true => self.send_compressed(cmd).await,
             _ => Err(ExaProtocolError::CompressionDisabled)?,
         }
@@ -418,7 +420,7 @@ impl ExaWebSocket {
         #[allow(unreachable_patterns)]
         let response = match self.attributes.compression_enabled {
             false => self.recv_uncompressed().await?,
-            #[cfg(feature = "flate2")]
+            #[cfg(feature = "compression")]
             true => self.recv_compressed().await?,
             _ => Err(ExaProtocolError::CompressionDisabled)?,
         };

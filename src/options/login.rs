@@ -52,6 +52,9 @@ impl RefreshToken {
 
 /// Serialization helper used particularly in the event
 /// that we need to encrypt the password in a [`Login::Credentials`] login.
+///
+/// Because of that, the passowrd cannot be borrowed (since we'll mutate it),
+/// hence no [`Copy`] derive.
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
 pub enum LoginRef<'a> {

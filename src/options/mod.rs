@@ -216,15 +216,14 @@ impl ConnectOptions for ExaConnectOptions {
     }
 }
 
+/// Serialization helper that borrows as much data as possible.
+/// This type cannot be [`Copy`] because of [`LoginRef`].
 #[derive(Debug, Clone, Serialize)]
 #[serde(into = "SerializableConOpts")]
 pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) login: LoginRef<'a>,
     pub(crate) protocol_version: ProtocolVersion,
-    pub(crate) ssl_mode: ExaSslMode,
-    pub(crate) ssl_ca: Option<&'a CertificateInput>,
-    pub(crate) ssl_client_cert: Option<&'a CertificateInput>,
-    pub(crate) ssl_client_key: Option<&'a CertificateInput>,
+    pub(crate) tls_opts: ExaTlsOptionsRef<'a>,
     pub(crate) schema: Option<&'a str>,
     pub(crate) fetch_size: usize,
     pub(crate) query_timeout: u64,
@@ -235,13 +234,17 @@ pub(crate) struct ExaConnectOptionsRef<'a> {
 
 impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
     fn from(value: &'a ExaConnectOptions) -> Self {
-        Self {
-            login: LoginRef::from(&value.login),
-            protocol_version: value.protocol_version,
+        let tls_opts = ExaTlsOptionsRef {
             ssl_mode: value.ssl_mode,
             ssl_ca: value.ssl_ca.as_ref(),
             ssl_client_cert: value.ssl_client_cert.as_ref(),
             ssl_client_key: value.ssl_client_key.as_ref(),
+        };
+
+        Self {
+            login: LoginRef::from(&value.login),
+            protocol_version: value.protocol_version,
+            tls_opts,
             schema: value.schema.as_deref(),
             fetch_size: value.fetch_size,
             query_timeout: value.query_timeout,
@@ -252,6 +255,14 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExaTlsOptionsRef<'a> {
+    pub(crate) ssl_mode: ExaSslMode,
+    pub(crate) ssl_ca: Option<&'a CertificateInput>,
+    pub(crate) ssl_client_cert: Option<&'a CertificateInput>,
+    pub(crate) ssl_client_key: Option<&'a CertificateInput>,
+}
+
 #[cfg(test)]
 #[allow(unused_imports)]
 mod tests {
@@ -260,7 +271,7 @@ mod tests {
 
     use crate::{ExaConnectOptions, Exasol};
 
-    #[cfg(feature = "flate2")]
+    #[cfg(feature = "compression")]
     #[sqlx::test]
     async fn test_compression_works(
         pool_opts: PoolOptions<Exasol>,
@@ -287,7 +298,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(not(feature = "flate2"))]
+    #[cfg(not(feature = "compression"))]
     #[sqlx::test]
     async fn test_compression_no_flag(
         pool_opts: PoolOptions<Exasol>,

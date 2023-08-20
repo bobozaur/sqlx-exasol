@@ -4,7 +4,7 @@ mod stream;
 mod tls;
 mod websocket;
 
-use std::iter;
+use std::{iter, net::SocketAddr};
 
 use lru::LruCache;
 use sqlx_core::{
@@ -37,6 +37,10 @@ pub struct ExaConnection {
 }
 
 impl ExaConnection {
+    pub fn socket_addr(&self) -> SocketAddr {
+        self.ws.socket_addr()
+    }
+
     pub fn attributes(&self) -> &ExaAttributes {
         &self.ws.attributes
     }
@@ -63,7 +67,8 @@ impl ExaConnection {
 
         for host in &opts.hosts {
             let str_host = host.to_string();
-            let with_socket = WithExaSocket(*host);
+            let socket_addr = SocketAddr::new(*host, opts.port);
+            let with_socket = WithExaSocket(socket_addr);
             let socket_res = sqlx_core::net::connect_tcp(&str_host, opts.port, with_socket).await;
 
             let socket = match socket_res {

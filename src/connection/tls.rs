@@ -5,13 +5,13 @@ use sqlx_core::{
 
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
-    options::{ExaConnectOptionsRef, ExaSslMode},
+    options::{ExaSslMode, ExaTlsOptionsRef},
 };
 
 pub(crate) async fn maybe_upgrade(
     socket: ExaSocket,
     host: &str,
-    options: ExaConnectOptionsRef<'_>,
+    options: ExaTlsOptionsRef<'_>,
 ) -> Result<(ExaSocket, bool), SqlxError> {
     match options.ssl_mode {
         ExaSslMode::Disabled => {
@@ -44,7 +44,7 @@ pub(crate) async fn maybe_upgrade(
         client_key_path: options.ssl_client_key,
     };
 
-    let with_socket = WithExaSocket(socket.ip_addr);
+    let with_socket = WithExaSocket(socket.sock_addr);
     let socket = socket.inner;
 
     tls::handshake(socket, tls_config, with_socket)

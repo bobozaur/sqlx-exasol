@@ -13,7 +13,7 @@ Features available:
  - Single and batch query execution
  - Prepared statements
  - WSS support through native-tls and rustls
- - Compression support through flate2
+ - Compression support through `flate2` and `async_compression`
  - Row deserialization into Rust types
  - Positional parameter binding
  - Named parameter binding
@@ -25,7 +25,7 @@ Features available:
 * `native-tls-vendored` - (disabled by default) enables `tungstenite` WSS encryption support through native-tls-vendored
 * `rustls-tls-webpki-roots` - (disabled by default) enables `tungstenite` WSS encryption support through rustls-tls-webpki-roots
 * `rustls-tls-native-roots` - (disabled by default) enables `tungstenite` WSS encryption support through rustls-tls-native-roots
-* `flate2` - (disabled by default) enables compression support
+* `compression` - (disabled by default) enables compression support
 
 
 ## License

@@ -1,7 +1,7 @@
 use std::{
     fmt::Debug,
     io,
-    net::IpAddr,
+    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -14,14 +14,14 @@ use sqlx_core::{
 };
 
 /// Implementor of [`WithSocket`].
-pub struct WithExaSocket(pub IpAddr);
+pub struct WithExaSocket(pub SocketAddr);
 
 impl WithSocket for WithExaSocket {
     type Output = ExaSocket;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         ExaSocket {
-            ip_addr: self.0,
+            sock_addr: self.0,
             inner: Box::new(socket),
         }
     }
@@ -31,7 +31,7 @@ impl WithSocket for WithExaSocket {
 /// for the underlying TCP socket. The traits are needed by the
 /// [`WebSocketStream`] wrapper.
 pub struct ExaSocket {
-    pub ip_addr: IpAddr,
+    pub sock_addr: SocketAddr,
     pub inner: Box<dyn Socket>,
 }
 

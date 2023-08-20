@@ -24,7 +24,7 @@ pub enum ExaProtocolError {
     DatatypeMismatch(String, String),
     #[error("server closed connection due to: {0}")]
     WebsocketClosed(String),
-    #[error("feature 'flate2' must be enabled to use compression")]
+    #[error("feature 'compression' must be enabled to use compression")]
     CompressionDisabled,
 }
 
