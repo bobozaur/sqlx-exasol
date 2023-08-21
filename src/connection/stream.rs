@@ -57,18 +57,17 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<<Self as Stream>::Item>> {
-        let mut this = self.as_mut().project();
-        let state = this.state.as_mut().project();
-
-        match state {
-            ResultStreamStateProj::Stream(stream) => stream.poll_next(cx),
-            ResultStreamStateProj::Initial(fut) => {
-                let stream = ready!(fut.poll(cx)?);
-                this.state.set(ResultStreamState::Stream(stream));
-
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
+        loop {
+            let mut this = self.as_mut().project();
+            let state = this.state.as_mut().project();
+            return match state {
+                ResultStreamStateProj::Stream(stream) => stream.poll_next(cx),
+                ResultStreamStateProj::Initial(fut) => {
+                    let stream = ready!(fut.poll(cx)?);
+                    this.state.set(ResultStreamState::Stream(stream));
+                    continue;
+                }
+            };
         }
     }
 }
@@ -251,20 +250,18 @@ where
     type Item = Result<ExaRow, SqlxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.as_mut().project();
+        loop {
+            let this = self.as_mut().project();
 
-        if let Some(row) = this.chunk_iter.next() {
-            return Poll::Ready(Some(Ok(row)));
+            if let Some(row) = this.chunk_iter.next() {
+                return Poll::Ready(Some(Ok(row)));
+            }
+
+            match ready!(this.chunk_stream.poll_next(cx)?) {
+                Some(chunk) => this.chunk_iter.renew(chunk),
+                None => return Poll::Ready(None),
+            };
         }
-
-        let chunk = match ready!(this.chunk_stream.poll_next(cx)?) {
-            Some(chunk) => chunk,
-            None => return Poll::Ready(None),
-        };
-
-        this.chunk_iter.renew(chunk);
-        cx.waker().wake_by_ref();
-        Poll::Pending
     }
 }
 

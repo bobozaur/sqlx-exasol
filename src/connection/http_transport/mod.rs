@@ -1,7 +1,7 @@
 mod export;
 mod import;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use arrayvec::ArrayString;
 use futures_util::{AsyncReadExt, AsyncWriteExt};
@@ -71,13 +71,6 @@ async fn upgrade_worker() {
 /// Parses response to return the internal Exasol address to be used in query.
 fn parse_address(buf: [u8; 24]) -> Result<SocketAddr, BoxDynError> {
     let port = u16::from_le_bytes([buf[4], buf[5]]);
-
-    let mut str_addr = ArrayString::<15>::new_const();
-    buf[8..]
-        .iter()
-        .take_while(|b| **b != b'\0')
-        .for_each(|b| str_addr.push(char::from(*b)));
-
-    let ip = str_addr.as_str().parse()?;
+    let ip = IpAddr::from([buf[8], buf[10], buf[12], buf[14]]);
     Ok(SocketAddr::new(ip, port))
 }

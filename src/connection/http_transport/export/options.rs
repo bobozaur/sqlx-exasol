@@ -1,7 +1,6 @@
 use std::{
-    cmp,
     fmt::Debug,
-    io::{Error as IoError, Result as IoResult},
+    io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
     net::{IpAddr, SocketAddr},
     pin::Pin,
     task::{ready, Context, Poll},
@@ -9,7 +8,7 @@ use std::{
 
 use crate::{
     connection::{
-        http_transport::{make_worker, RowSeparator},
+        http_transport::{make_worker, RowSeparator, SUCCESS_HEADERS},
         websocket::socket::ExaSocket,
     },
     ExaConnection, ExaDatabaseError,
@@ -18,7 +17,7 @@ use crate::{
 use arrayvec::ArrayString;
 use async_compression::futures::bufread::GzipDecoder;
 use futures_core::{future::BoxFuture, Future};
-use futures_io::{AsyncBufRead, AsyncRead, ErrorKind};
+use futures_io::{AsyncBufRead, AsyncRead, AsyncWrite, ErrorKind};
 use futures_util::{
     future::{try_join, try_join_all},
     io::BufReader,
@@ -28,14 +27,14 @@ use pin_project::pin_project;
 use sqlx_core::executor::Executor;
 use sqlx_core::Error as SqlxError;
 
-const CRLF_DELIMITER: &[u8; 2] = b"\r\n";
+const CRLF_DELIMITER: &str = "\r\n";
 const TRANSPORT_BUFFER_SIZE: usize = 65536;
 
 /// Export options
 #[derive(Debug)]
 pub struct ExportOptions<'a, F, Fut, T>
 where
-    F: FnMut(ExaExportReader) -> Fut,
+    F: FnMut(ExaExport) -> Fut,
     Fut: Future<Output = Result<T, SqlxError>>,
 {
     num_readers: usize,
@@ -51,7 +50,7 @@ where
 
 impl<'a, F, Fut, T> ExportOptions<'a, F, Fut, T>
 where
-    F: FnMut(ExaExportReader) -> Fut,
+    F: FnMut(ExaExport) -> Fut,
     Fut: Future<Output = Result<T, SqlxError>>,
 {
     pub(crate) fn new(source: QueryOrTable<'a>, future_maker: F) -> Self {
@@ -224,7 +223,7 @@ where
     ) -> Result<Vec<T>, SqlxError> {
         let futures_iter = sockets
             .into_iter()
-            .map(|socket| Self::skip_headers(socket))
+            .map(|socket| Self::skip_headers(ExportReader::new(socket)))
             .collect::<Vec<_>>();
 
         let exa_readers = try_join_all(futures_iter)
@@ -239,9 +238,8 @@ where
             .map_err(From::from)
     }
 
-    async fn skip_headers(socket: ExaSocket) -> Result<ExaExportReader, SqlxError> {
-        let socket = BufReader::new(socket);
-        let mut exa_reader = ExaExportReader {
+    async fn skip_headers(socket: ExportReader) -> Result<ExaExport, SqlxError> {
+        let mut exa_reader = ExaExport {
             socket,
             compression: false,
         };
@@ -266,20 +264,31 @@ pub enum QueryOrTable<'a> {
 
 #[pin_project]
 #[derive(Debug)]
-pub struct ExportReader {
+struct ExportReader {
+    #[pin]
     socket: BufReader<ExaSocket>,
-    state: ChunkReadingState,
+    state: ReaderState,
+    chunk_size: usize,
 }
 
 impl ExportReader {
-    fn read_byte(socket: &mut BufReader<ExaSocket>, cx: &mut Context) -> Poll<IoResult<u8>> {
+    fn new(socket: ExaSocket) -> Self {
+        Self {
+            socket: BufReader::new(socket),
+            state: ReaderState::ReadSize,
+            chunk_size: 0,
+        }
+    }
+
+    fn poll_read_byte(
+        socket: Pin<&mut BufReader<ExaSocket>>,
+        cx: &mut Context,
+    ) -> Poll<IoResult<u8>> {
         let mut buffer = [0; 1];
-        let n = ready!(Pin::new(socket).poll_read(cx, &mut buffer))?;
+        let n = ready!(socket.poll_read(cx, &mut buffer))?;
         if n != 1 {
-            return Poll::Ready(Err(IoError::new(
-                ErrorKind::InvalidInput,
-                "cannot read chunk size",
-            )));
+            let err = IoError::new(ErrorKind::InvalidInput, "cannot read chunk size");
+            return Poll::Ready(Err(err));
         }
         Poll::Ready(Ok(buffer[0]))
     }
@@ -287,93 +296,83 @@ impl ExportReader {
 
 impl AsyncRead for ExportReader {
     fn poll_read(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<futures_io::Result<usize>> {
-        let this = self.project();
-        let (state, output) = match this.state {
-            ChunkReadingState::Size(s) => {
-                let byte = ready!(Self::read_byte(this.socket, cx))?;
-                let char = byte as char;
-                s.push(char);
+        loop {
+            let this = self.as_mut().project();
 
-                let state = if s.ends_with("\r\n") {
-                    let chunk_size =
-                        usize::from_str_radix(s.as_str().trim_end(), 16).map_err(|_| {
-                            IoError::new(ErrorKind::InvalidInput, "cannot read chunk size")
-                        })?;
+            match this.state {
+                ReaderState::ReadSize => {
+                    let byte = ready!(Self::poll_read_byte(this.socket, cx))?;
+                    let digit = match byte {
+                        b'0'..=b'9' => byte - b'0',
+                        b'a'..=b'f' => 10 + byte - b'a',
+                        b'A'..=b'F' => 10 + byte - b'A',
+                        b'\r' => {
+                            *this.state = ReaderState::ExpectLF;
+                            continue;
+                        }
+                        _ => {
+                            return chunk_size_error(byte);
+                        }
+                    };
 
-                    Some(ChunkReadingState::Data(chunk_size))
-                } else {
-                    None
-                };
+                    *this.chunk_size = this
+                        .chunk_size
+                        .checked_mul(16)
+                        .ok_or_else(overflow)?
+                        .checked_add(digit.into())
+                        .ok_or_else(overflow)?;
 
-                (state, Poll::Pending)
-            }
-            ChunkReadingState::Data(remaining) => {
-                if *remaining > 0 {
-                    let num_bytes = ready!(Pin::new(this.socket).poll_read(cx, buf))?;
-                    *remaining -= num_bytes;
-                    (None, Poll::Ready(Ok(num_bytes)))
-                } else {
-                    (Some(ChunkReadingState::CR), Poll::Pending)
+                    if *this.chunk_size == 0 {
+                        *this.state = ReaderState::WriteResponse(0);
+                    }
                 }
-            }
-            ChunkReadingState::CR => {
-                let byte = ready!(Self::read_byte(this.socket, cx))?;
-
-                if byte != b'\r' {
-                    Err(IoError::new(ErrorKind::InvalidInput, "problem"))?;
+                ReaderState::ReadData => {
+                    if *this.chunk_size > 0 {
+                        let num_bytes = ready!(this.socket.poll_read(cx, buf))?;
+                        *this.chunk_size -= num_bytes;
+                        return Poll::Ready(Ok(num_bytes));
+                    } else {
+                        *this.state = ReaderState::ReadSize;
+                    }
                 }
+                ReaderState::ExpectLF => {
+                    let byte = ready!(Self::poll_read_byte(this.socket, cx))?;
 
-                (Some(ChunkReadingState::LF), Poll::Pending)
-            }
-            ChunkReadingState::LF => {
-                let byte = ready!(Self::read_byte(this.socket, cx))?;
+                    if byte != b'\n' {
+                        return chunk_size_error(byte);
+                    }
 
-                if byte != b'\n' {
-                    Err(IoError::new(ErrorKind::InvalidInput, "problem"))?;
+                    *this.state = ReaderState::ReadData;
                 }
+                ReaderState::WriteResponse(start) => {
+                    // EOF is reached after writing the HTTP response.
+                    if *start >= SUCCESS_HEADERS.len() - 1 {
+                        return Poll::Ready(Ok(0));
+                    }
 
-                (
-                    Some(ChunkReadingState::Size(ArrayString::new_const())),
-                    Poll::Pending,
-                )
-            }
-        };
-
-        if let Some(state) = state {
-            *this.state = state;
+                    let buf = &SUCCESS_HEADERS[*start..];
+                    let num_bytes = ready!(this.socket.poll_write(cx, buf))?;
+                    *start += num_bytes;
+                }
+            };
         }
-
-        if output.is_pending() {
-            cx.waker().wake_by_ref();
-        }
-
-        output
     }
 }
 
-#[pin_project]
-#[derive(Debug)]
-pub struct ExaExportReader {
-    #[pin]
-    socket: BufReader<ExaSocket>,
-    compression: bool,
+fn chunk_size_error<T>(byte: u8) -> Poll<IoResult<T>> {
+    let msg = format!("expected HEX or CR byte, found {byte}");
+    Poll::Ready(Err(IoError::new(IoErrorKind::InvalidData, msg)))
 }
 
-impl AsyncRead for ExaExportReader {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<IoResult<usize>> {
-        self.project().socket.poll_read(cx, buf)
-    }
+fn overflow() -> IoError {
+    IoError::new(IoErrorKind::InvalidData, "Chunk size overflowed 64 bits")
 }
 
-impl AsyncBufRead for ExaExportReader {
+impl AsyncBufRead for ExportReader {
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
         self.project().socket.poll_fill_buf(cx)
     }
@@ -383,10 +382,38 @@ impl AsyncBufRead for ExaExportReader {
     }
 }
 
+#[pin_project]
 #[derive(Debug)]
-enum ChunkReadingState {
-    Size(ArrayString<24>),
-    Data(usize),
-    CR,
-    LF,
+pub struct ExaExport {
+    #[pin]
+    socket: ExportReader,
+    compression: bool,
+}
+
+impl AsyncRead for ExaExport {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<IoResult<usize>> {
+        self.project().socket.poll_read(cx, buf)
+    }
+}
+
+impl AsyncBufRead for ExaExport {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
+        self.project().socket.poll_fill_buf(cx)
+    }
+
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        self.project().socket.consume(amt)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+enum ReaderState {
+    ReadSize,
+    ReadData,
+    ExpectLF,
+    WriteResponse(usize),
 }
