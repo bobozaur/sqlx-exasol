@@ -1,5 +1,6 @@
 mod executor;
 mod http_transport;
+mod macros;
 mod stream;
 mod tls;
 mod websocket;
@@ -13,7 +14,7 @@ use sqlx_core::{
     Error as SqlxError,
 };
 
-use futures_util::Future;
+use futures_util::{Future, TryStreamExt};
 
 use crate::{
     arguments::ExaArguments,
@@ -22,10 +23,17 @@ use crate::{
     error::ExaProtocolError,
     options::ExaConnectOptions,
     responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
+    ExaQueryResult,
 };
 
 use stream::QueryResultStream;
 use websocket::{socket::WithExaSocket, ExaWebSocket};
+
+use self::macros::fetcher_closure;
+
+pub use http_transport::{
+    ExaExport, ExaImport, ExportOptions, ImportOptions, QueryOrTable, RowSeparator, Trim,
+};
 
 #[derive(Debug)]
 pub struct ExaConnection {
@@ -100,6 +108,18 @@ impl ExaConnection {
         };
 
         Ok(con)
+    }
+
+    #[allow(clippy::needless_lifetimes)]
+    pub(crate) async fn execute_string_query<'a>(
+        &'a mut self,
+        query: String,
+    ) -> Result<ExaQueryResult, SqlxError> {
+        self.execute_plain(&query, fetcher_closure!('a))
+            .await?
+            .try_filter_map(|step| async move { Ok(step.map_left(Some).left_or(None)) })
+            .try_collect()
+            .await
     }
 
     async fn execute_query<'a, C, F>(
