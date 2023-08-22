@@ -1,5 +1,6 @@
 use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Error as WsError;
+use rcgen::RcgenError;
 use rsa::errors::Error as RsaError;
 use serde_json::error::Error as JsonError;
 use sqlx_core::Error as SqlxError;
@@ -74,6 +75,12 @@ impl<T> ExaResultExt<T> for Result<T, WsError> {
 }
 
 impl<T> ExaResultExt<T> for Result<T, RsaError> {
+    fn to_sqlx_err(self) -> Result<T, SqlxError> {
+        self.map_err(|e| SqlxError::Protocol(e.to_string()))
+    }
+}
+
+impl<T> ExaResultExt<T> for Result<T, RcgenError> {
     fn to_sqlx_err(self) -> Result<T, SqlxError> {
         self.map_err(|e| SqlxError::Protocol(e.to_string()))
     }

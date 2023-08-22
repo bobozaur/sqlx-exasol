@@ -10,9 +10,14 @@ use std::task::{ready, Context, Poll};
 use futures_io::AsyncRead;
 use futures_util::future::try_join_all;
 use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt};
+use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
+use rsa::pkcs8::{EncodePrivateKey, LineEnding};
+use rsa::RsaPrivateKey;
 use sqlx_core::error::{BoxDynError, Error as SqlxError};
+use sqlx_core::net::tls::CertificateInput;
 
 use crate::connection::{tls, websocket::socket::WithExaSocket};
+use crate::error::ExaResultExt;
 use crate::options::ExaTlsOptionsRef;
 use crate::{ExaDatabaseError, ExaSslMode};
 
@@ -32,6 +37,12 @@ const SUCCESS_HEADERS: &[u8; 66] = b"HTTP/1.1 200 OK\r\n\
                                      Connection: close\r\n\
                                      Transfer-Encoding: chunked\r\n\
                                      \r\n";
+
+const GZ_FILE_EXT: &str = "gz";
+const CSV_FILE_EXT: &str = "csv";
+
+const HTTP_PREFIX: &str = "http";
+const HTTPS_PREFIX: &str = "https";
 
 #[derive(Debug, Clone, Copy)]
 pub enum RowSeparator {
@@ -89,11 +100,17 @@ async fn start_jobs(
         sockets.push(socket);
     }
 
+    let cert = make_cert()?;
+    let tls_cert = cert.serialize_pem().to_sqlx_err()?;
+    let tls_cert = CertificateInput::Inline(tls_cert.into_bytes());
+    let key = cert.serialize_private_key_pem();
+    let key = CertificateInput::Inline(key.into_bytes());
+
     let tls_opts = ExaTlsOptionsRef {
         ssl_mode: ExaSslMode::Preferred,
         ssl_ca: None,
-        ssl_client_cert: None,
-        ssl_client_key: None,
+        ssl_client_cert: Some(&tls_cert),
+        ssl_client_key: Some(&key),
     };
 
     let sockets = if encrypted {
@@ -145,17 +162,35 @@ fn append_filenames(
     is_compressed: bool,
 ) {
     let prefix = match is_encrypted {
-        false => "http",
-        true => "https",
+        false => HTTP_PREFIX,
+        true => HTTPS_PREFIX,
     };
 
     let ext = match is_compressed {
-        false => "csv",
-        true => "gz",
+        false => CSV_FILE_EXT,
+        true => GZ_FILE_EXT,
     };
 
     for (idx, addr) in addrs.into_iter().enumerate() {
         let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'", prefix, addr, idx, ext);
         query.push_str(&filename);
     }
+}
+
+fn make_cert() -> Result<Certificate, SqlxError> {
+    let mut params = CertificateParams::default();
+    params.alg = &PKCS_RSA_SHA256;
+    params.key_pair = Some(make_rsa_keypair()?);
+    Certificate::from_params(params).to_sqlx_err()
+}
+
+fn make_rsa_keypair() -> Result<KeyPair, SqlxError> {
+    let mut rng = rand::thread_rng();
+    let bits = 2048;
+    let private_key = RsaPrivateKey::new(&mut rng, bits).to_sqlx_err()?;
+    let key = private_key
+        .to_pkcs8_pem(LineEnding::CRLF)
+        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+
+    KeyPair::from_pem(&key).to_sqlx_err()
 }
