@@ -1,6 +1,6 @@
 use std::{
     fmt::Debug,
-    io,
+    io::{ErrorKind as IoErrorKind, Result as IoResult},
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
@@ -46,10 +46,10 @@ impl AsyncRead for ExaSocket {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: &mut [u8],
-    ) -> Poll<futures_io::Result<usize>> {
+    ) -> Poll<IoResult<usize>> {
         while buf.has_remaining_mut() {
             match self.inner.try_read(&mut buf) {
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                Err(e) if e.kind() == IoErrorKind::WouldBlock => {
                     ready!(self.inner.poll_read_ready(cx)?);
                 }
                 ready => return Poll::Ready(ready),
@@ -65,10 +65,10 @@ impl AsyncWrite for ExaSocket {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<futures_io::Result<usize>> {
+    ) -> Poll<IoResult<usize>> {
         while !buf.is_empty() {
             match self.inner.try_write(buf) {
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                Err(e) if e.kind() == IoErrorKind::WouldBlock => {
                     ready!(self.inner.poll_write_ready(cx)?)
                 }
                 ready => return Poll::Ready(ready),
@@ -78,11 +78,11 @@ impl AsyncWrite for ExaSocket {
         Poll::Ready(Ok(0))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         self.inner.poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<futures_io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         self.inner.poll_shutdown(cx)
     }
 }

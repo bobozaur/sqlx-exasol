@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::connection::{
-    http_transport::{poll_ignore_headers, poll_read_byte, SUCCESS_HEADERS},
+    http_transport::{poll_ignore_headers, poll_read_byte, poll_send_static},
     websocket::socket::ExaSocket,
 };
 
@@ -26,6 +26,11 @@ pub struct ExportReader {
 }
 
 impl ExportReader {
+    /// Packet that tells Exasol the transport was successfull.
+    const RESPONSE: &[u8; 38] = b"HTTP/1.1 200 OK\r\n\
+                                  Connection: close\r\n\
+                                  \r\n";
+
     pub fn new(socket: ExaSocket) -> Self {
         Self {
             socket: BufReader::new(socket),
@@ -69,7 +74,7 @@ impl AsyncRead for ExportReader {
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let this = self.as_mut().project();
+            let mut this = self.as_mut().project();
 
             match this.state {
                 ReaderState::SkipHeaders(buf) => {
@@ -140,18 +145,17 @@ impl AsyncRead for ExportReader {
                     }
                 }
 
-                ReaderState::WriteResponse(start) => {
+                ReaderState::WriteResponse(offset) => {
                     // EOF is reached after writing the HTTP response.
-                    // But we need to wait for the query to finish execution,
-                    // thus ensuring that the server has read the response.
-                    if *start >= SUCCESS_HEADERS.len() {
+                    let socket = this.socket.as_mut();
+                    let done = ready!(poll_send_static(socket, cx, Self::RESPONSE, offset))?;
+
+                    if done {
+                        // We flush to ensure that all data has reached Exasol
+                        // and the reader can finish or even be dropped.
                         ready!(this.socket.poll_flush(cx))?;
                         return Poll::Ready(Ok(0));
                     }
-
-                    let buf = &SUCCESS_HEADERS[*start..];
-                    let num_bytes = ready!(this.socket.poll_write(cx, buf))?;
-                    *start += num_bytes;
                 }
             };
         }

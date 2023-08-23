@@ -1,15 +1,17 @@
+use arrayvec::ArrayString;
 use futures_io::AsyncWrite;
-use futures_util::{io::BufReader, AsyncWriteExt};
+use futures_util::io::BufReader;
 use pin_project::pin_project;
 
 use std::{
+    fmt::Write,
     io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
 use crate::connection::{
-    http_transport::{poll_read_byte, DOUBLE_CR_LF, SUCCESS_HEADERS},
+    http_transport::{poll_ignore_headers, poll_send_static},
     websocket::socket::ExaSocket,
 };
 
@@ -20,6 +22,7 @@ pub struct ImportWriter {
     socket: BufReader<ExaSocket>,
     buf: Vec<u8>,
     buf_start: Option<usize>,
+    buf_patched: bool,
     state: WriterState,
 }
 
@@ -28,7 +31,13 @@ impl ImportWriter {
     // In HEX, that's 8 bytes -> 16 digits.
     // We also reserve two additional bytes for CRLF.
     const CHUNK_SIZE_RESERVED: usize = 18;
-    const END_PACKET: &[u8; 5] = b"0\r\n\r\n";
+    const EMPTY_CHUNK: &[u8; 5] = b"0\r\n\r\n";
+
+    /// HTTP Response for the IMPORT request Exasol sends.
+    const RESPONSE: &[u8; 66] = b"HTTP/1.1 200 OK\r\n\
+                                  Connection: close\r\n\
+                                  Transfer-Encoding: chunked\r\n\
+                                  \r\n";
 
     pub fn new(socket: ExaSocket, buffer_size: usize) -> Self {
         let buffer_size = Self::CHUNK_SIZE_RESERVED + buffer_size + 2;
@@ -43,21 +52,21 @@ impl ImportWriter {
             socket: BufReader::new(socket),
             buf,
             buf_start: None,
+            buf_patched: false,
             state: WriterState::SkipHeaders([0; 4]),
         }
     }
 
-    /// Writes the final empty chunk to the chunked transfer stream.
-    pub async fn finish(&mut self) -> IoResult<()> {
-        self.flush().await?;
-        self.socket.write_all(Self::END_PACKET).await
-    }
-
     /// Flushes the data in the buffer to the underlying writer.
-    fn poll_flush_buffer(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush_buffer(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         // Do not write an empty chunk as that would terminate the stream.
         if self.is_empty() {
             return Poll::Ready(Ok(()));
+        }
+
+        // Must only happen once per chunk.
+        if !self.buf_patched {
+            self.as_mut().patch_buffer();
         }
 
         let mut this = self.project();
@@ -75,6 +84,7 @@ impl ImportWriter {
 
             this.buf.truncate(Self::CHUNK_SIZE_RESERVED);
             *this.buf_start = None;
+            *this.buf_patched = false;
         }
 
         Poll::Ready(Ok(()))
@@ -82,13 +92,18 @@ impl ImportWriter {
 
     /// Patches the buffer to arrange the chunk size at the start
     /// and append CR LF at the end.
-    fn patch_buffer(&mut self) {
-        let chunk_size = format!("{:X}\r\n", self.buffer_len()).into_bytes();
+    fn patch_buffer(mut self: Pin<&mut Self>) {
+        let mut chunk_size_str = ArrayString::<{ Self::CHUNK_SIZE_RESERVED }>::new_const();
+        write!(&mut chunk_size_str, "{:X}\r\n", self.buffer_len())
+            .expect("buffer shouldn't be bigger than u64::MAX");
+
+        let chunk_size = chunk_size_str.as_bytes();
         let offset = Self::CHUNK_SIZE_RESERVED - chunk_size.len();
 
-        self.buf[offset..Self::CHUNK_SIZE_RESERVED].clone_from_slice(&chunk_size);
+        self.buf[offset..Self::CHUNK_SIZE_RESERVED].clone_from_slice(chunk_size);
         self.buf.extend_from_slice(b"\r\n");
         self.buf_start = Some(offset);
+        self.buf_patched = true;
     }
 
     fn buffer_len(&self) -> usize {
@@ -107,52 +122,49 @@ impl AsyncWrite for ImportWriter {
         buf: &[u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let mut this = self.as_mut().project();
+            let this = self.as_mut().project();
             match this.state {
                 WriterState::SkipHeaders(buf) => {
-                    let byte = ready!(poll_read_byte(this.socket.as_mut(), cx))?;
-
-                    // Shift bytes
-                    buf[0] = buf[1];
-                    buf[1] = buf[2];
-                    buf[2] = buf[3];
-                    buf[3] = byte;
+                    let done = ready!(poll_ignore_headers(this.socket, cx, buf))?;
 
                     // If true, all headers have been read
-                    if buf == DOUBLE_CR_LF {
+                    if done {
                         *this.state = WriterState::WriteResponse(0);
                     }
                 }
                 WriterState::WriteResponse(offset) => {
-                    // Check if response headers were written entirely
-                    if *offset >= SUCCESS_HEADERS.len() {
+                    let done = ready!(poll_send_static(this.socket, cx, Self::RESPONSE, offset))?;
+
+                    if done {
                         *this.state = WriterState::BufferData;
-                    } else {
-                        let buf = &SUCCESS_HEADERS[*offset..];
-                        let num_bytes = ready!(this.socket.poll_write(cx, buf))?;
-                        *offset += num_bytes;
                     }
                 }
                 WriterState::BufferData => {
                     // We keep extra capacity for the chunk terminator
-                    let cap = this.buf.capacity() - 2;
+                    let buf_free = this.buf.capacity() - this.buf.len() - 2;
 
                     // There's still space in buffer
-                    if cap > this.buf.len() {
-                        return Pin::new(this.buf).poll_write(cx, buf);
+                    if buf_free > 0 {
+                        let max_write = buf_free.min(buf.len());
+                        return Pin::new(this.buf).poll_write(cx, &buf[..max_write]);
                     }
 
-                    // Buffer is full, patch and send it.
-                    *this.state = WriterState::PatchBuffer;
-                }
-                WriterState::PatchBuffer => {
-                    self.patch_buffer();
-                    self.state = WriterState::Send;
+                    // Buffer is full, send it.
+                    *this.state = WriterState::Send;
                 }
 
                 WriterState::Send => {
                     ready!(self.as_mut().poll_flush_buffer(cx))?;
                     self.state = WriterState::BufferData;
+                }
+
+                WriterState::End(offset) => {
+                    let done =
+                        ready!(poll_send_static(this.socket, cx, Self::EMPTY_CHUNK, offset))?;
+
+                    if done {
+                        return Poll::Ready(Ok(0));
+                    }
                 }
             };
         }
@@ -163,7 +175,13 @@ impl AsyncWrite for ImportWriter {
         self.project().socket.poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        ready!(self.as_mut().poll_flush(cx))?;
+
+        // We write an empty buffer to artifically trigger the WriterState::End flow.
+        self.state = WriterState::End(0);
+        ready!(self.as_mut().poll_write(cx, &[]))?;
+
         self.project().socket.poll_close(cx)
     }
 }
@@ -173,8 +191,8 @@ enum WriterState {
     SkipHeaders([u8; 4]),
     WriteResponse(usize),
     BufferData,
-    PatchBuffer,
     Send,
+    End(usize),
 }
 
 fn write_zero_error() -> Poll<IoResult<()>> {

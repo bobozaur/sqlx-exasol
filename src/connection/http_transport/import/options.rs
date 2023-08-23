@@ -1,5 +1,6 @@
-use std::net::SocketAddr;
+use std::{fmt::Write, net::SocketAddr};
 
+use arrayvec::ArrayString;
 use futures_core::Future;
 use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
@@ -200,8 +201,9 @@ where
             query.push_str(trim.as_ref());
         }
 
-        query.push_str(" SKIP = ");
-        query.push_str(&self.skip.to_string());
+        query.push_str(" ROW SEPARATOR = '");
+        query.push_str(self.row_separator.as_ref());
+        query.push('\'');
 
         query.push_str(" COLUMN SEPARATOR = '");
         query.push_str(self.column_separator);
@@ -211,9 +213,17 @@ where
         query.push_str(self.column_delimiter);
         query.push('\'');
 
-        query.push_str(" ROW SEPARATOR = '");
-        query.push_str(self.row_separator.as_ref());
-        query.push('\'');
+        let mut skip_str = ArrayString::<20>::new_const();
+        write!(&mut skip_str, "{}", self.skip).expect("u64 can't have more than 20 digits");
+
+        query.push_str(" SKIP = ");
+        query.push_str(&skip_str);
+
+        if let Some(trim) = self.trim {
+            query.push_str(" TRIM = '");
+            query.push_str(trim.as_ref());
+            query.push('\'');
+        }
 
         query
     }

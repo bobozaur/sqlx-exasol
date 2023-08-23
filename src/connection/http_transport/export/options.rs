@@ -137,7 +137,11 @@ impl<'a> ExportOptions<'a> {
         query.push_str("EXPORT ");
 
         match self.source {
-            QueryOrTable::Table(t) => query.push_str(t),
+            QueryOrTable::Table(t) => {
+                query.push('"');
+                query.push_str(t);
+                query.push('"');
+            }
             QueryOrTable::Query(q) => {
                 query.push_str("(\n");
                 query.push_str(q);
@@ -157,6 +161,10 @@ impl<'a> ExportOptions<'a> {
 
         query.push_str(" NULL = '");
         query.push_str(self.null);
+        query.push('\'');
+
+        query.push_str(" ROW SEPARATOR = '");
+        query.push_str(self.row_separator.as_ref());
         query.push('\'');
 
         query.push_str(" COLUMN SEPARATOR = '");

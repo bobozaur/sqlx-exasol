@@ -12,6 +12,7 @@ async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDyn
     let mut buf = String::new();
     reader.read_to_string(&mut buf).await?;
     writer.write_all(buf.as_bytes()).await?;
+    writer.close().await?;
     Ok(())
 }
 
@@ -46,7 +47,13 @@ async fn test_http_transport_roundtrip_single_threaded(pool: Pool<Exasol>) -> an
             .map_err(|e| anyhow::anyhow! {e})?;
 
     assert_eq!(1000, export_res.rows_affected());
-    assert_eq!(0, import_res.rows_affected());
+    assert_eq!(1000, import_res.rows_affected());
+
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_EXPORT")
+        .fetch_one(&mut *conn1)
+        .await?;
+
+    assert_eq!(num_rows, 2000);
 
     Ok(())
 }
@@ -71,6 +78,7 @@ async fn test_http_transport_roundtrip_multi_threaded(pool: Pool<Exasol>) -> any
         .await?;
 
     let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+        .buffer_size(2048)
         .execute(&mut conn2)
         .await?;
 
@@ -86,47 +94,53 @@ async fn test_http_transport_roundtrip_multi_threaded(pool: Pool<Exasol>) -> any
             .map_err(|e| anyhow::anyhow! {e})?;
 
     assert_eq!(1000, export_res.rows_affected());
-    assert_eq!(0, import_res.rows_affected());
+    assert_eq!(1000, import_res.rows_affected());
+
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_EXPORT")
+        .fetch_one(&mut *conn1)
+        .await?;
+
+    assert_eq!(num_rows, 2000);
 
     Ok(())
 }
 
-// #[cfg(feature = "compression")]
-// #[sqlx::test]
-// async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow::Result<()> {
-//     let mut conn1 = pool.acquire().await?;
-//     let mut conn2 = pool.acquire().await?;
+#[cfg(feature = "compression")]
+#[sqlx::test]
+async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow::Result<()> {
+    let mut conn1 = pool.acquire().await?;
+    let mut conn2 = pool.acquire().await?;
 
-//     conn1
-//         .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
-//         .await?;
+    conn1
+        .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+        .await?;
 
-//     sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-//         .bind(vec!["dummy"; 1000])
-//         .execute(&mut *conn1)
-//         .await?;
+    sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
+        .bind(vec!["dummy"; 1000])
+        .execute(&mut *conn1)
+        .await?;
 
-//     let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
-//         .compression(true)
-//         .execute(&mut conn1)
-//         .await?;
+    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+        .compression(true)
+        .execute(&mut conn1)
+        .await?;
 
-//     let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
-//         .skip(1)
-//         .compression(true)
-//         .execute(&mut conn2)
-//         .await?;
+    let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+        .skip(1)
+        .compression(true)
+        .execute(&mut conn2)
+        .await?;
 
-//     let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
+    let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
 
-//     env_logger::init();
-//     let (export_res, import_res, _) =
-//         try_join3(export_fut, import_fut, try_join_all(transport_futs))
-//             .await
-//             .map_err(|e| anyhow::anyhow! {e})?;
+    env_logger::init();
+    let (export_res, import_res, _) =
+        try_join3(export_fut, import_fut, try_join_all(transport_futs))
+            .await
+            .map_err(|e| anyhow::anyhow! {e})?;
 
-//     assert_eq!(1000, export_res.rows_affected());
-//     assert_eq!(0, import_res.rows_affected());
+    assert_eq!(1000, export_res.rows_affected());
+    assert_eq!(0, import_res.rows_affected());
 
-//     Ok(())
-// }
+    Ok(())
+}

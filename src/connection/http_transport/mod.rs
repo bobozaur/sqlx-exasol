@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
 use arrayvec::ArrayString;
-use futures_io::AsyncRead;
+use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::future::try_join_all;
 use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt};
 use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
@@ -32,11 +32,6 @@ pub use import::{ExaImport, ImportOptions, Trim};
 const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 
 const DOUBLE_CR_LF: &[u8; 4] = b"\r\n\r\n";
-
-/// Packet that tells Exasol the transport was successful
-const SUCCESS_HEADERS: &[u8; 38] = b"HTTP/1.1 200 OK\r\n\
-                                     Connection: close\r\n\
-                                     \r\n";
 
 const GZ_FILE_EXT: &str = "gz";
 const CSV_FILE_EXT: &str = "csv";
@@ -72,6 +67,23 @@ fn poll_read_byte(socket: Pin<&mut BufReader<ExaSocket>>, cx: &mut Context) -> P
     } else {
         Poll::Ready(Ok(buffer[0]))
     }
+}
+
+/// Sends some static data, returning whether all of it was sent or not.
+fn poll_send_static(
+    socket: Pin<&mut BufReader<ExaSocket>>,
+    cx: &mut Context<'_>,
+    buf: &'static [u8],
+    offset: &mut usize,
+) -> Poll<IoResult<bool>> {
+    if *offset >= buf.len() {
+        return Poll::Ready(Ok(true));
+    }
+
+    let num_bytes = ready!(socket.poll_write(cx, &buf[*offset..]))?;
+    *offset += num_bytes;
+
+    Poll::Ready(Ok(false))
 }
 
 fn poll_ignore_headers(
