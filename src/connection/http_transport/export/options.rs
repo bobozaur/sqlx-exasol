@@ -10,7 +10,7 @@ use crate::{
 
 use futures_core::Future;
 
-use sqlx_core::Error as SqlxError;
+use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use super::{reader::ExportReader, ExaExport};
 
@@ -50,7 +50,7 @@ impl<'a> ExportOptions<'a> {
         con: &'b mut ExaConnection,
     ) -> Result<
         (
-            impl Future<Output = Result<ExaQueryResult, SqlxError>> + 'b,
+            impl Future<Output = Result<ExaQueryResult, BoxDynError>> + 'b,
             Vec<ExaExport>,
         ),
         SqlxError,
@@ -59,19 +59,21 @@ impl<'a> ExportOptions<'a> {
         let port = con.ws.socket_addr().port();
         let encrypted = con.attributes().encryption_enabled;
 
-        let (sockets, addrs): (Vec<ExaSocket>, _) =
+        let (raw_sockets, addrs): (Vec<ExaSocket>, _) =
             start_jobs(self.num_readers, ips, port, encrypted)
                 .await?
                 .into_iter()
                 .unzip();
 
         let query = self.query(addrs, encrypted, self.compression);
-        let sockets = sockets
+        
+        let sockets = raw_sockets
             .into_iter()
-            .map(|s| ExaExport::new(ExportReader::new(s), self.compression))
+            .map(ExportReader::new)
+            .map(|r| ExaExport::new(r, self.compression))
             .collect();
 
-        Ok((con.execute_string_query(query), sockets))
+        Ok((con.run_http_transport(query), sockets))
     }
 
     /// Sets the number of reader jobs that will be started.
@@ -129,7 +131,7 @@ impl<'a> ExportOptions<'a> {
         if let Some(com) = self.comment {
             query.push_str("/*");
             query.push_str(com);
-            query.push_str("*/");
+            query.push_str("*/\n");
         }
 
         query.push_str("EXPORT ");
@@ -147,25 +149,25 @@ impl<'a> ExportOptions<'a> {
         append_filenames(&mut query, addrs, is_encrypted, is_compressed);
 
         if let Some(enc) = self.encoding {
-            query.push_str("ENCODING = '");
+            query.push_str(" ENCODING = '");
             query.push_str(enc);
             query.push('\'');
         }
 
-        query.push_str("NULL = '");
+        query.push_str(" NULL = '");
         query.push_str(self.null);
         query.push('\'');
 
-        query.push_str("COLUMN SEPARATOR = '");
+        query.push_str(" COLUMN SEPARATOR = '");
         query.push_str(self.column_separator);
         query.push('\'');
 
-        query.push_str("COLUMN DELIMITER = '");
+        query.push_str(" COLUMN DELIMITER = '");
         query.push_str(self.column_delimiter);
         query.push('\'');
 
         if self.with_column_names {
-            query.push_str("WITH COLUMN NAMES");
+            query.push_str(" WITH COLUMN NAMES");
         }
 
         query

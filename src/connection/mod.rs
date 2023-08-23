@@ -10,6 +10,7 @@ use std::{iter, net::SocketAddr};
 use lru::LruCache;
 use sqlx_core::{
     connection::{Connection, LogSettings},
+    error::BoxDynError,
     transaction::Transaction,
     Error as SqlxError,
 };
@@ -111,15 +112,16 @@ impl ExaConnection {
     }
 
     #[allow(clippy::needless_lifetimes)]
-    pub(crate) async fn execute_string_query<'a>(
+    pub(crate) async fn run_http_transport<'a>(
         &'a mut self,
         query: String,
-    ) -> Result<ExaQueryResult, SqlxError> {
+    ) -> Result<ExaQueryResult, BoxDynError> {
         self.execute_plain(&query, fetcher_closure!('a))
             .await?
             .try_filter_map(|step| async move { Ok(step.map_left(Some).left_or(None)) })
             .try_collect()
             .await
+            .map_err(From::from)
     }
 
     async fn execute_query<'a, C, F>(

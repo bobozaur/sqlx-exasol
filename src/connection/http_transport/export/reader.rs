@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     fmt::Debug,
     io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
     pin::Pin,
@@ -10,9 +11,10 @@ use crate::connection::{
     websocket::socket::ExaSocket,
 };
 
-use futures_io::{AsyncBufRead, AsyncRead, AsyncWrite, ErrorKind};
+use futures_io::{AsyncBufRead, AsyncRead, AsyncWrite};
 use futures_util::io::BufReader;
 use pin_project::pin_project;
+use tracing::trace;
 
 #[pin_project]
 #[derive(Debug)]
@@ -21,6 +23,7 @@ pub struct ExportReader {
     socket: BufReader<ExaSocket>,
     state: ReaderState,
     chunk_size: usize,
+    ended: bool,
 }
 
 impl ExportReader {
@@ -29,20 +32,33 @@ impl ExportReader {
             socket: BufReader::new(socket),
             state: ReaderState::SkipHeaders([0; 4]),
             chunk_size: 0,
+            ended: false,
         }
     }
 
-    fn poll_read_byte(
+    fn poll_read_cr(
         socket: Pin<&mut BufReader<ExaSocket>>,
         cx: &mut Context,
-    ) -> Poll<IoResult<u8>> {
-        let mut buffer = [0; 1];
-        let n = ready!(socket.poll_read(cx, &mut buffer))?;
+    ) -> Poll<IoResult<()>> {
+        let byte = ready!(poll_read_byte(socket, cx))?;
 
-        if n != 1 {
-            Poll::Ready(Err(chunk_size_error()))
+        if byte != b'\r' {
+            invalid_size_byte(byte)
         } else {
-            Poll::Ready(Ok(buffer[0]))
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn poll_read_lf(
+        socket: Pin<&mut BufReader<ExaSocket>>,
+        cx: &mut Context,
+    ) -> Poll<IoResult<()>> {
+        let byte = ready!(poll_read_byte(socket, cx))?;
+
+        if byte != b'\n' {
+            invalid_size_byte(byte)
+        } else {
+            Poll::Ready(Ok(()))
         }
     }
 }
@@ -68,17 +84,22 @@ impl AsyncRead for ExportReader {
 
                     // If true, all headers have been read
                     if buf == DOUBLE_CR_LF {
+                        trace!("finished reading request headers");
                         *this.state = ReaderState::ReadSize;
                     }
                 }
+
                 ReaderState::ReadSize => {
-                    let byte = ready!(Self::poll_read_byte(this.socket, cx))?;
+                    let byte = ready!(poll_read_byte(this.socket, cx))?;
+                    trace!("size byte: {byte}");
+
                     let digit = match byte {
                         b'0'..=b'9' => byte - b'0',
                         b'a'..=b'f' => 10 + byte - b'a',
                         b'A'..=b'F' => 10 + byte - b'A',
                         b'\r' => {
-                            *this.state = ReaderState::ExpectLF;
+                            trace!("will read chunk of size: {}", this.chunk_size);
+                            *this.state = ReaderState::ExpectSizeLF;
                             continue;
                         }
                         _ => {
@@ -92,36 +113,62 @@ impl AsyncRead for ExportReader {
                         .ok_or_else(overflow)?
                         .checked_add(digit.into())
                         .ok_or_else(overflow)?;
-
-                    if *this.chunk_size == 0 {
-                        *this.state = ReaderState::WriteResponse(0);
-                    }
                 }
+
                 ReaderState::ReadData => {
                     if *this.chunk_size > 0 {
-                        let num_bytes = ready!(this.socket.poll_read(cx, buf))?;
+                        let max_read = cmp::min(buf.len(), *this.chunk_size);
+                        let num_bytes = ready!(this.socket.poll_read(cx, &mut buf[..max_read]))?;
                         *this.chunk_size -= num_bytes;
+                        trace!("read {num_bytes} bytes remaining; {}", this.chunk_size);
                         return Poll::Ready(Ok(num_bytes));
                     } else {
-                        *this.state = ReaderState::ReadSize;
+                        *this.state = ReaderState::ExpectDataCR;
                     }
                 }
-                ReaderState::ExpectLF => {
-                    let byte = ready!(Self::poll_read_byte(this.socket, cx))?;
 
-                    if byte != b'\n' {
-                        return invalid_size_byte(byte);
+                ReaderState::ExpectSizeLF => {
+                    trace!("reading size LF!");
+                    ready!(Self::poll_read_lf(this.socket, cx))?;
+                    // If even after encountering CR the chunk size is still 0,
+                    // then we reached the end of the stream.
+                    if *this.chunk_size == 0 {
+                        trace!("reader marked as ended!");
+                        *this.ended = true;
                     }
 
                     *this.state = ReaderState::ReadData;
                 }
+
+                ReaderState::ExpectDataCR => {
+                    trace!("reading data CR!");
+                    ready!(Self::poll_read_cr(this.socket, cx))?;
+                    *this.state = ReaderState::ExpectDataLF;
+                }
+
+                ReaderState::ExpectDataLF => {
+                    trace!("reading data LF!");
+                    ready!(Self::poll_read_lf(this.socket, cx))?;
+                    if *this.ended {
+                        trace!("reader ended; writing response");
+                        *this.state = ReaderState::WriteResponse(0);
+                    } else {
+                        *this.state = ReaderState::ReadSize;
+                    }
+                }
+
                 ReaderState::WriteResponse(start) => {
                     // EOF is reached after writing the HTTP response.
-                    if *start >= SUCCESS_HEADERS.len() - 1 {
+                    // But we need to wait for the query to finish execution,
+                    // thus ensuring that the server has read the response.
+                    if *start >= SUCCESS_HEADERS.len() {
+                        trace!("polling flag");
+                        ready!(this.socket.poll_flush(cx))?;
                         return Poll::Ready(Ok(0));
                     }
 
                     let buf = &SUCCESS_HEADERS[*start..];
+                    trace!("{buf:?}");
                     let num_bytes = ready!(this.socket.poll_write(cx, buf))?;
                     *start += num_bytes;
                 }
@@ -145,7 +192,9 @@ enum ReaderState {
     SkipHeaders([u8; 4]),
     ReadSize,
     ReadData,
-    ExpectLF,
+    ExpectDataCR,
+    ExpectDataLF,
+    ExpectSizeLF,
     WriteResponse(usize),
 }
 
@@ -155,9 +204,5 @@ fn invalid_size_byte<T>(byte: u8) -> Poll<IoResult<T>> {
 }
 
 fn overflow() -> IoError {
-    IoError::new(IoErrorKind::InvalidData, "Chunk size overflowed 64 bits")
-}
-
-fn chunk_size_error() -> IoError {
-    IoError::new(ErrorKind::InvalidInput, "cannot read chunk size")
+    IoError::new(IoErrorKind::InvalidData, "chunk size overflowed 64 bits")
 }

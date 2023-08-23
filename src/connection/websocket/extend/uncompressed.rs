@@ -2,26 +2,31 @@ use crate::{
     error::{ExaProtocolError, ExaResultExt},
     responses::Response,
 };
+use async_tungstenite::WebSocketStream;
+use futures_util::io::BufReader;
 
 use async_tungstenite::tungstenite::Message;
 use futures_util::{SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
 
-use super::ExaWebSocket;
+use crate::connection::websocket::socket::ExaSocket;
 
-impl ExaWebSocket {
+#[derive(Debug)]
+pub struct PlainWebSocket(pub WebSocketStream<BufReader<ExaSocket>>);
+
+impl PlainWebSocket {
     /// Sends an uncompressed command.
-    pub(crate) async fn send_uncompressed(&mut self, cmd: String) -> Result<(), SqlxError> {
-        self.ws.send(Message::Text(cmd)).await.to_sqlx_err()
+    pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
+        self.0.send(Message::Text(cmd)).await.to_sqlx_err()
     }
 
     /// Receives an uncompressed [`Response<T>`].
-    pub(crate) async fn recv_uncompressed<T>(&mut self) -> Result<Response<T>, SqlxError>
+    pub async fn recv<T>(&mut self) -> Result<Response<T>, SqlxError>
     where
         T: DeserializeOwned,
     {
-        while let Some(response) = self.ws.next().await {
+        while let Some(response) = self.0.next().await {
             let msg = response.to_sqlx_err()?;
 
             return match msg {
@@ -36,5 +41,10 @@ impl ExaWebSocket {
         }
 
         Err(ExaProtocolError::MissingMessage)?
+    }
+
+    pub async fn close(&mut self) -> Result<(), SqlxError> {
+        self.0.close(None).await.to_sqlx_err()?;
+        Ok(())
     }
 }

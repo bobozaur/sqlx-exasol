@@ -1,8 +1,5 @@
+mod extend;
 pub mod socket;
-
-#[cfg(feature = "compression")]
-mod compressed;
-mod uncompressed;
 
 use std::{
     borrow::Cow,
@@ -10,9 +7,7 @@ use std::{
     net::{IpAddr, SocketAddr},
 };
 
-use async_tungstenite::{tungstenite::Message, WebSocketStream};
-
-use futures_util::{io::BufReader, Future, SinkExt};
+use futures_util::{io::BufReader, Future};
 use lru::LruCache;
 use rsa::RsaPublicKey;
 use serde::de::{DeserializeOwned, IgnoredAny};
@@ -26,17 +21,19 @@ use crate::{
     },
     responses::{
         DataChunk, DescribeStatement, ExaAttributes, Hosts, PreparedStatement, PublicKey,
-        QueryResult, Response, Results, SessionInfo,
+        QueryResult, Results, SessionInfo,
     },
 };
 
 use socket::ExaSocket;
 
+use extend::WebSocketExt;
+
 use super::{stream::QueryResultStream, tls};
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub ws: WebSocketStream<BufReader<ExaSocket>>,
+    pub ws: WebSocketExt,
     pub attributes: ExaAttributes,
     pub pending_rollback: bool,
 }
@@ -63,25 +60,28 @@ impl ExaWebSocket {
             .await
             .to_sqlx_err()?;
 
-        let mut ws = Self {
+        let ws = WebSocketExt::new(ws);
+
+        let mut this = Self {
             ws,
             attributes: Default::default(),
             pending_rollback: false,
         };
 
-        ws.attributes.encryption_enabled = is_tls;
-        ws.attributes.fetch_size = options.fetch_size;
-        ws.attributes.statement_cache_capacity = options.statement_cache_capacity;
-        let compression = options.compression;
+        this.attributes.encryption_enabled = is_tls;
+        this.attributes.fetch_size = options.fetch_size;
+        this.attributes.statement_cache_capacity = options.statement_cache_capacity;
+        let should_compress = options.compression;
 
         // Login is always uncompressed
-        let session_info = ws.login(options).await?;
+        let session_info = this.login(options).await?;
 
         // So we set compression afterwards, if needed.
-        ws.attributes.compression_enabled = compression;
-        ws.get_attributes().await?;
+        this.attributes.compression_enabled = should_compress;
+        this.ws = this.ws.adjust_compression(should_compress);
+        this.get_attributes().await?;
 
-        Ok((ws, session_info))
+        Ok((this, session_info))
     }
 
     pub(crate) async fn login(
@@ -207,12 +207,7 @@ impl ExaWebSocket {
     }
 
     pub async fn ping(&mut self) -> Result<(), SqlxError> {
-        self.ws
-            .send(Message::Ping(Vec::new()))
-            .await
-            .to_sqlx_err()?;
-
-        Ok(())
+        self.ws.ping().await
     }
 
     pub async fn disconnect(&mut self) -> Result<(), SqlxError> {
@@ -221,8 +216,7 @@ impl ExaWebSocket {
     }
 
     pub async fn close(&mut self) -> Result<(), SqlxError> {
-        self.ws.close(None).await.to_sqlx_err()?;
-        Ok(())
+        self.ws.close().await
     }
 
     pub async fn get_or_prepare<'a>(
@@ -344,7 +338,7 @@ impl ExaWebSocket {
     }
 
     pub fn socket_addr(&self) -> SocketAddr {
-        self.ws.get_ref().get_ref().sock_addr
+        self.ws.socket_addr()
     }
 
     async fn login_credentials(
@@ -403,35 +397,16 @@ impl ExaWebSocket {
         let cmd = cmd.into_inner();
         tracing::debug!("sending command to database: {cmd}");
 
-        #[allow(unreachable_patterns)]
-        match self.attributes.compression_enabled {
-            false => self.send_uncompressed(cmd).await,
-            #[cfg(feature = "compression")]
-            true => self.send_compressed(cmd).await,
-            _ => Err(ExaProtocolError::CompressionDisabled)?,
-        }
+        self.ws.send(cmd).await
     }
 
-    /// Receives a [`Response<T>`] and processes the attributes, returning `T`.
+    /// Receives a database response containing attributes,
+    /// processes the attributes and returns the inner data.
     async fn recv<T>(&mut self) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
     {
-        #[allow(unreachable_patterns)]
-        let response = match self.attributes.compression_enabled {
-            false => self.recv_uncompressed().await?,
-            #[cfg(feature = "compression")]
-            true => self.recv_compressed().await?,
-            _ => Err(ExaProtocolError::CompressionDisabled)?,
-        };
-
-        let (response_data, attributes) = match response {
-            Response::Ok {
-                response_data,
-                attributes,
-            } => (response_data, attributes),
-            Response::Error { exception } => return Err(exception)?,
-        };
+        let (response_data, attributes) = Result::from(self.ws.recv().await?)?;
 
         if let Some(attributes) = attributes {
             tracing::debug!("updating connection attributes using:\n{attributes:#?}");

@@ -46,6 +46,18 @@ pub enum Response<T> {
     },
 }
 
+impl<T> From<Response<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> {
+    fn from(value: Response<T>) -> Self {
+        match value {
+            Response::Ok {
+                response_data,
+                attributes,
+            } => Ok((response_data, attributes)),
+            Response::Error { exception } => Err(exception),
+        }
+    }
+}
+
 /// Enum representing the columns output of a [`PreparedStatement`].
 /// It is structured like this because we basically get a result set like
 /// construct, but only the columns are relevant.

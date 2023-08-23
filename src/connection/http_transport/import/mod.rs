@@ -25,13 +25,12 @@ pub enum ExaImport {
 }
 
 impl ExaImport {
-    const END_PACKET: &[u8; 5] = b"0\r\n\r\n";
-
     /// Ends the data import.
     /// *MUST* be called after no more data needs to be
     /// passed to this writer.
     pub async fn finish(mut self) -> IoResult<()> {
-        self.write_all(Self::END_PACKET).await
+        self.flush().await?;
+        self.into_inner().finish().await
     }
 
     pub(crate) fn new(writer: ImportWriter, compression: bool) -> Self {
@@ -39,6 +38,14 @@ impl ExaImport {
             #[cfg(feature = "compression")]
             true => Self::Compressed(GzipDecoder::new(writer)),
             _ => Self::Plain(writer),
+        }
+    }
+
+    fn into_inner(self) -> ImportWriter {
+        match self {
+            #[cfg(feature = "compression")]
+            ExaImport::Compressed(s) => s.into_inner(),
+            ExaImport::Plain(s) => s,
         }
     }
 }

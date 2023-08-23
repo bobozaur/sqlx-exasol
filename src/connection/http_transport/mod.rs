@@ -7,6 +7,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
+use arrayvec::ArrayString;
 use futures_io::AsyncRead;
 use futures_util::future::try_join_all;
 use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt};
@@ -33,9 +34,8 @@ const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 const DOUBLE_CR_LF: &[u8; 4] = b"\r\n\r\n";
 
 /// Packet that tells Exasol the transport was successful
-const SUCCESS_HEADERS: &[u8; 66] = b"HTTP/1.1 200 OK\r\n\
+const SUCCESS_HEADERS: &[u8; 38] = b"HTTP/1.1 200 OK\r\n\
                                      Connection: close\r\n\
-                                     Transfer-Encoding: chunked\r\n\
                                      \r\n";
 
 const GZ_FILE_EXT: &str = "gz";
@@ -100,28 +100,30 @@ async fn start_jobs(
         sockets.push(socket);
     }
 
-    let cert = make_cert()?;
-    let tls_cert = cert.serialize_pem().to_sqlx_err()?;
-    let tls_cert = CertificateInput::Inline(tls_cert.into_bytes());
-    let key = cert.serialize_private_key_pem();
-    let key = CertificateInput::Inline(key.into_bytes());
+    // let (ssl_mode, cert, key) = if encrypted {
+    //     let cert = make_cert()?;
+    //     let tls_cert = cert.serialize_pem().to_sqlx_err()?;
+    //     let tls_cert = CertificateInput::Inline(tls_cert.into_bytes());
+    //     let key = cert.serialize_private_key_pem();
+    //     let key = CertificateInput::Inline(key.into_bytes());
 
-    let tls_opts = ExaTlsOptionsRef {
-        ssl_mode: ExaSslMode::Preferred,
-        ssl_ca: None,
-        ssl_client_cert: Some(&tls_cert),
-        ssl_client_key: Some(&key),
-    };
+    //     (ExaSslMode::Required, Some(tls_cert), Some(key))
+    // } else {
+    //     (ExaSslMode::Disabled, None, None)
+    // };
 
-    let sockets = if encrypted {
-        let futures = iter::zip(sockets, &str_addrs).map(|(s, h)| upgrade_socket(s, h, tls_opts));
+    // let tls_opts = ExaTlsOptionsRef {
+    //     ssl_mode,
+    //     ssl_ca: None,
+    //     ssl_client_cert: cert.as_ref(),
+    //     ssl_client_key: key.as_ref(),
+    // };
 
-        try_join_all(futures)
-            .await
-            .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?
-    } else {
-        sockets
-    };
+    // let futures = iter::zip(sockets, &str_addrs).map(|(s, h)| upgrade_socket(s, h, tls_opts));
+
+    // let sockets = try_join_all(futures)
+    //     .await
+    //     .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?;
 
     Ok(iter::zip(sockets, addrs).collect())
 }
@@ -137,9 +139,15 @@ async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddr), 
     // Read response buffer.
     let mut buf = [0; 24];
     socket.read_exact(&mut buf).await?;
+    let mut ip_buf = ArrayString::<16>::new_const();
+
+    buf[8..]
+        .iter()
+        .take_while(|b| **b != b'\0')
+        .for_each(|b| ip_buf.push(char::from(*b)));
 
     let port = u16::from_le_bytes([buf[4], buf[5]]);
-    let ip = IpAddr::from([buf[8], buf[10], buf[12], buf[14]]);
+    let ip = ip_buf.parse()?;
     let address = SocketAddr::new(ip, port);
 
     Ok((socket, address))
@@ -166,13 +174,15 @@ fn append_filenames(
         true => HTTPS_PREFIX,
     };
 
+    let prefix = HTTP_PREFIX;
+
     let ext = match is_compressed {
         false => CSV_FILE_EXT,
         true => GZ_FILE_EXT,
     };
 
     for (idx, addr) in addrs.into_iter().enumerate() {
-        let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'", prefix, addr, idx, ext);
+        let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'\n", prefix, addr, idx, ext);
         query.push_str(&filename);
     }
 }
