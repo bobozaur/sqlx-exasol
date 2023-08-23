@@ -1,3 +1,7 @@
+mod buf_reader;
+mod options;
+mod reader;
+
 use std::{
     io::Result as IoResult,
     pin::Pin,
@@ -8,18 +12,17 @@ use async_compression::futures::bufread::GzipDecoder;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
 
-use self::reader::ExportReader;
-
-mod options;
-mod reader;
+use reader::ExportReader;
 
 pub use options::{ExportOptions, QueryOrTable};
+
+use self::buf_reader::ExportBufReader;
 
 #[pin_project(project = ExaExportProj)]
 #[derive(Debug)]
 pub enum ExaExport {
     #[cfg(feature = "compression")]
-    Compressed(#[pin] GzipDecoder<ExportReader>),
+    Compressed(#[pin] GzipDecoder<ExportBufReader>),
     Plain(#[pin] ExportReader),
 }
 
@@ -27,7 +30,7 @@ impl ExaExport {
     pub(crate) fn new(reader: ExportReader, compression: bool) -> Self {
         match compression {
             #[cfg(feature = "compression")]
-            true => Self::Compressed(GzipDecoder::new(reader)),
+            true => Self::Compressed(GzipDecoder::new(ExportBufReader::new(reader))),
             _ => Self::Plain(reader),
         }
     }

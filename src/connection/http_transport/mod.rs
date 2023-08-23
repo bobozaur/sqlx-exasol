@@ -61,7 +61,7 @@ fn poll_read_byte(socket: Pin<&mut BufReader<ExaSocket>>, cx: &mut Context) -> P
     let n = ready!(socket.poll_read(cx, &mut buffer))?;
 
     if n != 1 {
-        let msg = "cannot read chunk size";
+        let msg = "cannot read chunk byte";
         let err = IoError::new(IoErrorKind::InvalidInput, msg);
         Poll::Ready(Err(err))
     } else {

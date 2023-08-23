@@ -8,13 +8,7 @@ use futures_util::{
 use sqlx::{Executor, Pool};
 use sqlx_core::error::BoxDynError;
 
-async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
-    let mut buf = String::new();
-    reader.read_to_string(&mut buf).await?;
-    writer.write_all(buf.as_bytes()).await?;
-    writer.close().await?;
-    Ok(())
-}
+const NUM_ROWS: usize = 1_000_000;
 
 #[sqlx::test]
 async fn test_http_transport_roundtrip_single_threaded(pool: Pool<Exasol>) -> anyhow::Result<()> {
@@ -22,19 +16,19 @@ async fn test_http_transport_roundtrip_single_threaded(pool: Pool<Exasol>) -> an
     let mut conn2 = pool.acquire().await?;
 
     conn1
-        .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+        .execute("CREATE TABLE TEST_HTTP_TRANSPORT ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-        .bind(vec!["dummy"; 1000])
+    sqlx::query("INSERT INTO TEST_HTTP_TRANSPORT VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
         .execute(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+    let (import_fut, writers) = ImportOptions::new("TEST_HTTP_TRANSPORT")
         .skip(1)
         .execute(&mut conn2)
         .await?;
@@ -46,14 +40,14 @@ async fn test_http_transport_roundtrip_single_threaded(pool: Pool<Exasol>) -> an
             .await
             .map_err(|e| anyhow::anyhow! {e})?;
 
-    assert_eq!(1000, export_res.rows_affected());
-    assert_eq!(1000, import_res.rows_affected());
+    assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
+    assert_eq!(NUM_ROWS as u64, import_res.rows_affected());
 
-    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_EXPORT")
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_HTTP_TRANSPORT")
         .fetch_one(&mut *conn1)
         .await?;
 
-    assert_eq!(num_rows, 2000);
+    assert_eq!(num_rows, 2 * NUM_ROWS as u64);
 
     Ok(())
 }
@@ -64,20 +58,20 @@ async fn test_http_transport_roundtrip_multi_threaded(pool: Pool<Exasol>) -> any
     let mut conn2 = pool.acquire().await?;
 
     conn1
-        .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+        .execute("CREATE TABLE TEST_HTTP_TRANSPORT ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-        .bind(vec!["dummy"; 1000])
+    sqlx::query("INSERT INTO TEST_HTTP_TRANSPORT VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
         .with_column_names(false)
         .execute(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+    let (import_fut, writers) = ImportOptions::new("TEST_HTTP_TRANSPORT")
         .buffer_size(2048)
         .execute(&mut conn2)
         .await?;
@@ -93,14 +87,14 @@ async fn test_http_transport_roundtrip_multi_threaded(pool: Pool<Exasol>) -> any
             .await
             .map_err(|e| anyhow::anyhow! {e})?;
 
-    assert_eq!(1000, export_res.rows_affected());
-    assert_eq!(1000, import_res.rows_affected());
+    assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
+    assert_eq!(NUM_ROWS as u64, import_res.rows_affected());
 
-    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_EXPORT")
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_HTTP_TRANSPORT")
         .fetch_one(&mut *conn1)
         .await?;
 
-    assert_eq!(num_rows, 2000);
+    assert_eq!(num_rows, 2 * NUM_ROWS as u64);
 
     Ok(())
 }
@@ -112,35 +106,52 @@ async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow:
     let mut conn2 = pool.acquire().await?;
 
     conn1
-        .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+        .execute("CREATE TABLE TEST_HTTP_TRANSPORT ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-        .bind(vec!["dummy"; 1])
+    sqlx::query("INSERT INTO TEST_HTTP_TRANSPORT VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
+        .with_column_names(false)
         .compression(true)
         .execute(&mut conn1)
         .await?;
 
-    let transport_futs = readers.into_iter().map(read_data);
+    let (import_fut, writers) = ImportOptions::new("TEST_HTTP_TRANSPORT")
+        .compression(true)
+        .execute(&mut conn2)
+        .await?;
 
-    env_logger::init();
-    let (export_res, _) = futures_util::future::try_join(export_fut, try_join_all(transport_futs))
-        .await
-        .map_err(|e| anyhow::anyhow! {e})?;
+    let transport_futs = iter::zip(readers, writers).map(|(r, w)| {
+        tokio::spawn(pipe(r, w))
+            .map_err(From::from)
+            .and_then(|r| async { r })
+    });
 
-    log::set_max_level(log::LevelFilter::Off);
+    let (export_res, import_res, _) =
+        try_join3(export_fut, import_fut, try_join_all(transport_futs))
+            .await
+            .map_err(|e| anyhow::anyhow! {e})?;
 
-    assert_eq!(1, export_res.rows_affected());
+    assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
+    assert_eq!(NUM_ROWS as u64, import_res.rows_affected());
+
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_HTTP_TRANSPORT")
+        .fetch_one(&mut *conn1)
+        .await?;
+
+    assert_eq!(num_rows, 2 * NUM_ROWS as u64);
 
     Ok(())
 }
 
-async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
+async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
     let mut buf = String::new();
     reader.read_to_string(&mut buf).await?;
+    writer.write_all(buf.as_bytes()).await?;
+    writer.close().await?;
     Ok(())
 }

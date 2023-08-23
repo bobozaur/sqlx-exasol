@@ -10,7 +10,7 @@ use crate::connection::{
     websocket::socket::ExaSocket,
 };
 
-use futures_io::{AsyncBufRead, AsyncRead, AsyncWrite};
+use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::io::BufReader;
 use pin_project::pin_project;
 
@@ -158,16 +158,6 @@ impl AsyncRead for ExportReader {
                 }
             };
         }
-    }
-}
-
-impl AsyncBufRead for ExportReader {
-    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
-        self.project().socket.poll_fill_buf(cx)
-    }
-
-    fn consume(self: Pin<&mut Self>, amt: usize) {
-        self.project().socket.consume(amt)
     }
 }
 
