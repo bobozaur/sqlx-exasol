@@ -86,7 +86,7 @@ fn poll_send_static(
     Poll::Ready(Ok(false))
 }
 
-fn poll_ignore_headers(
+fn poll_until_double_crlf(
     socket: Pin<&mut BufReader<ExaSocket>>,
     cx: &mut Context,
     buf: &mut [u8; 4],

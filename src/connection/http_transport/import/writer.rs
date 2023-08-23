@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::connection::{
-    http_transport::{poll_ignore_headers, poll_send_static},
+    http_transport::{poll_send_static, poll_until_double_crlf},
     websocket::socket::ExaSocket,
 };
 
@@ -53,7 +53,7 @@ impl ImportWriter {
             buf,
             buf_start: None,
             buf_patched: false,
-            state: WriterState::SkipHeaders([0; 4]),
+            state: WriterState::SkipRequest([0; 4]),
         }
     }
 
@@ -124,10 +124,9 @@ impl AsyncWrite for ImportWriter {
         loop {
             let this = self.as_mut().project();
             match this.state {
-                WriterState::SkipHeaders(buf) => {
-                    let done = ready!(poll_ignore_headers(this.socket, cx, buf))?;
+                WriterState::SkipRequest(buf) => {
+                    let done = ready!(poll_until_double_crlf(this.socket, cx, buf))?;
 
-                    // If true, all headers have been read
                     if done {
                         *this.state = WriterState::WriteResponse(0);
                     }
@@ -188,7 +187,7 @@ impl AsyncWrite for ImportWriter {
 
 #[derive(Debug, Copy, Clone)]
 enum WriterState {
-    SkipHeaders([u8; 4]),
+    SkipRequest([u8; 4]),
     WriteResponse(usize),
     BufferData,
     Send,

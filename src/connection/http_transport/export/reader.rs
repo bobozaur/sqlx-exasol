@@ -1,5 +1,4 @@
 use std::{
-    cmp,
     fmt::Debug,
     io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
     pin::Pin,
@@ -7,7 +6,7 @@ use std::{
 };
 
 use crate::connection::{
-    http_transport::{poll_ignore_headers, poll_read_byte, poll_send_static},
+    http_transport::{poll_read_byte, poll_send_static, poll_until_double_crlf},
     websocket::socket::ExaSocket,
 };
 
@@ -34,7 +33,7 @@ impl ExportReader {
     pub fn new(socket: ExaSocket) -> Self {
         Self {
             socket: BufReader::new(socket),
-            state: ReaderState::SkipHeaders([0; 4]),
+            state: ReaderState::SkipRequest([0; 4]),
             chunk_size: 0,
             ended: false,
         }
@@ -77,9 +76,9 @@ impl AsyncRead for ExportReader {
             let mut this = self.as_mut().project();
 
             match this.state {
-                ReaderState::SkipHeaders(buf) => {
-                    let done = ready!(poll_ignore_headers(this.socket, cx, buf))?;
-                    // If true, all headers have been read
+                ReaderState::SkipRequest(buf) => {
+                    let done = ready!(poll_until_double_crlf(this.socket, cx, buf))?;
+
                     if done {
                         *this.state = ReaderState::ReadSize;
                     }
@@ -111,7 +110,7 @@ impl AsyncRead for ExportReader {
 
                 ReaderState::ReadData => {
                     if *this.chunk_size > 0 {
-                        let max_read = cmp::min(buf.len(), *this.chunk_size);
+                        let max_read = buf.len().min(*this.chunk_size);
                         let num_bytes = ready!(this.socket.poll_read(cx, &mut buf[..max_read]))?;
                         *this.chunk_size -= num_bytes;
                         return Poll::Ready(Ok(num_bytes));
@@ -174,7 +173,7 @@ impl AsyncBufRead for ExportReader {
 
 #[derive(Copy, Clone, Debug)]
 enum ReaderState {
-    SkipHeaders([u8; 4]),
+    SkipRequest([u8; 4]),
     ReadSize,
     ReadData,
     ExpectDataCR,

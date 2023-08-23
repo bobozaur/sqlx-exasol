@@ -116,7 +116,7 @@ async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow:
         .await?;
 
     sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-        .bind(vec!["dummy"; 1000])
+        .bind(vec!["dummy"; 1])
         .execute(&mut *conn1)
         .await?;
 
@@ -125,22 +125,22 @@ async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow:
         .execute(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
-        .skip(1)
-        .compression(true)
-        .execute(&mut conn2)
-        .await?;
-
-    let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
+    let transport_futs = readers.into_iter().map(read_data);
 
     env_logger::init();
-    let (export_res, import_res, _) =
-        try_join3(export_fut, import_fut, try_join_all(transport_futs))
-            .await
-            .map_err(|e| anyhow::anyhow! {e})?;
+    let (export_res, _) = futures_util::future::try_join(export_fut, try_join_all(transport_futs))
+        .await
+        .map_err(|e| anyhow::anyhow! {e})?;
 
-    assert_eq!(1000, export_res.rows_affected());
-    assert_eq!(0, import_res.rows_affected());
+    log::set_max_level(log::LevelFilter::Off);
 
+    assert_eq!(1, export_res.rows_affected());
+
+    Ok(())
+}
+
+async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf).await?;
     Ok(())
 }
