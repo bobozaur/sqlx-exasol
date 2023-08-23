@@ -1,71 +1,132 @@
-use exasol::{ExaExport, Exasol, ExportOptions, QueryOrTable};
+use std::iter;
+
+use exasol::{ExaExport, ExaImport, Exasol, ExportOptions, ImportOptions, QueryOrTable};
 use futures_util::{
-    future::{try_join, try_join_all},
-    AsyncReadExt, TryFutureExt,
+    future::{try_join3, try_join_all},
+    AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
 use sqlx::{Executor, Pool};
 use sqlx_core::error::BoxDynError;
 
-#[sqlx::test]
-async fn test_export_single_threaded(pool: Pool<Exasol>) -> anyhow::Result<()> {
-    let mut conn = pool.acquire().await?;
+async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf).await?;
+    writer.write_all(buf.as_bytes()).await?;
+    Ok(())
+}
 
-    conn.execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+#[sqlx::test]
+async fn test_http_transport_roundtrip_single_threaded(pool: Pool<Exasol>) -> anyhow::Result<()> {
+    let mut conn1 = pool.acquire().await?;
+    let mut conn2 = pool.acquire().await?;
+
+    conn1
+        .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
         .await?;
 
     sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-        .bind(vec!["blabla".to_owned(); 1000])
-        .execute(&mut *conn)
+        .bind(vec!["dummy"; 1000])
+        .execute(&mut *conn1)
         .await?;
 
-    let (future, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
-        .execute(&mut conn)
+    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+        .execute(&mut conn1)
         .await?;
 
-    let read_futures = readers.into_iter().map(read_data);
+    let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+        .skip(1)
+        .execute(&mut conn2)
+        .await?;
 
-    let (query_res, _) = try_join(future, try_join_all(read_futures))
-        .await
-        .map_err(|e| anyhow::anyhow! {e})?;
+    let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
 
-    assert_eq!(1000, query_res.rows_affected());
+    let (export_res, import_res, _) =
+        try_join3(export_fut, import_fut, try_join_all(transport_futs))
+            .await
+            .map_err(|e| anyhow::anyhow! {e})?;
+
+    assert_eq!(1000, export_res.rows_affected());
+    assert_eq!(0, import_res.rows_affected());
 
     Ok(())
 }
 
 #[sqlx::test]
-async fn test_export_multi_threaded(pool: Pool<Exasol>) -> anyhow::Result<()> {
-    let mut conn = pool.acquire().await?;
+async fn test_http_transport_roundtrip_multi_threaded(pool: Pool<Exasol>) -> anyhow::Result<()> {
+    let mut conn1 = pool.acquire().await?;
+    let mut conn2 = pool.acquire().await?;
 
-    conn.execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+    conn1
+        .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
         .await?;
 
     sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
-        .bind(vec!["blabla".to_owned(); 1000])
-        .execute(&mut *conn)
+        .bind(vec!["dummy"; 1000])
+        .execute(&mut *conn1)
         .await?;
 
-    let (future, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
-        .execute(&mut conn)
+    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+        .with_column_names(false)
+        .execute(&mut conn1)
         .await?;
 
-    let read_futures = readers.into_iter().map(|r| {
-        tokio::spawn(read_data(r))
+    let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+        .execute(&mut conn2)
+        .await?;
+
+    let transport_futs = iter::zip(readers, writers).map(|(r, w)| {
+        tokio::spawn(pipe(r, w))
             .map_err(From::from)
             .and_then(|r| async { r })
     });
 
-    let (query_res, _) = try_join(future, try_join_all(read_futures))
-        .await
-        .map_err(|e| anyhow::anyhow! {e})?;
+    let (export_res, import_res, _) =
+        try_join3(export_fut, import_fut, try_join_all(transport_futs))
+            .await
+            .map_err(|e| anyhow::anyhow! {e})?;
 
-    assert_eq!(1000, query_res.rows_affected());
+    assert_eq!(1000, export_res.rows_affected());
+    assert_eq!(0, import_res.rows_affected());
 
     Ok(())
 }
 
-async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
-    let mut buf = String::new();
-    reader.read_to_string(&mut buf).await?;
-    Ok(())
-}
+// #[cfg(feature = "compression")]
+// #[sqlx::test]
+// async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow::Result<()> {
+//     let mut conn1 = pool.acquire().await?;
+//     let mut conn2 = pool.acquire().await?;
+
+//     conn1
+//         .execute("CREATE TABLE TEST_EXPORT ( col VARCHAR(200) );")
+//         .await?;
+
+//     sqlx::query("INSERT INTO TEST_EXPORT VALUES (?)")
+//         .bind(vec!["dummy"; 1000])
+//         .execute(&mut *conn1)
+//         .await?;
+
+//     let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_EXPORT"))
+//         .compression(true)
+//         .execute(&mut conn1)
+//         .await?;
+
+//     let (import_fut, writers) = ImportOptions::new("TEST_EXPORT")
+//         .skip(1)
+//         .compression(true)
+//         .execute(&mut conn2)
+//         .await?;
+
+//     let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
+
+//     env_logger::init();
+//     let (export_res, import_res, _) =
+//         try_join3(export_fut, import_fut, try_join_all(transport_futs))
+//             .await
+//             .map_err(|e| anyhow::anyhow! {e})?;
+
+//     assert_eq!(1000, export_res.rows_affected());
+//     assert_eq!(0, import_res.rows_affected());
+
+//     Ok(())
+// }

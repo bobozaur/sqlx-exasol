@@ -163,9 +163,9 @@ where
             query.push_str("*/\n");
         }
 
-        query.push_str("IMPORT INTO ");
+        query.push_str("IMPORT INTO \"");
         query.push_str(self.dest_table);
-        query.push(' ');
+        query.push_str("\" ");
 
         if let Some(cols) = self.columns {
             query.push('(');
@@ -182,6 +182,7 @@ where
         }
 
         query.push_str("FROM CSV ");
+
         append_filenames(&mut query, addrs, is_encrypted, is_compressed);
 
         if let Some(enc) = self.encoding {

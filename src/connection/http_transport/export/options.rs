@@ -66,7 +66,7 @@ impl<'a> ExportOptions<'a> {
                 .unzip();
 
         let query = self.query(addrs, encrypted, self.compression);
-        
+
         let sockets = raw_sockets
             .into_iter()
             .map(ExportReader::new)
@@ -146,6 +146,7 @@ impl<'a> ExportOptions<'a> {
         };
 
         query.push_str(" INTO CSV ");
+
         append_filenames(&mut query, addrs, is_encrypted, is_compressed);
 
         if let Some(enc) = self.encoding {

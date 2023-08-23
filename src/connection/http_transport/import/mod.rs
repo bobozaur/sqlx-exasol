@@ -4,9 +4,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_compression::futures::write::GzipDecoder;
+use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
-use futures_util::AsyncWriteExt;
 use pin_project::pin_project;
 
 use self::writer::ImportWriter;
@@ -20,32 +19,16 @@ pub use options::{ImportOptions, Trim};
 #[derive(Debug)]
 pub enum ExaImport {
     #[cfg(feature = "compression")]
-    Compressed(#[pin] GzipDecoder<ImportWriter>),
+    Compressed(#[pin] GzipEncoder<ImportWriter>),
     Plain(#[pin] ImportWriter),
 }
 
 impl ExaImport {
-    /// Ends the data import.
-    /// *MUST* be called after no more data needs to be
-    /// passed to this writer.
-    pub async fn finish(mut self) -> IoResult<()> {
-        self.flush().await?;
-        self.into_inner().finish().await
-    }
-
     pub(crate) fn new(writer: ImportWriter, compression: bool) -> Self {
         match compression {
             #[cfg(feature = "compression")]
-            true => Self::Compressed(GzipDecoder::new(writer)),
+            true => Self::Compressed(GzipEncoder::new(writer)),
             _ => Self::Plain(writer),
-        }
-    }
-
-    fn into_inner(self) -> ImportWriter {
-        match self {
-            #[cfg(feature = "compression")]
-            ExaImport::Compressed(s) => s.into_inner(),
-            ExaImport::Plain(s) => s,
         }
     }
 }

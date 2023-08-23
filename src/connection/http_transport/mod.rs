@@ -74,6 +74,26 @@ fn poll_read_byte(socket: Pin<&mut BufReader<ExaSocket>>, cx: &mut Context) -> P
     }
 }
 
+fn poll_ignore_headers(
+    socket: Pin<&mut BufReader<ExaSocket>>,
+    cx: &mut Context,
+    buf: &mut [u8; 4],
+) -> Poll<IoResult<bool>> {
+    let byte = ready!(poll_read_byte(socket, cx))?;
+
+    // Shift bytes
+    buf[0] = buf[1];
+    buf[1] = buf[2];
+    buf[2] = buf[3];
+    buf[3] = byte;
+
+    // If true, all headers have been read
+    match buf == DOUBLE_CR_LF {
+        true => Poll::Ready(Ok(true)),
+        false => Poll::Ready(Ok(false)),
+    }
+}
+
 async fn start_jobs(
     num_jobs: usize,
     ips: Vec<IpAddr>,

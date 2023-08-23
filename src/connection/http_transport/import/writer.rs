@@ -64,7 +64,6 @@ impl ImportWriter {
 
         if let Some(start) = this.buf_start {
             while *start < this.buf.len() {
-                tracing::info!("{:?}", &this.buf[*start..]);
                 let res = ready!(this.socket.as_mut().poll_write(cx, &this.buf[*start..]));
 
                 match res {
@@ -135,31 +134,24 @@ impl AsyncWrite for ImportWriter {
                     }
                 }
                 WriterState::BufferData => {
-                    tracing::info!("buffering data");
                     // We keep extra capacity for the chunk terminator
                     let cap = this.buf.capacity() - 2;
 
                     // There's still space in buffer
                     if cap > this.buf.len() {
-                        let res = Pin::new(this.buf).poll_write(cx, buf);
-                        tracing::info!("buf write res: {res:?}");
-                        return res;
+                        return Pin::new(this.buf).poll_write(cx, buf);
                     }
-
-                    tracing::info!("data buffered!");
 
                     // Buffer is full, patch and send it.
                     *this.state = WriterState::PatchBuffer;
                 }
                 WriterState::PatchBuffer => {
-                    tracing::info!("patching buffer");
                     self.patch_buffer();
                     self.state = WriterState::Send;
                 }
 
                 WriterState::Send => {
                     ready!(self.as_mut().poll_flush_buffer(cx))?;
-                    tracing::info!("buffer sent");
                     self.state = WriterState::BufferData;
                 }
             };
