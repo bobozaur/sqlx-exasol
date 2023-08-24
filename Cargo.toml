@@ -14,6 +14,9 @@ categories = ["database"]
 compression = ["dep:async-compression", "dep:flate2"]
 uuid = ["dep:uuid"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
+etl = []
+etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
+etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
 
 [dependencies]
 rand = "0.8.5"
@@ -34,7 +37,7 @@ sqlx-core = "=0.7.1"
 sqlx-macros-core = "=0.7.1"
 tracing = { version = "0.1.37", features = ["log"] }
 arrayvec = "0.7.4"
-rcgen = "0.11.1"
+rcgen = { version = "0.11.1", optional = true }
 
 # Feature flagged optional dependencies
 uuid = { version = "1.4.1", features = ["serde"], optional = true }
@@ -47,6 +50,11 @@ async-compression = { version = "0.4.1", features = [
     "futures-io",
     "gzip",
 ], optional = true }
+rustls = { version = "0.21", default-features = false, features = [
+    "dangerous_configuration",
+    "tls12",
+], optional = true }
+native-tls = { version = "0.2.10", optional = true }
 
 [dev-dependencies]
 sqlx = { version = "=0.7.1", features = [

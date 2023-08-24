@@ -1,5 +1,5 @@
 mod executor;
-mod http_transport;
+mod etl;
 mod macros;
 mod stream;
 mod tls;
@@ -32,7 +32,7 @@ use websocket::{socket::WithExaSocket, ExaWebSocket};
 
 use self::macros::fetcher_closure;
 
-pub use http_transport::{
+pub use etl::{
     ExaExport, ExaImport, ExportOptions, ImportOptions, QueryOrTable, RowSeparator, Trim,
 };
 

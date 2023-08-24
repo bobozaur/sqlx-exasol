@@ -1,8 +1,8 @@
-use std::{fmt::Debug, net::SocketAddr};
+use std::{fmt::Debug, net::SocketAddrV4};
 
 use crate::{
     connection::{
-        http_transport::{append_filenames, start_jobs, RowSeparator},
+        etl::{append_filenames, start_jobs, RowSeparator},
         websocket::socket::ExaSocket,
     },
     ExaConnection, ExaQueryResult,
@@ -59,11 +59,8 @@ impl<'a> ExportOptions<'a> {
         let port = con.ws.socket_addr().port();
         let encrypted = con.attributes().encryption_enabled;
 
-        let (raw_sockets, addrs): (Vec<ExaSocket>, _) =
-            start_jobs(self.num_readers, ips, port, encrypted)
-                .await?
-                .into_iter()
-                .unzip();
+        let socket_details = start_jobs(self.num_readers, ips, port, encrypted).await?;
+        let (raw_sockets, addrs): (Vec<ExaSocket>, _) = socket_details.into_iter().unzip();
 
         let query = self.query(addrs, encrypted, self.compression);
 
@@ -125,7 +122,7 @@ impl<'a> ExportOptions<'a> {
         self
     }
 
-    fn query(&self, addrs: Vec<SocketAddr>, is_encrypted: bool, is_compressed: bool) -> String {
+    fn query(&self, addrs: Vec<SocketAddrV4>, is_encrypted: bool, is_compressed: bool) -> String {
         let mut query = String::new();
 
         if let Some(com) = self.comment {

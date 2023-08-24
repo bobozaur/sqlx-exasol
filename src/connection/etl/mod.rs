@@ -1,9 +1,11 @@
 mod export;
 mod import;
+#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+mod tls;
 
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult};
 use std::iter;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
@@ -11,16 +13,10 @@ use arrayvec::ArrayString;
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::future::try_join_all;
 use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt};
-use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
-use rsa::pkcs8::{EncodePrivateKey, LineEnding};
-use rsa::RsaPrivateKey;
 use sqlx_core::error::{BoxDynError, Error as SqlxError};
-use sqlx_core::net::tls::CertificateInput;
 
-use crate::connection::{tls, websocket::socket::WithExaSocket};
-use crate::error::ExaResultExt;
-use crate::options::ExaTlsOptionsRef;
-use crate::{ExaDatabaseError, ExaSslMode};
+use crate::connection::websocket::socket::WithExaSocket;
+use crate::ExaDatabaseError;
 
 use super::websocket::socket::ExaSocket;
 
@@ -111,56 +107,35 @@ async fn start_jobs(
     ips: Vec<IpAddr>,
     port: u16,
     encrypted: bool,
-) -> Result<Vec<(ExaSocket, SocketAddr)>, SqlxError> {
+) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
     let num_jobs = if num_jobs > 0 { num_jobs } else { ips.len() };
     let futures = ips
         .into_iter()
         .take(num_jobs)
         .map(|ip| spawn_socket(ip, port));
 
-    let socket_arr = try_join_all(futures)
+    let (sockets, addrs): (Vec<ExaSocket>, Vec<SocketAddrV4>) = try_join_all(futures)
         .await
-        .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?;
+        .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?
+        .into_iter()
+        .unzip();
 
-    let mut sockets = Vec::with_capacity(socket_arr.len());
-    let mut addrs = Vec::with_capacity(socket_arr.len());
-    let mut str_addrs = Vec::with_capacity(socket_arr.len());
+    tracing::info!("before sockets");
+    let sockets = match encrypted {
+        #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+        true => {
+            let cert = tls::make_cert()?;
+            let futures = sockets.into_iter().map(|s| tls::upgrade(s, &cert));
+            try_join_all(futures).await?
+        }
+        _ => sockets,
+    };
 
-    for (socket, addr) in socket_arr {
-        str_addrs.push(addr.to_string());
-        addrs.push(addr);
-        sockets.push(socket);
-    }
-
-    // let (ssl_mode, cert, key) = if encrypted {
-    //     let cert = make_cert()?;
-    //     let tls_cert = cert.serialize_pem().to_sqlx_err()?;
-    //     let tls_cert = CertificateInput::Inline(tls_cert.into_bytes());
-    //     let key = cert.serialize_private_key_pem();
-    //     let key = CertificateInput::Inline(key.into_bytes());
-
-    //     (ExaSslMode::Required, Some(tls_cert), Some(key))
-    // } else {
-    //     (ExaSslMode::Disabled, None, None)
-    // };
-
-    // let tls_opts = ExaTlsOptionsRef {
-    //     ssl_mode,
-    //     ssl_ca: None,
-    //     ssl_client_cert: cert.as_ref(),
-    //     ssl_client_key: key.as_ref(),
-    // };
-
-    // let futures = iter::zip(sockets, &str_addrs).map(|(s, h)| upgrade_socket(s, h, tls_opts));
-
-    // let sockets = try_join_all(futures)
-    //     .await
-    //     .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?;
-
+    tracing::info!("after sockets");
     Ok(iter::zip(sockets, addrs).collect())
 }
 
-async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddr), BoxDynError> {
+async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddrV4), BoxDynError> {
     let host = ip.to_string();
     let socket_addr = SocketAddr::new(ip, port);
     let with_socket = WithExaSocket(socket_addr);
@@ -180,24 +155,14 @@ async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddr), 
 
     let port = u16::from_le_bytes([buf[4], buf[5]]);
     let ip = ip_buf.parse()?;
-    let address = SocketAddr::new(ip, port);
+    let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))
 }
 
-async fn upgrade_socket(
-    socket: ExaSocket,
-    host: &str,
-    tls_opts: ExaTlsOptionsRef<'_>,
-) -> Result<ExaSocket, SqlxError> {
-    tls::maybe_upgrade(socket, host, tls_opts)
-        .await
-        .map(|(s, _)| s)
-}
-
 fn append_filenames(
     query: &mut String,
-    addrs: Vec<SocketAddr>,
+    addrs: Vec<SocketAddrV4>,
     is_encrypted: bool,
     is_compressed: bool,
 ) {
@@ -205,8 +170,6 @@ fn append_filenames(
         false => HTTP_PREFIX,
         true => HTTPS_PREFIX,
     };
-
-    let prefix = HTTP_PREFIX;
 
     let ext = match is_compressed {
         false => CSV_FILE_EXT,
@@ -217,22 +180,4 @@ fn append_filenames(
         let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'\n", prefix, addr, idx, ext);
         query.push_str(&filename);
     }
-}
-
-fn make_cert() -> Result<Certificate, SqlxError> {
-    let mut params = CertificateParams::default();
-    params.alg = &PKCS_RSA_SHA256;
-    params.key_pair = Some(make_rsa_keypair()?);
-    Certificate::from_params(params).to_sqlx_err()
-}
-
-fn make_rsa_keypair() -> Result<KeyPair, SqlxError> {
-    let mut rng = rand::thread_rng();
-    let bits = 2048;
-    let private_key = RsaPrivateKey::new(&mut rng, bits).to_sqlx_err()?;
-    let key = private_key
-        .to_pkcs8_pem(LineEnding::CRLF)
-        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
-
-    KeyPair::from_pem(&key).to_sqlx_err()
 }

@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::connection::{
-    http_transport::{poll_send_static, poll_until_double_crlf},
+    etl::{poll_send_static, poll_until_double_crlf},
     websocket::socket::ExaSocket,
 };
 

@@ -1,4 +1,4 @@
-use std::{fmt::Write, net::SocketAddr};
+use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
 use futures_core::Future;
@@ -6,7 +6,7 @@ use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use crate::{
     connection::{
-        http_transport::{append_filenames, start_jobs, RowSeparator},
+        etl::{append_filenames, start_jobs, RowSeparator},
         websocket::socket::ExaSocket,
     },
     ExaConnection, ExaQueryResult,
@@ -74,11 +74,8 @@ where
         let port = con.ws.socket_addr().port();
         let encrypted = con.attributes().encryption_enabled;
 
-        let (raw_sockets, addrs): (Vec<ExaSocket>, _) =
-            start_jobs(self.num_writers, ips, port, encrypted)
-                .await?
-                .into_iter()
-                .unzip();
+        let socket_details = start_jobs(self.num_writers, ips, port, encrypted).await?;
+        let (raw_sockets, addrs): (Vec<ExaSocket>, _) = socket_details.into_iter().unzip();
 
         let query = self.query(addrs, encrypted, self.compression);
 
@@ -155,7 +152,7 @@ where
         self
     }
 
-    fn query(&self, addrs: Vec<SocketAddr>, is_encrypted: bool, is_compressed: bool) -> String {
+    fn query(&self, addrs: Vec<SocketAddrV4>, is_encrypted: bool, is_compressed: bool) -> String {
         let mut query = String::new();
 
         if let Some(com) = self.comment {

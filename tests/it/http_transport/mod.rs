@@ -114,6 +114,8 @@ async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow:
         .execute(&mut *conn1)
         .await?;
 
+    env_logger::init();
+
     let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
         .with_column_names(false)
         .compression(true)

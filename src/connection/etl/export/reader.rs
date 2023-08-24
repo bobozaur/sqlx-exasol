@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::connection::{
-    http_transport::{poll_read_byte, poll_send_static, poll_until_double_crlf},
+    etl::{poll_read_byte, poll_send_static, poll_until_double_crlf},
     websocket::socket::ExaSocket,
 };
 
@@ -25,7 +25,7 @@ pub struct ExportReader {
 }
 
 impl ExportReader {
-    /// Packet that tells Exasol the transport was successfull.
+    /// HTTP Response for the EXPORT request Exasol sends.
     const RESPONSE: &[u8; 38] = b"HTTP/1.1 200 OK\r\n\
                                   Connection: close\r\n\
                                   \r\n";
