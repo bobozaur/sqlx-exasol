@@ -17,15 +17,12 @@ use rsa::RsaPrivateKey;
 
 use crate::error::ExaResultExt;
 
-use self::native_tls::upgrade_native_tls;
-use self::rustls::upgrade_rustls;
-
 #[allow(unreachable_code)]
 pub async fn upgrade(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
     #[cfg(feature = "etl_native_tls")]
-    return upgrade_native_tls(socket, cert).await;
+    return native_tls::upgrade_native_tls(socket, cert).await;
     #[cfg(feature = "etl_rustls")]
-    return upgrade_rustls(socket, cert).await;
+    return rustls::upgrade_rustls(socket, cert).await;
 }
 
 pub fn make_cert() -> Result<Certificate, SqlxError> {
@@ -75,6 +72,7 @@ impl SyncExaSocket {
         Poll::Ready(Ok(()))
     }
 
+    #[allow(dead_code)]
     pub async fn ready(&mut self) -> IoResult<()> {
         future::poll_fn(|cx| self.poll_ready(cx)).await
     }

@@ -32,8 +32,8 @@ const DOUBLE_CR_LF: &[u8; 4] = b"\r\n\r\n";
 const GZ_FILE_EXT: &str = "gz";
 const CSV_FILE_EXT: &str = "csv";
 
-const HTTP_PREFIX: &str = "http";
-const HTTPS_PREFIX: &str = "https";
+const HTTP_SCHEME: &str = "http";
+const HTTPS_SCHEME: &str = "https";
 
 #[derive(Debug, Clone, Copy)]
 pub enum RowSeparator {
@@ -120,8 +120,6 @@ async fn start_jobs(
         .into_iter()
         .unzip();
 
-    tracing::info!("before sockets");
-
     let sockets = match encrypted {
         #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
         true => {
@@ -131,8 +129,6 @@ async fn start_jobs(
         }
         _ => sockets,
     };
-
-    tracing::info!("after sockets");
 
     Ok(iter::zip(sockets, addrs).collect())
 }
@@ -169,8 +165,8 @@ fn append_filenames(
     is_compressed: bool,
 ) {
     let prefix = match is_encrypted {
-        false => HTTP_PREFIX,
-        true => HTTPS_PREFIX,
+        false => HTTP_SCHEME,
+        true => HTTPS_SCHEME,
     };
 
     let ext = match is_compressed {

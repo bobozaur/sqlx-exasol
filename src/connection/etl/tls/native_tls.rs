@@ -17,6 +17,8 @@ pub async fn upgrade_native_tls(
     socket: ExaSocket,
     cert: &Certificate,
 ) -> Result<ExaSocket, SqlxError> {
+    tracing::trace!("upgrading socket to TLS through 'native-tls'");
+
     let tls_cert = cert.serialize_pem().to_sqlx_err()?;
     let key = cert.serialize_private_key_pem();
     let socket_addr = socket.sock_addr;
@@ -45,27 +47,22 @@ struct NativeTlsSocket(native_tls::TlsStream<SyncExaSocket>);
 
 impl Socket for NativeTlsSocket {
     fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
-        tracing::info!("in try_read");
         self.0.read(buf.init_mut())
     }
 
     fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        tracing::info!("in try_write");
         self.0.write(buf)
     }
 
     fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        tracing::info!("in poll_read_ready");
         self.0.get_mut().poll_ready(cx)
     }
 
     fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        tracing::info!("in poll_write_ready");
         self.0.get_mut().poll_ready(cx)
     }
 
     fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        tracing::info!("in poll_shutdown");
         match self.0.shutdown() {
             Err(e) if e.kind() == IoErrorKind::WouldBlock => self.0.get_mut().poll_ready(cx),
             ready => Poll::Ready(ready),

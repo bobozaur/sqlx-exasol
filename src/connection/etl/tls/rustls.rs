@@ -20,6 +20,8 @@ use crate::error::ExaResultExt;
 use super::SyncExaSocket;
 
 pub async fn upgrade_rustls(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
+    tracing::trace!("upgrading socket to TLS through 'rustls'");
+
     let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
     let key = PrivateKey(cert.serialize_private_key_der());
     let socket_addr = socket.sock_addr;
