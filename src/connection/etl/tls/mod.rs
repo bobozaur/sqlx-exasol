@@ -3,6 +3,7 @@ mod native_tls;
 #[cfg(feature = "etl_rustls")]
 mod rustls;
 
+use std::future;
 use std::io::{Read, Result as IoResult, Write};
 use std::task::{ready, Context, Poll};
 
@@ -22,9 +23,9 @@ use self::rustls::upgrade_rustls;
 #[allow(unreachable_code)]
 pub async fn upgrade(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
     #[cfg(feature = "etl_native_tls")]
-    return upgrade_native_tls(socket, cert);
+    return upgrade_native_tls(socket, cert).await;
     #[cfg(feature = "etl_rustls")]
-    return upgrade_rustls(socket, cert);
+    return upgrade_rustls(socket, cert).await;
 }
 
 pub fn make_cert() -> Result<Certificate, SqlxError> {
@@ -72,6 +73,10 @@ impl SyncExaSocket {
         }
 
         Poll::Ready(Ok(()))
+    }
+
+    pub async fn ready(&mut self) -> IoResult<()> {
+        future::poll_fn(|cx| self.poll_ready(cx)).await
     }
 }
 

@@ -121,6 +121,7 @@ async fn start_jobs(
         .unzip();
 
     tracing::info!("before sockets");
+
     let sockets = match encrypted {
         #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
         true => {
@@ -132,6 +133,7 @@ async fn start_jobs(
     };
 
     tracing::info!("after sockets");
+
     Ok(iter::zip(sockets, addrs).collect())
 }
 

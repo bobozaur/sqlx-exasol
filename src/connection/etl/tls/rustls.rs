@@ -1,3 +1,4 @@
+use std::future;
 use std::io::{ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -18,7 +19,7 @@ use crate::error::ExaResultExt;
 
 use super::SyncExaSocket;
 
-pub fn upgrade_rustls(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
+pub async fn upgrade_rustls(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
     let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
     let key = PrivateKey(cert.serialize_private_key_der());
     let socket_addr = socket.sock_addr;
@@ -33,11 +34,14 @@ pub fn upgrade_rustls(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket
         )
     };
     let state = ServerConnection::new(config).to_sqlx_err()?;
-    let socket = RustlsSocket {
+    let mut socket = RustlsSocket {
         inner: SyncExaSocket::new(socket),
         state,
         close_notify_sent: false,
     };
+
+    // Performs the TLS handshake or bails
+    socket.complete_io().await?;
 
     let socket = WithExaSocket(socket_addr).with_socket(socket);
     Ok(socket)
@@ -59,6 +63,10 @@ impl RustlsSocket {
                 ready => return Poll::Ready(ready.map(|_| ())),
             }
         }
+    }
+
+    async fn complete_io(&mut self) -> IoResult<()> {
+        future::poll_fn(|cx| self.poll_complete_io(cx)).await
     }
 }
 

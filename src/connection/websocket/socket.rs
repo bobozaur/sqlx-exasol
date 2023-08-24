@@ -47,6 +47,7 @@ impl AsyncRead for ExaSocket {
         cx: &mut Context<'_>,
         mut buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
+        tracing::info!("in poll_read");
         while buf.has_remaining_mut() {
             match self.inner.try_read(&mut buf) {
                 Err(e) if e.kind() == IoErrorKind::WouldBlock => {
@@ -66,6 +67,7 @@ impl AsyncWrite for ExaSocket {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<IoResult<usize>> {
+        tracing::info!("in poll_write");
         while !buf.is_empty() {
             match self.inner.try_write(buf) {
                 Err(e) if e.kind() == IoErrorKind::WouldBlock => {
