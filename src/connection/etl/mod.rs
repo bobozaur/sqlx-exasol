@@ -206,6 +206,7 @@ async fn spawn_non_tls_sockets(
     port: u16,
 ) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
     tracing::trace!("spawning {num_sockets} non-TLS sockets");
+    
     let mut sockets = Vec::with_capacity(num_sockets);
 
     for ip in ips.into_iter().take(num_sockets) {

@@ -1,5 +1,6 @@
 mod extend;
 pub mod socket;
+mod tls;
 
 use std::{
     borrow::Cow,
@@ -29,7 +30,9 @@ use socket::ExaSocket;
 
 use extend::WebSocketExt;
 
-use super::{stream::QueryResultStream, tls};
+use super::stream::QueryResultStream;
+
+pub use tls::WithMaybeTlsExaSocket;
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
@@ -44,17 +47,17 @@ impl ExaWebSocket {
 
     pub(crate) async fn new(
         host: &str,
+        port: u16,
         socket: ExaSocket,
         options: ExaConnectOptionsRef<'_>,
+        with_tls: bool,
     ) -> Result<(Self, SessionInfo), SqlxError> {
-        let (socket, is_tls) = tls::maybe_upgrade(socket, host, options.tls_opts).await?;
-
-        let scheme = match is_tls {
+        let scheme = match with_tls {
             true => Self::WSS_SCHEME,
             false => Self::WS_SCHEME,
         };
 
-        let host = format!("{scheme}://{host}");
+        let host = format!("{scheme}://{host}:{port}");
 
         let (ws, _) = async_tungstenite::client_async(host, BufReader::new(socket))
             .await
@@ -68,7 +71,7 @@ impl ExaWebSocket {
             pending_rollback: false,
         };
 
-        this.attributes.encryption_enabled = is_tls;
+        this.attributes.encryption_enabled = with_tls;
         this.attributes.fetch_size = options.fetch_size;
         this.attributes.statement_cache_capacity = options.statement_cache_capacity;
         let should_compress = options.compression;

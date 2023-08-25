@@ -13,7 +13,6 @@ use sqlx_core::{
     net::{Socket, WithSocket},
 };
 
-/// Implementor of [`WithSocket`].
 pub struct WithExaSocket(pub SocketAddr);
 
 impl WithSocket for WithExaSocket {
@@ -29,7 +28,7 @@ impl WithSocket for WithExaSocket {
 
 /// A wrapper so we can implement [`AsyncRead`] and [`AsyncWrite`]
 /// for the underlying TCP socket. The traits are needed by the
-/// [`WebSocketStream`] wrapper.
+/// [`async_tungstenite::WebSocketStream`] wrapper.
 pub struct ExaSocket {
     pub sock_addr: SocketAddr,
     pub inner: Box<dyn Socket>,

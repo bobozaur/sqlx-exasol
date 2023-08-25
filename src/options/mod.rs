@@ -5,7 +5,7 @@ mod protocol_version;
 mod serializable;
 mod ssl_mode;
 
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -48,7 +48,7 @@ pub(crate) const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
-    pub(crate) hosts: Vec<IpAddr>,
+    pub(crate) hosts_details: Vec<(String, Vec<SocketAddr>)>,
     pub(crate) port: u16,
     pub(crate) ssl_mode: ExaSslMode,
     pub(crate) ssl_ca: Option<CertificateInput>,
@@ -223,7 +223,6 @@ impl ConnectOptions for ExaConnectOptions {
 pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) login: LoginRef<'a>,
     pub(crate) protocol_version: ProtocolVersion,
-    pub(crate) tls_opts: ExaTlsOptionsRef<'a>,
     pub(crate) schema: Option<&'a str>,
     pub(crate) fetch_size: usize,
     pub(crate) query_timeout: u64,
@@ -234,17 +233,9 @@ pub(crate) struct ExaConnectOptionsRef<'a> {
 
 impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
     fn from(value: &'a ExaConnectOptions) -> Self {
-        let tls_opts = ExaTlsOptionsRef {
-            ssl_mode: value.ssl_mode,
-            ssl_ca: value.ssl_ca.as_ref(),
-            ssl_client_cert: value.ssl_client_cert.as_ref(),
-            ssl_client_key: value.ssl_client_key.as_ref(),
-        };
-
         Self {
             login: LoginRef::from(&value.login),
             protocol_version: value.protocol_version,
-            tls_opts,
             schema: value.schema.as_deref(),
             fetch_size: value.fetch_size,
             query_timeout: value.query_timeout,
@@ -256,11 +247,22 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ExaTlsOptionsRef<'a> {
+pub struct ExaTlsOptionsRef<'a> {
     pub(crate) ssl_mode: ExaSslMode,
     pub(crate) ssl_ca: Option<&'a CertificateInput>,
     pub(crate) ssl_client_cert: Option<&'a CertificateInput>,
     pub(crate) ssl_client_key: Option<&'a CertificateInput>,
+}
+
+impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {
+    fn from(value: &'a ExaConnectOptions) -> Self {
+        ExaTlsOptionsRef {
+            ssl_mode: value.ssl_mode,
+            ssl_ca: value.ssl_ca.as_ref(),
+            ssl_client_cert: value.ssl_client_cert.as_ref(),
+            ssl_client_key: value.ssl_client_key.as_ref(),
+        }
+    }
 }
 
 #[cfg(test)]

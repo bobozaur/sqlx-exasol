@@ -3,12 +3,12 @@ pub mod etl;
 mod executor;
 mod macros;
 mod stream;
-mod tls;
 mod websocket;
 
 use std::{iter, net::SocketAddr};
 
 use lru::LruCache;
+use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
     error::BoxDynError,
@@ -31,7 +31,7 @@ use crate::{
 use stream::QueryResultStream;
 use websocket::{socket::WithExaSocket, ExaWebSocket};
 
-use self::macros::fetcher_closure;
+use self::{macros::fetcher_closure, websocket::WithMaybeTlsExaSocket};
 
 #[derive(Debug)]
 pub struct ExaConnection {
@@ -71,32 +71,55 @@ impl ExaConnection {
     pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, SqlxError> {
         let mut ws_result = Err(SqlxError::Configuration("No hosts found".into()));
 
-        for host in &opts.hosts {
-            let str_host = host.to_string();
-            let socket_addr = SocketAddr::new(*host, opts.port);
-            let with_socket = WithExaSocket(socket_addr);
-            let socket_res = sqlx_core::net::connect_tcp(&str_host, opts.port, with_socket).await;
+        // We want to try and randomly connect to nodes, if multiple were provided.
+        // But since the RNG is not Send and cloning the hosts would be more expensive,
+        // we create a vector of the indices and shuffle these instead.
+        let mut indices = (0..opts.hosts_details.len()).collect::<Vec<_>>();
+        indices.shuffle(&mut thread_rng());
 
-            let socket = match socket_res {
-                Ok(socket) => socket,
-                Err(err) => {
-                    ws_result = Err(err);
-                    continue;
-                }
-            };
+        // For each host parsed from the connection string
+        for idx in indices {
+            // We know the index is valid since it's between 0..hosts.len()
+            let (host, addrs) = opts
+                .hosts_details
+                .get(idx)
+                .expect("hosts list index must be valid");
 
-            match ExaWebSocket::new(&str_host, socket, opts.into()).await {
-                Ok(ws) => {
-                    ws_result = Ok(ws);
-                    break;
-                }
-                Err(err) => {
-                    ws_result = Err(err);
-                    continue;
+            // For each socket address resolved from the host
+            for socket_addr in addrs {
+                let wrapper = WithExaSocket(*socket_addr);
+                let with_socket = WithMaybeTlsExaSocket::new(wrapper, host, opts.into());
+                let socket_res = sqlx_core::net::connect_tcp(host, opts.port, with_socket).await;
+
+                // Continue if we couldn't make the socket connect future
+                let socket_res = match socket_res {
+                    Ok(socket) => socket.await,
+                    Err(err) => {
+                        ws_result = Err(err);
+                        continue;
+                    }
+                };
+
+                // Continue if the future to connect a socket failed
+                let (socket, with_tls) = match socket_res {
+                    Ok(socket) => socket,
+                    Err(err) => {
+                        ws_result = Err(err);
+                        continue;
+                    }
+                };
+
+                // Break if we successfully connect a websocket.
+                match ExaWebSocket::new(host, opts.port, socket, opts.into(), with_tls).await {
+                    Ok(ws) => {
+                        ws_result = Ok(ws);
+                        break;
+                    }
+                    Err(err) => ws_result = Err(err),
                 }
             }
         }
-        
+
         let (ws, session_info) = ws_result?;
         let con = Self {
             ws,
