@@ -10,6 +10,7 @@ use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
 use arrayvec::ArrayString;
+use futures_channel::oneshot::{self, Receiver, Sender};
 use futures_core::future::BoxFuture;
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::io::BufReader;
@@ -108,24 +109,24 @@ async fn spawn_sockets(
     ips: Vec<IpAddr>,
     port: u16,
     with_tls: bool,
-) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+) -> Result<
+    Vec<(
+        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
+        Receiver<SocketAddrV4>,
+    )>,
+    SqlxError,
+> {
     let num_sockets = if num > 0 { num } else { ips.len() };
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
     match with_tls {
         true => tls::spawn_tls_sockets(num_sockets, ips, port).await,
-        false => {
-            tracing::warn!("An ETL TLS feature is enabled but the connection is not using TLS. ETL will also not use it.");
-            spawn_non_tls_sockets(num_sockets, ips, port).await
-        }
+        false => spawn_non_tls_sockets(num_sockets, ips, port).await,
     }
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
-        true => {
-            let msg = "ETL with TLS requires the 'etl_native_tls' or 'etl_rustls' feature";
-            Err(SqlxError::Tls(msg.into()))
-        }
+        true => Err(SqlxError::Tls("A TLS feature is required for ETL TLS")),
         false => spawn_non_tls_sockets(num_sockets, ips, port).await,
     }
 }
@@ -204,39 +205,58 @@ async fn spawn_non_tls_sockets(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
-) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+) -> Result<
+    Vec<(
+        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
+        Receiver<SocketAddrV4>,
+    )>,
+    SqlxError,
+> {
     tracing::trace!("spawning {num_sockets} non-TLS sockets");
 
-    let mut sockets = Vec::with_capacity(num_sockets);
+    let mut output = Vec::with_capacity(num_sockets);
 
     for ip in ips.into_iter().take(num_sockets) {
         let mut ip_buf = ArrayString::<50>::new_const();
         write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+        let (tx, rx) = oneshot::channel();
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithNonTlsSocket(wrapper);
-        let socket = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
+        let with_socket = WithNonTlsSocket::new(wrapper, tx);
+        let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
 
-        sockets.push(socket);
+        output.push((future, rx));
     }
 
-    Ok(sockets)
+    Ok(output)
 }
 
-struct WithNonTlsSocket(WithExaSocket);
+struct WithNonTlsSocket {
+    wrapper: WithExaSocket,
+    sender: Sender<SocketAddrV4>,
+}
+
+impl WithNonTlsSocket {
+    fn new(wrapper: WithExaSocket, sender: Sender<SocketAddrV4>) -> Self {
+        Self { wrapper, sender }
+    }
+}
 
 impl WithSocket for WithNonTlsSocket {
-    type Output = BoxFuture<'static, Result<(ExaSocket, SocketAddrV4), SqlxError>>;
+    type Output = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let wrapper = self.0;
+        let WithNonTlsSocket { wrapper, sender } = self;
 
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
+            sender
+                .send(address)
+                .map_err(|_| "could not send socket address for ETL job".to_owned())
+                .map_err(SqlxError::Protocol)?;
+
             let socket = wrapper.with_socket(socket);
-            Ok((socket, address))
+            Ok(socket)
         })
     }
 }

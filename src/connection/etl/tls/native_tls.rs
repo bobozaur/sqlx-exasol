@@ -1,4 +1,5 @@
 use arrayvec::ArrayString;
+use futures_channel::oneshot::{self, Receiver, Sender};
 use futures_core::future::BoxFuture;
 use native_tls::{HandshakeError, Identity, TlsAcceptor};
 use rcgen::Certificate;
@@ -8,6 +9,7 @@ use sqlx_core::net::Socket;
 use std::fmt::Write as _;
 use std::io::{ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::connection::websocket::socket::ExaSocket;
@@ -23,7 +25,13 @@ pub async fn spawn_native_tls_sockets(
     ips: Vec<IpAddr>,
     port: u16,
     cert: Certificate,
-) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+) -> Result<
+    Vec<(
+        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
+        Receiver<SocketAddrV4>,
+    )>,
+    SqlxError,
+> {
     tracing::trace!("spawning {num_sockets} TLS sockets through 'native-tls'");
 
     let tls_cert = cert.serialize_pem().to_sqlx_err()?;
@@ -31,23 +39,23 @@ pub async fn spawn_native_tls_sockets(
 
     let ident = Identity::from_pkcs8(tls_cert.as_bytes(), key.as_bytes()).to_sqlx_err()?;
     let acceptor = TlsAcceptor::new(ident).to_sqlx_err()?;
+    let acceptor = Arc::new(acceptor);
 
-    let mut sockets = Vec::with_capacity(ips.len());
+    let mut output = Vec::with_capacity(ips.len());
 
     for ip in ips.into_iter().take(num_sockets) {
         let mut ip_buf = ArrayString::<50>::new_const();
         write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+        let (tx, rx) = oneshot::channel();
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithNativeTlsSocket::new(wrapper, &acceptor);
-        let socket = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
+        let with_socket = WithNativeTlsSocket::new(wrapper, acceptor.clone(), tx);
+        let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
 
-        sockets.push(socket);
+        output.push((future, rx));
     }
 
-    Ok(sockets)
+    Ok(output)
 }
 
 struct NativeTlsSocket<S>(native_tls::TlsStream<SyncSocket<S>>)
@@ -82,28 +90,45 @@ where
     }
 }
 
-struct WithNativeTlsSocket<'a> {
+struct WithNativeTlsSocket {
     wrapper: WithExaSocket,
-    acceptor: &'a TlsAcceptor,
+    acceptor: Arc<TlsAcceptor>,
+    sender: Sender<SocketAddrV4>,
 }
 
-impl<'a> WithNativeTlsSocket<'a> {
-    fn new(wrapper: WithExaSocket, acceptor: &'a TlsAcceptor) -> Self {
-        Self { wrapper, acceptor }
+impl WithNativeTlsSocket {
+    fn new(
+        wrapper: WithExaSocket,
+        acceptor: Arc<TlsAcceptor>,
+        sender: Sender<SocketAddrV4>,
+    ) -> Self {
+        Self {
+            wrapper,
+            acceptor,
+            sender,
+        }
     }
 }
 
-impl<'a> WithSocket for WithNativeTlsSocket<'a> {
-    type Output = BoxFuture<'a, Result<(ExaSocket, SocketAddrV4), SqlxError>>;
+impl WithSocket for WithNativeTlsSocket {
+    type Output = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithNativeTlsSocket { wrapper, acceptor } = self;
+        let WithNativeTlsSocket {
+            wrapper,
+            acceptor,
+            sender,
+        } = self;
 
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
+            sender
+                .send(address)
+                .map_err(|_| "could not send socket address for ETL job".to_owned())
+                .map_err(SqlxError::Protocol)?;
 
             let mut hs = match acceptor.accept(SyncSocket::new(socket)) {
-                Ok(s) => return Ok((wrapper.with_socket(NativeTlsSocket(s)), address)),
+                Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
                 Err(HandshakeError::Failure(e)) => return Err(SqlxError::Tls(e.into())),
                 Err(HandshakeError::WouldBlock(hs)) => hs,
             };
@@ -112,7 +137,7 @@ impl<'a> WithSocket for WithNativeTlsSocket<'a> {
                 hs.get_mut().ready().await?;
 
                 match hs.handshake() {
-                    Ok(s) => return Ok((wrapper.with_socket(NativeTlsSocket(s)), address)),
+                    Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
                     Err(HandshakeError::Failure(e)) => return Err(SqlxError::Tls(e.into())),
                     Err(HandshakeError::WouldBlock(h)) => hs = h,
                 }

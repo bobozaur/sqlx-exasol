@@ -4,9 +4,10 @@ use std::io::{ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use arrayvec::ArrayString;
+use futures_channel::oneshot::{self, Receiver, Sender};
 use futures_core::future::BoxFuture;
 use rcgen::Certificate;
 use rustls::PrivateKey;
@@ -28,7 +29,13 @@ pub async fn spawn_rustls_sockets(
     ips: Vec<IpAddr>,
     port: u16,
     cert: Certificate,
-) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+) -> Result<
+    Vec<(
+        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
+        Receiver<SocketAddrV4>,
+    )>,
+    SqlxError,
+> {
     tracing::trace!("spawning {num_sockets} TLS sockets through 'rustls'");
 
     let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
@@ -44,22 +51,21 @@ pub async fn spawn_rustls_sockets(
         )
     };
 
-    let mut sockets = Vec::with_capacity(ips.len());
+    let mut output = Vec::with_capacity(ips.len());
 
     for ip in ips.into_iter().take(num_sockets) {
         let mut ip_buf = ArrayString::<50>::new_const();
         write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+        let (tx, rx) = oneshot::channel();
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithRustlsSocket::new(wrapper, config.clone());
-        let socket = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
+        let with_socket = WithRustlsSocket::new(wrapper, config.clone(), tx);
+        let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
 
-        sockets.push(socket);
+        output.push((future, rx));
     }
 
-    Ok(sockets)
+    Ok(output)
 }
 
 struct RustlsSocket<S>
@@ -79,7 +85,7 @@ where
         loop {
             match self.state.complete_io(&mut self.inner) {
                 Err(e) if e.kind() == IoErrorKind::WouldBlock => {
-                    futures_util::ready!(self.inner.poll_ready(cx))?;
+                    ready!(self.inner.poll_ready(cx))?;
                 }
                 ready => return Poll::Ready(ready.map(|_| ())),
             }
@@ -133,22 +139,39 @@ where
 struct WithRustlsSocket {
     wrapper: WithExaSocket,
     config: Arc<ServerConfig>,
+    sender: Sender<SocketAddrV4>,
 }
 
 impl WithRustlsSocket {
-    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
-        Self { wrapper, config }
+    fn new(
+        wrapper: WithExaSocket,
+        config: Arc<ServerConfig>,
+        sender: Sender<SocketAddrV4>,
+    ) -> Self {
+        Self {
+            wrapper,
+            config,
+            sender,
+        }
     }
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = BoxFuture<'static, Result<(ExaSocket, SocketAddrV4), SqlxError>>;
+    type Output = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithRustlsSocket { wrapper, config } = self;
+        let WithRustlsSocket {
+            wrapper,
+            config,
+            sender,
+        } = self;
 
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
+            sender
+                .send(address)
+                .map_err(|_| "could not send socket address for ETL job".to_owned())
+                .map_err(SqlxError::Protocol)?;
 
             let state = ServerConnection::new(config).to_sqlx_err()?;
             let mut socket = RustlsSocket {
@@ -161,7 +184,7 @@ impl WithSocket for WithRustlsSocket {
             socket.complete_io().await?;
 
             let socket = wrapper.with_socket(socket);
-            Ok((socket, address))
+            Ok(socket)
         })
     }
 }

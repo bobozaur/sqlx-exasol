@@ -1,5 +1,6 @@
 use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Error as WsError;
+use futures_channel::oneshot::Canceled;
 use rsa::errors::Error as RsaError;
 use serde_json::error::Error as JsonError;
 use sqlx_core::Error as SqlxError;
@@ -82,6 +83,13 @@ impl<T> ExaResultExt<T> for Result<T, RsaError> {
 impl<T> ExaResultExt<T> for Result<T, JsonError> {
     fn to_sqlx_err(self) -> Result<T, SqlxError> {
         self.map_err(|e| SqlxError::Protocol(e.to_string()))
+    }
+}
+
+impl<T> ExaResultExt<T> for Result<T, Canceled> {
+    fn to_sqlx_err(self) -> Result<T, SqlxError> {
+        self.map_err(|_| "receiving ETL socket address failed".to_owned())
+            .map_err(SqlxError::Protocol)
     }
 }
 

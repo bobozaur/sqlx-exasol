@@ -28,6 +28,7 @@ async-tungstenite = "0.23.0"
 futures-io = "0.3.28"
 futures-util = "0.3.28"
 futures-core = "0.3.28"
+futures-channel = "0.3.28"
 serde_json = { version = "1.0.100", features = ["raw_value"] }
 serde = { version = "1.0.169", features = ["derive"] }
 either = "1.8.1"

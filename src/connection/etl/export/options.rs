@@ -5,11 +5,13 @@ use crate::{
         etl::{append_filenames, spawn_sockets, RowSeparator},
         websocket::socket::ExaSocket,
     },
+    error::ExaResultExt,
     ExaConnection, ExaQueryResult,
 };
 
-use futures_core::Future;
+use futures_core::future::BoxFuture;
 
+use futures_util::future::{select, try_join_all, Either};
 use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use super::{reader::ExportReader, ExaExport};
@@ -50,7 +52,7 @@ impl<'a> ExportBuilder<'a> {
         con: &'b mut ExaConnection,
     ) -> Result<
         (
-            impl Future<Output = Result<ExaQueryResult, BoxDynError>> + 'b,
+            BoxFuture<'b, Result<ExaQueryResult, BoxDynError>>,
             Vec<ExaExport>,
         ),
         SqlxError,
@@ -59,18 +61,38 @@ impl<'a> ExportBuilder<'a> {
         let port = con.ws.socket_addr().port();
         let with_tls = con.attributes().encryption_enabled;
 
-        let socket_details = spawn_sockets(self.num_readers, ips, port, with_tls).await?;
-        let (raw_sockets, addrs): (Vec<ExaSocket>, _) = socket_details.into_iter().unzip();
+        let (futures, rxs): (Vec<_>, Vec<_>) = spawn_sockets(self.num_readers, ips, port, with_tls)
+            .await?
+            .into_iter()
+            .unzip();
+
+        let addrs_fut = try_join_all(rxs);
+        let sockets_fut = try_join_all(futures);
+
+        let (addrs, sockets_fut): (Vec<_>, BoxFuture<'_, Result<Vec<ExaSocket>, SqlxError>>) =
+            match select(addrs_fut, sockets_fut).await {
+                Either::Left((addrs, sockets_fut)) => (addrs.to_sqlx_err()?, Box::pin(sockets_fut)),
+                Either::Right((sockets, addrs_fut)) => (
+                    addrs_fut.await.to_sqlx_err()?,
+                    Box::pin(async move { sockets }),
+                ),
+            };
 
         let query = self.query(addrs, with_tls, self.compression);
+        let query_fut = Box::pin(con.execute_etl(query));
 
-        let sockets = raw_sockets
+        let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
+            Either::Right((sockets, f)) => (sockets?, f),
+            _ => unreachable!("ETL cannot finish before we use the sockets"),
+        };
+
+        let sockets = sockets
             .into_iter()
             .map(ExportReader::new)
             .map(|r| ExaExport::new(r, self.compression))
             .collect();
 
-        Ok((con.execute_etl(query), sockets))
+        Ok((query_fut, sockets))
     }
 
     /// Sets the number of reader jobs that will be started.

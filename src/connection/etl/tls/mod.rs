@@ -8,6 +8,8 @@ use std::io::{Read, Result as IoResult, Write};
 use std::net::{IpAddr, SocketAddrV4};
 use std::task::{ready, Context, Poll};
 
+use futures_channel::oneshot::Receiver;
+use futures_core::future::BoxFuture;
 use sqlx_core::error::Error as SqlxError;
 use sqlx_core::net::Socket;
 
@@ -27,7 +29,13 @@ pub async fn spawn_tls_sockets(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
-) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+) -> Result<
+    Vec<(
+        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
+        Receiver<SocketAddrV4>,
+    )>,
+    SqlxError,
+> {
     let cert = make_cert()?;
 
     #[cfg(feature = "etl_native_tls")]
@@ -91,7 +99,10 @@ where
 
     #[allow(dead_code)]
     pub async fn ready(&mut self) -> IoResult<()> {
-        future::poll_fn(|cx| self.poll_ready(cx)).await
+        future::poll_fn(|cx| {
+            self.poll_ready(cx)
+        })
+        .await
     }
 }
 
