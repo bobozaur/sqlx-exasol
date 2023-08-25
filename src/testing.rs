@@ -124,18 +124,21 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         do_cleanup(&mut conn, now).await?;
     }
 
+    let mut tx = conn.begin().await?;
+
     let query_str = r#"INSERT INTO "_sqlx_tests"."_sqlx_test_databases" (test_path) VALUES (?)"#;
     query(query_str)
         .bind(args.test_path)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await?;
 
     let query_str = r#"SELECT MAX(db_id) FROM "_sqlx_tests"."_sqlx_test_databases";"#;
-    let new_db_id: u64 = query_scalar(query_str).fetch_one(&mut *conn).await?;
+    let new_db_id: u64 = query_scalar(query_str).fetch_one(&mut *tx).await?;
     let new_db_name = db_name(new_db_id);
 
     let query_str = format!("CREATE SCHEMA {}", new_db_name);
-    conn.execute(&*query_str).await?;
+    tx.execute(&*query_str).await?;
+    tx.commit().await?;
 
     eprintln!("created database {}", new_db_name);
 
