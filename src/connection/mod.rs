@@ -134,7 +134,7 @@ impl ExaConnection {
 
     #[cfg(feature = "etl")]
     #[allow(clippy::needless_lifetimes)]
-    pub(crate) async fn run_http_transport<'a>(
+    pub(crate) async fn execute_etl<'a>(
         &'a mut self,
         query: String,
     ) -> Result<ExaQueryResult, BoxDynError> {

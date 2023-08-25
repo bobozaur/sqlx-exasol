@@ -85,7 +85,7 @@ where
             .map(|w| ExaImport::new(w, self.compression))
             .collect();
 
-        Ok((con.run_http_transport(query), sockets))
+        Ok((con.execute_etl(query), sockets))
     }
 
     /// Sets the number of writer jobs that will be started.

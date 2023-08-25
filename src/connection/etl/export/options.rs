@@ -70,7 +70,7 @@ impl<'a> ExportBuilder<'a> {
             .map(|r| ExaExport::new(r, self.compression))
             .collect();
 
-        Ok((con.run_http_transport(query), sockets))
+        Ok((con.execute_etl(query), sockets))
     }
 
     /// Sets the number of reader jobs that will be started.
