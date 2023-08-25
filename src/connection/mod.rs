@@ -96,6 +96,7 @@ impl ExaConnection {
                 }
             }
         }
+        
         let (ws, session_info) = ws_result?;
         let con = Self {
             ws,

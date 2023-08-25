@@ -2,7 +2,7 @@ use std::{fmt::Debug, net::SocketAddrV4};
 
 use crate::{
     connection::{
-        etl::{append_filenames, start_jobs, RowSeparator},
+        etl::{append_filenames, spawn_sockets, RowSeparator},
         websocket::socket::ExaSocket,
     },
     ExaConnection, ExaQueryResult,
@@ -59,7 +59,7 @@ impl<'a> ExportBuilder<'a> {
         let port = con.ws.socket_addr().port();
         let with_tls = con.attributes().encryption_enabled;
 
-        let socket_details = start_jobs(self.num_readers, ips, port, with_tls).await?;
+        let socket_details = spawn_sockets(self.num_readers, ips, port, with_tls).await?;
         let (raw_sockets, addrs): (Vec<ExaSocket>, _) = socket_details.into_iter().unzip();
 
         let query = self.query(addrs, with_tls, self.compression);

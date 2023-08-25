@@ -3,17 +3,18 @@ mod import;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod tls;
 
+use std::fmt::Write;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult};
-use std::iter;
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
 use arrayvec::ArrayString;
+use futures_core::future::BoxFuture;
 use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::future::try_join_all;
-use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt};
-use sqlx_core::error::{BoxDynError, Error as SqlxError};
+use futures_util::io::BufReader;
+use sqlx_core::error::Error as SqlxError;
+use sqlx_core::net::{Socket, WithSocket};
 
 use crate::connection::websocket::socket::WithExaSocket;
 use crate::ExaDatabaseError;
@@ -102,76 +103,31 @@ fn poll_until_double_crlf(
     }
 }
 
-async fn start_jobs(
-    num_jobs: usize,
+async fn spawn_sockets(
+    num: usize,
     ips: Vec<IpAddr>,
     port: u16,
     with_tls: bool,
 ) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
-    let num_jobs = if num_jobs > 0 { num_jobs } else { ips.len() };
-    let futures = ips
-        .into_iter()
-        .take(num_jobs)
-        .map(|ip| spawn_socket(ip, port));
+    let num_sockets = if num > 0 { num } else { ips.len() };
 
-    let (sockets, addrs): (Vec<ExaSocket>, Vec<SocketAddrV4>) = try_join_all(futures)
-        .await
-        .map_err(|e| ExaDatabaseError::unknown(e.to_string()))?
-        .into_iter()
-        .unzip();
-
-    let sockets = maybe_upgrade(sockets, with_tls).await?;
-
-    Ok(iter::zip(sockets, addrs).collect())
-}
-
-async fn maybe_upgrade(sockets: Vec<ExaSocket>, with_tls: bool) -> Result<Vec<ExaSocket>, SqlxError> {
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
     match with_tls {
-        true => {
-            let cert = tls::make_cert()?;
-            let futures = sockets.into_iter().map(|s| tls::upgrade(s, &cert));
-            try_join_all(futures).await
-        }
+        true => tls::spawn_tls_sockets(num_sockets, ips, port).await,
         false => {
-            tracing::warn!("An ETL TLS feature is enabled but the connection is not encrypted. ETL will also be unencrypted");
-            Ok(sockets)
+            tracing::warn!("An ETL TLS feature is enabled but the connection is not using TLS. ETL will also not use it.");
+            spawn_non_tls_sockets(num_sockets, ips, port).await
         }
     }
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
         true => {
-            let msg = "encrypted ETL requires the 'etl_native_tls' or 'etl_rustls' feature";
+            let msg = "ETL with TLS requires the 'etl_native_tls' or 'etl_rustls' feature";
             Err(SqlxError::Tls(msg.into()))
         }
-        false => Ok(sockets),
+        false => spawn_non_tls_sockets(num_sockets, ips, port).await,
     }
-}
-
-async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddrV4), BoxDynError> {
-    let host = ip.to_string();
-    let socket_addr = SocketAddr::new(ip, port);
-    let with_socket = WithExaSocket(socket_addr);
-
-    let mut socket = sqlx_core::net::connect_tcp(&host, port, with_socket).await?;
-    socket.write_all(&SPECIAL_PACKET).await?;
-
-    // Read response buffer.
-    let mut buf = [0; 24];
-    socket.read_exact(&mut buf).await?;
-    let mut ip_buf = ArrayString::<16>::new_const();
-
-    buf[8..]
-        .iter()
-        .take_while(|b| **b != b'\0')
-        .for_each(|b| ip_buf.push(char::from(*b)));
-
-    let port = u16::from_le_bytes([buf[4], buf[5]]);
-    let ip = ip_buf.parse()?;
-    let address = SocketAddrV4::new(ip, port);
-
-    Ok((socket, address))
 }
 
 fn append_filenames(
@@ -193,5 +149,93 @@ fn append_filenames(
     for (idx, addr) in addrs.into_iter().enumerate() {
         let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'\n", prefix, addr, idx, ext);
         query.push_str(&filename);
+    }
+}
+
+/// Behind the scenes Exasol will import/export to a file located on the
+/// one-shot HTTP server we will host on this socket.
+///
+/// The "file" will be defined something like "http://10.25.0.2/0001.csv".
+///
+/// While I don't know the exact implementation details, I assume Exasol
+/// does port forwarding to/from the socket we connect (the one in this function)
+/// and a local socket it opens (which has the address used in the file).
+///
+/// This function is used to retrieve the internal IP of that local socket,
+/// so we can construct the file name.
+async fn get_etl_addr<S>(mut socket: S) -> Result<(S, SocketAddrV4), SqlxError>
+where
+    S: Socket,
+{
+    // Write special packet
+    let mut write_start = 0;
+
+    while write_start < SPECIAL_PACKET.len() {
+        let written = socket.write(&SPECIAL_PACKET[write_start..]).await?;
+        write_start += written;
+    }
+
+    // Read response buffer.
+    let mut buf = [0; 24];
+    let mut read_start = 0;
+
+    while read_start < buf.len() {
+        let mut buf = &mut buf[read_start..];
+        let read = socket.read(&mut buf).await?;
+        read_start += read;
+    }
+
+    // Parse address
+    let mut ip_buf = ArrayString::<16>::new_const();
+
+    buf[8..]
+        .iter()
+        .take_while(|b| **b != b'\0')
+        .for_each(|b| ip_buf.push(char::from(*b)));
+
+    let port = u16::from_le_bytes([buf[4], buf[5]]);
+    let ip = ip_buf.parse().map_err(ExaDatabaseError::unknown)?;
+    let address = SocketAddrV4::new(ip, port);
+
+    Ok((socket, address))
+}
+
+async fn spawn_non_tls_sockets(
+    num_sockets: usize,
+    ips: Vec<IpAddr>,
+    port: u16,
+) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+    tracing::trace!("spawning {num_sockets} non-TLS sockets");
+    let mut sockets = Vec::with_capacity(num_sockets);
+
+    for ip in ips.into_iter().take(num_sockets) {
+        let mut ip_buf = ArrayString::<50>::new_const();
+        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+
+        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
+        let with_socket = WithNonTlsSocket(wrapper);
+        let socket = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
+            .await?
+            .await?;
+
+        sockets.push(socket);
+    }
+
+    Ok(sockets)
+}
+
+struct WithNonTlsSocket(WithExaSocket);
+
+impl WithSocket for WithNonTlsSocket {
+    type Output = BoxFuture<'static, Result<(ExaSocket, SocketAddrV4), SqlxError>>;
+
+    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        let wrapper = self.0;
+
+        Box::pin(async move {
+            let (socket, address) = get_etl_addr(socket).await?;
+            let socket = wrapper.with_socket(socket);
+            Ok((socket, address))
+        })
     }
 }

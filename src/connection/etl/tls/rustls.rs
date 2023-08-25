@@ -1,10 +1,13 @@
+use std::fmt::Write as _;
 use std::future;
 use std::io::{ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures_io::AsyncWrite;
+use arrayvec::ArrayString;
+use futures_core::future::BoxFuture;
 use rcgen::Certificate;
 use rustls::PrivateKey;
 use rustls::ServerConfig;
@@ -16,15 +19,20 @@ use sqlx_core::net::{Socket, WithSocket};
 use crate::connection::websocket::socket::ExaSocket;
 use crate::connection::websocket::socket::WithExaSocket;
 use crate::error::ExaResultExt;
+use crate::etl::get_etl_addr;
 
-use super::SyncExaSocket;
+use super::SyncSocket;
 
-pub async fn upgrade_rustls(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
-    tracing::trace!("upgrading socket to TLS through 'rustls'");
+pub async fn spawn_rustls_sockets(
+    num_sockets: usize,
+    ips: Vec<IpAddr>,
+    port: u16,
+    cert: Certificate,
+) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
+    tracing::trace!("spawning {num_sockets} TLS sockets through 'rustls'");
 
     let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
     let key = PrivateKey(cert.serialize_private_key_der());
-    let socket_addr = socket.sock_addr;
 
     let config = {
         Arc::new(
@@ -35,27 +43,38 @@ pub async fn upgrade_rustls(socket: ExaSocket, cert: &Certificate) -> Result<Exa
                 .to_sqlx_err()?,
         )
     };
-    let state = ServerConnection::new(config).to_sqlx_err()?;
-    let mut socket = RustlsSocket {
-        inner: SyncExaSocket::new(socket),
-        state,
-        close_notify_sent: false,
-    };
 
-    // Performs the TLS handshake or bails
-    socket.complete_io().await?;
+    let mut sockets = Vec::with_capacity(ips.len());
 
-    let socket = WithExaSocket(socket_addr).with_socket(socket);
-    Ok(socket)
+    for ip in ips.into_iter().take(num_sockets) {
+        let mut ip_buf = ArrayString::<50>::new_const();
+        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+
+        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
+        let with_socket = WithRustlsSocket::new(wrapper, config.clone());
+        let socket = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
+            .await?
+            .await?;
+
+        sockets.push(socket);
+    }
+
+    Ok(sockets)
 }
 
-struct RustlsSocket {
-    inner: SyncExaSocket,
+struct RustlsSocket<S>
+where
+    S: Socket,
+{
+    inner: SyncSocket<S>,
     state: ServerConnection,
     close_notify_sent: bool,
 }
 
-impl RustlsSocket {
+impl<S> RustlsSocket<S>
+where
+    S: Socket,
+{
     fn poll_complete_io(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         loop {
             match self.state.complete_io(&mut self.inner) {
@@ -72,7 +91,10 @@ impl RustlsSocket {
     }
 }
 
-impl Socket for RustlsSocket {
+impl<S> Socket for RustlsSocket<S>
+where
+    S: Socket,
+{
     fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
         self.state.reader().read(buf.init_mut())
     }
@@ -104,6 +126,42 @@ impl Socket for RustlsSocket {
         }
 
         futures_util::ready!(self.poll_complete_io(cx))?;
-        Pin::new(&mut self.inner.socket).poll_close(cx)
+        Pin::new(&mut self.inner.socket).poll_shutdown(cx)
+    }
+}
+
+struct WithRustlsSocket {
+    wrapper: WithExaSocket,
+    config: Arc<ServerConfig>,
+}
+
+impl WithRustlsSocket {
+    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
+        Self { wrapper, config }
+    }
+}
+
+impl WithSocket for WithRustlsSocket {
+    type Output = BoxFuture<'static, Result<(ExaSocket, SocketAddrV4), SqlxError>>;
+
+    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        let WithRustlsSocket { wrapper, config } = self;
+
+        Box::pin(async move {
+            let (socket, address) = get_etl_addr(socket).await?;
+
+            let state = ServerConnection::new(config).to_sqlx_err()?;
+            let mut socket = RustlsSocket {
+                inner: SyncSocket::new(socket),
+                state,
+                close_notify_sent: false,
+            };
+
+            // Performs the TLS handshake or bails
+            socket.complete_io().await?;
+
+            let socket = wrapper.with_socket(socket);
+            Ok((socket, address))
+        })
     }
 }

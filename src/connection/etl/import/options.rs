@@ -6,7 +6,7 @@ use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use crate::{
     connection::{
-        etl::{append_filenames, start_jobs, RowSeparator},
+        etl::{append_filenames, spawn_sockets, RowSeparator},
         websocket::socket::ExaSocket,
     },
     ExaConnection, ExaQueryResult,
@@ -74,7 +74,7 @@ where
         let port = con.ws.socket_addr().port();
         let with_tls = con.attributes().encryption_enabled;
 
-        let socket_details = start_jobs(self.num_writers, ips, port, with_tls).await?;
+        let socket_details = spawn_sockets(self.num_writers, ips, port, with_tls).await?;
         let (raw_sockets, addrs): (Vec<ExaSocket>, _) = socket_details.into_iter().unzip();
 
         let query = self.query(addrs, with_tls, self.compression);

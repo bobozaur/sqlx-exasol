@@ -12,13 +12,15 @@ pub struct ExaDatabaseError {
     code: String,
 }
 
-#[cfg(feature = "etl")]
 impl ExaDatabaseError {
     const UNKNOWN_ERROR_CODE: &str = "00000";
 
-    pub(crate) fn unknown(text: String) -> Self {
+    pub(crate) fn unknown<E>(err: E) -> Self
+    where
+        E: std::error::Error,
+    {
         Self {
-            text,
+            text: err.to_string(),
             code: Self::UNKNOWN_ERROR_CODE.to_owned(),
         }
     }
