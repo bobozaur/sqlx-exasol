@@ -17,6 +17,9 @@ use rsa::RsaPrivateKey;
 
 use crate::error::ExaResultExt;
 
+#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
+compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
+
 #[allow(unreachable_code)]
 pub async fn upgrade(socket: ExaSocket, cert: &Certificate) -> Result<ExaSocket, SqlxError> {
     #[cfg(feature = "etl_native_tls")]

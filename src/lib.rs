@@ -25,10 +25,10 @@ use sqlx_core::{
 
 pub use arguments::ExaArguments;
 pub use column::ExaColumn;
-pub use connection::{
-    ExaConnection, ExaExport, ExaImport, ExportOptions, ImportOptions, QueryOrTable, RowSeparator,
-    Trim,
-};
+#[cfg(feature = "etl")]
+pub use connection::etl;
+pub use connection::ExaConnection;
+
 pub use database::Exasol;
 pub use options::{ExaConnectOptions, ExaSslMode, ProtocolVersion};
 pub use query_result::ExaQueryResult;

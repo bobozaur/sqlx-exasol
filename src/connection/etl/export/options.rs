@@ -16,7 +16,7 @@ use super::{reader::ExportReader, ExaExport};
 
 /// Export options
 #[derive(Debug)]
-pub struct ExportOptions<'a> {
+pub struct ExportBuilder<'a> {
     num_readers: usize,
     compression: bool,
     source: QueryOrTable<'a>,
@@ -29,7 +29,7 @@ pub struct ExportOptions<'a> {
     with_column_names: bool,
 }
 
-impl<'a> ExportOptions<'a> {
+impl<'a> ExportBuilder<'a> {
     pub fn new(source: QueryOrTable<'a>) -> Self {
         Self {
             num_readers: 0,
@@ -45,7 +45,7 @@ impl<'a> ExportOptions<'a> {
         }
     }
 
-    pub async fn execute<'b>(
+    pub async fn build<'b>(
         &mut self,
         con: &'b mut ExaConnection,
     ) -> Result<
@@ -57,12 +57,12 @@ impl<'a> ExportOptions<'a> {
     > {
         let ips = con.ws.get_hosts().await?;
         let port = con.ws.socket_addr().port();
-        let encrypted = con.attributes().encryption_enabled;
+        let with_tls = con.attributes().encryption_enabled;
 
-        let socket_details = start_jobs(self.num_readers, ips, port, encrypted).await?;
+        let socket_details = start_jobs(self.num_readers, ips, port, with_tls).await?;
         let (raw_sockets, addrs): (Vec<ExaSocket>, _) = socket_details.into_iter().unzip();
 
-        let query = self.query(addrs, encrypted, self.compression);
+        let query = self.query(addrs, with_tls, self.compression);
 
         let sockets = raw_sockets
             .into_iter()
@@ -122,7 +122,7 @@ impl<'a> ExportOptions<'a> {
         self
     }
 
-    fn query(&self, addrs: Vec<SocketAddrV4>, is_encrypted: bool, is_compressed: bool) -> String {
+    fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
         let mut query = String::new();
 
         if let Some(com) = self.comment {
@@ -148,7 +148,7 @@ impl<'a> ExportOptions<'a> {
 
         query.push_str(" INTO CSV ");
 
-        append_filenames(&mut query, addrs, is_encrypted, is_compressed);
+        append_filenames(&mut query, addrs, with_tls, with_compression);
 
         if let Some(enc) = self.encoding {
             query.push_str(" ENCODING = '");

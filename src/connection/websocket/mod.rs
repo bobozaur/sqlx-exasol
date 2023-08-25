@@ -152,6 +152,7 @@ impl ExaWebSocket {
         self.send_cmd_ignore_response(cmd).await
     }
 
+    #[cfg(feature = "etl")]
     pub async fn get_hosts(&mut self) -> Result<Vec<IpAddr>, SqlxError> {
         let host_ip = self.socket_addr().ip();
         let _cmd = ExaCommand::new_get_hosts(host_ip).try_into()?;

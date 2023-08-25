@@ -24,6 +24,7 @@ pub(crate) enum ExaCommand<'a> {
     SetAttributes(SetAttributes<'a>),
     Login(LoginInfo),
     LoginToken(LoginInfo),
+    #[cfg(feature = "etl")]
     GetHosts(GetHosts),
     Execute(Sql<'a>),
     Fetch(Fetch),
@@ -48,6 +49,7 @@ impl<'a> ExaCommand<'a> {
         Self::LoginToken(LoginInfo { protocol_version })
     }
 
+    #[cfg(feature = "etl")]
     pub fn new_get_hosts(host_ip: IpAddr) -> Self {
         Self::GetHosts(GetHosts { host_ip })
     }

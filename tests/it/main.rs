@@ -1,7 +1,8 @@
 mod common;
 mod describe;
 mod error;
-mod http_transport;
+#[cfg(feature = "etl")]
+mod etl;
 mod migrate;
 #[path = "./test-attr.rs"]
 mod test_attr;

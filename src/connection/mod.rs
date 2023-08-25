@@ -1,5 +1,6 @@
+#[cfg(feature = "etl")]
+pub mod etl;
 mod executor;
-mod etl;
 mod macros;
 mod stream;
 mod tls;
@@ -31,10 +32,6 @@ use stream::QueryResultStream;
 use websocket::{socket::WithExaSocket, ExaWebSocket};
 
 use self::macros::fetcher_closure;
-
-pub use etl::{
-    ExaExport, ExaImport, ExportOptions, ImportOptions, QueryOrTable, RowSeparator, Trim,
-};
 
 #[derive(Debug)]
 pub struct ExaConnection {
@@ -111,6 +108,7 @@ impl ExaConnection {
         Ok(con)
     }
 
+    #[cfg(feature = "etl")]
     #[allow(clippy::needless_lifetimes)]
     pub(crate) async fn run_http_transport<'a>(
         &'a mut self,

@@ -14,7 +14,7 @@ use pin_project::pin_project;
 
 use reader::ExportReader;
 
-pub use options::{ExportOptions, QueryOrTable};
+pub use options::{ExportBuilder, QueryOrTable};
 
 use self::buf_reader::ExportBufReader;
 

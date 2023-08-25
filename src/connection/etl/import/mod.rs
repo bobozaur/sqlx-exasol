@@ -13,7 +13,7 @@ use self::writer::ImportWriter;
 mod options;
 mod writer;
 
-pub use options::{ImportOptions, Trim};
+pub use options::{ImportBuilder, Trim};
 
 #[pin_project(project = ExaImportProj)]
 #[derive(Debug)]

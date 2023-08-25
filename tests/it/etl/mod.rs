@@ -1,6 +1,9 @@
 use std::iter;
 
-use exasol::{ExaExport, ExaImport, Exasol, ExportOptions, ImportOptions, QueryOrTable};
+use exasol::{
+    etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable},
+    Exasol,
+};
 use futures_util::{
     future::{try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
@@ -24,13 +27,13 @@ async fn test_http_transport_roundtrip_single_threaded(pool: Pool<Exasol>) -> an
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
-        .execute(&mut conn1)
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
+        .build(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = ImportOptions::new("TEST_HTTP_TRANSPORT")
+    let (import_fut, writers) = ImportBuilder::new("TEST_HTTP_TRANSPORT")
         .skip(1)
-        .execute(&mut conn2)
+        .build(&mut conn2)
         .await?;
 
     let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
@@ -66,14 +69,14 @@ async fn test_http_transport_roundtrip_multi_threaded(pool: Pool<Exasol>) -> any
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
         .with_column_names(false)
-        .execute(&mut conn1)
+        .build(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = ImportOptions::new("TEST_HTTP_TRANSPORT")
+    let (import_fut, writers) = ImportBuilder::new("TEST_HTTP_TRANSPORT")
         .buffer_size(2048)
-        .execute(&mut conn2)
+        .build(&mut conn2)
         .await?;
 
     let transport_futs = iter::zip(readers, writers).map(|(r, w)| {
@@ -116,15 +119,15 @@ async fn test_http_transport_roundtrip_compressed(pool: Pool<Exasol>) -> anyhow:
 
     env_logger::init();
 
-    let (export_fut, readers) = ExportOptions::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT"))
         .with_column_names(false)
         .compression(true)
-        .execute(&mut conn1)
+        .build(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = ImportOptions::new("TEST_HTTP_TRANSPORT")
+    let (import_fut, writers) = ImportBuilder::new("TEST_HTTP_TRANSPORT")
         .compression(true)
-        .execute(&mut conn2)
+        .build(&mut conn2)
         .await?;
 
     let transport_futs = iter::zip(readers, writers).map(|(r, w)| {

@@ -20,8 +20,8 @@ use crate::ExaDatabaseError;
 
 use super::websocket::socket::ExaSocket;
 
-pub use export::{ExaExport, ExportOptions, QueryOrTable};
-pub use import::{ExaImport, ImportOptions, Trim};
+pub use export::{ExaExport, ExportBuilder, QueryOrTable};
+pub use import::{ExaImport, ImportBuilder, Trim};
 
 /// Special Exasol packet that enables tunneling.
 /// Exasol responds with an internal address that can be used in query.
@@ -106,7 +106,7 @@ async fn start_jobs(
     num_jobs: usize,
     ips: Vec<IpAddr>,
     port: u16,
-    encrypted: bool,
+    with_tls: bool,
 ) -> Result<Vec<(ExaSocket, SocketAddrV4)>, SqlxError> {
     let num_jobs = if num_jobs > 0 { num_jobs } else { ips.len() };
     let futures = ips
@@ -120,17 +120,33 @@ async fn start_jobs(
         .into_iter()
         .unzip();
 
-    let sockets = match encrypted {
-        #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+    let sockets = maybe_upgrade(sockets, with_tls).await?;
+
+    Ok(iter::zip(sockets, addrs).collect())
+}
+
+async fn maybe_upgrade(sockets: Vec<ExaSocket>, with_tls: bool) -> Result<Vec<ExaSocket>, SqlxError> {
+    #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+    match with_tls {
         true => {
             let cert = tls::make_cert()?;
             let futures = sockets.into_iter().map(|s| tls::upgrade(s, &cert));
-            try_join_all(futures).await?
+            try_join_all(futures).await
         }
-        _ => sockets,
-    };
+        false => {
+            tracing::warn!("An ETL TLS feature is enabled but the connection is not encrypted. ETL will also be unencrypted");
+            Ok(sockets)
+        }
+    }
 
-    Ok(iter::zip(sockets, addrs).collect())
+    #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
+    match with_tls {
+        true => {
+            let msg = "encrypted ETL requires the 'etl_native_tls' or 'etl_rustls' feature";
+            Err(SqlxError::Tls(msg.into()))
+        }
+        false => Ok(sockets),
+    }
 }
 
 async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddrV4), BoxDynError> {
@@ -161,15 +177,15 @@ async fn spawn_socket(ip: IpAddr, port: u16) -> Result<(ExaSocket, SocketAddrV4)
 fn append_filenames(
     query: &mut String,
     addrs: Vec<SocketAddrV4>,
-    is_encrypted: bool,
-    is_compressed: bool,
+    with_tls: bool,
+    with_compression: bool,
 ) {
-    let prefix = match is_encrypted {
+    let prefix = match with_tls {
         false => HTTP_SCHEME,
         true => HTTPS_SCHEME,
     };
 
-    let ext = match is_compressed {
+    let ext = match with_compression {
         false => CSV_FILE_EXT,
         true => GZ_FILE_EXT,
     };

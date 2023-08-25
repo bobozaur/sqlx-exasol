@@ -12,6 +12,7 @@ pub struct ExaDatabaseError {
     code: String,
 }
 
+#[cfg(feature = "etl")]
 impl ExaDatabaseError {
     const UNKNOWN_ERROR_CODE: &str = "00000";
 
