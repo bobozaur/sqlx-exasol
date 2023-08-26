@@ -23,7 +23,7 @@ where
 {
     num_writers: usize,
     buffer_size: usize,
-    compression: bool,
+    compression: Option<bool>,
     dest_table: &'a str,
     columns: Option<&'a [T]>,
     comment: Option<&'a str>,
@@ -41,7 +41,7 @@ impl<'a> ImportBuilder<'a> {
         Self {
             num_writers: 0,
             buffer_size: Self::DEFAULT_BUF_SIZE,
-            compression: false,
+            compression: None,
             dest_table,
             columns: None,
             comment: None,
@@ -75,6 +75,9 @@ where
         let ips = con.ws.get_hosts().await?;
         let port = con.ws.socket_addr().port();
         let with_tls = con.attributes().encryption_enabled;
+        let with_compression = self
+            .compression
+            .unwrap_or(con.attributes().compression_enabled);
 
         let (futures, rxs): (Vec<_>, Vec<_>) = spawn_sockets(self.num_writers, ips, port, with_tls)
             .await?
@@ -93,7 +96,7 @@ where
                 ),
             };
 
-        let query = self.query(addrs, with_tls, self.compression);
+        let query = self.query(addrs, with_tls, with_compression);
         let query_fut = Box::pin(con.execute_etl(query));
 
         let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
@@ -104,7 +107,7 @@ where
         let sockets = sockets
             .into_iter()
             .map(|s| ImportWriter::new(s, self.buffer_size))
-            .map(|w| ExaImport::new(w, self.compression))
+            .map(|w| ExaImport::new(w, with_compression))
             .collect::<Vec<_>>();
 
         Ok((query_fut, sockets))
@@ -125,7 +128,7 @@ where
 
     #[cfg(feature = "compression")]
     pub fn compression(&mut self, enabled: bool) -> &mut Self {
-        self.compression = enabled;
+        self.compression = Some(enabled);
         self
     }
 

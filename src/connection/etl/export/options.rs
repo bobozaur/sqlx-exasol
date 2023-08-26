@@ -20,7 +20,7 @@ use super::{reader::ExportReader, ExaExport};
 #[derive(Debug)]
 pub struct ExportBuilder<'a> {
     num_readers: usize,
-    compression: bool,
+    compression: Option<bool>,
     source: QueryOrTable<'a>,
     comment: Option<&'a str>,
     encoding: Option<&'a str>,
@@ -35,7 +35,7 @@ impl<'a> ExportBuilder<'a> {
     pub fn new(source: QueryOrTable<'a>) -> Self {
         Self {
             num_readers: 0,
-            compression: false,
+            compression: None,
             source,
             comment: None,
             encoding: None,
@@ -60,6 +60,9 @@ impl<'a> ExportBuilder<'a> {
         let ips = con.ws.get_hosts().await?;
         let port = con.ws.socket_addr().port();
         let with_tls = con.attributes().encryption_enabled;
+        let with_compression = self
+            .compression
+            .unwrap_or(con.attributes().compression_enabled);
 
         let (futures, rxs): (Vec<_>, Vec<_>) = spawn_sockets(self.num_readers, ips, port, with_tls)
             .await?
@@ -78,7 +81,7 @@ impl<'a> ExportBuilder<'a> {
                 ),
             };
 
-        let query = self.query(addrs, with_tls, self.compression);
+        let query = self.query(addrs, with_tls, with_compression);
         let query_fut = Box::pin(con.execute_etl(query));
 
         let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
@@ -89,7 +92,7 @@ impl<'a> ExportBuilder<'a> {
         let sockets = sockets
             .into_iter()
             .map(ExportReader::new)
-            .map(|r| ExaExport::new(r, self.compression))
+            .map(|r| ExaExport::new(r, with_compression))
             .collect();
 
         Ok((query_fut, sockets))
@@ -105,7 +108,7 @@ impl<'a> ExportBuilder<'a> {
 
     #[cfg(feature = "compression")]
     pub fn compression(&mut self, enabled: bool) -> &mut Self {
-        self.compression = enabled;
+        self.compression = Some(enabled);
         self
     }
 
