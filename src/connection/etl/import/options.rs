@@ -158,7 +158,7 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         if let Some(cols) = self.columns {
             query.push('(');
             for col in cols.iter() {
-                Self::push_ident(&mut query, col);
+                query.push_str(col);
                 query.push_str(", ");
             }
 
@@ -186,10 +186,10 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         // This is numeric, so no quoting
         query.push_str("SKIP = ");
         query.push_str(&skip_str);
+        query.push(' ');
 
         if let Some(trim) = self.trim {
             query.push_str(trim.as_ref());
-            query.push(' ');
         }
 
         query

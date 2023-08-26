@@ -1,19 +1,6 @@
-use std::iter;
-
-use exasol::{
-    etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable},
-    Exasol,
-};
-use futures_util::{
-    future::{try_join3, try_join_all},
-    AsyncReadExt, AsyncWriteExt, TryFutureExt,
-};
-use sqlx::{Executor, Pool};
-use sqlx_core::error::BoxDynError;
+const NUM_ROWS: usize = 1_000_000;
 
 use macros::test_threaded_etl;
-
-const NUM_ROWS: usize = 1_000_000;
 
 test_threaded_etl!(
     single:
@@ -75,6 +62,23 @@ test_threaded_etl!(
     ImportBuilder::new("TEST_ETL").skip(1),
 );
 
+test_threaded_etl!(
+    single:
+    "limit_workers",
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).num_readers(1),
+    ImportBuilder::new("TEST_ETL").skip(1).num_writers(1),
+);
+
+test_threaded_etl!(
+    single:
+    "all_arguments",
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).num_readers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
+    ImportBuilder::new("TEST_ETL").skip(1).buffer_size(20000).columns(Some(&["col"])).num_writers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").trim(exasol::etl::Trim::Both),
+    #[cfg(feature = "compression")]
+);
+
 mod macros {
     macro_rules! test_threaded_etl {
     ($type:literal, $name:literal, $table:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
@@ -82,8 +86,15 @@ mod macros {
             $(#[$attr]),*
             #[sqlx::test]
             async fn [< test_etl_ $type _ $name >](
-                pool: Pool<Exasol>,
+                pool: sqlx::Pool<exasol::Exasol>,
             ) -> anyhow::Result<()> {
+                use std::iter;
+
+                use exasol::{etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable}};
+                use futures_util::{future::{try_join3, try_join_all}, AsyncReadExt, AsyncWriteExt, TryFutureExt};
+                use sqlx::{Executor};
+                use sqlx_core::error::BoxDynError;
+
                 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
                     let mut buf = String::new();
                     reader.read_to_string(&mut buf).await?;
