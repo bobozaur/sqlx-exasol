@@ -21,7 +21,6 @@ pub struct ExportReader {
     socket: BufReader<ExaSocket>,
     state: ReaderState,
     chunk_size: usize,
-    ended: bool,
 }
 
 impl ExportReader {
@@ -35,7 +34,6 @@ impl ExportReader {
             socket: BufReader::new(socket),
             state: ReaderState::SkipRequest([0; 4]),
             chunk_size: 0,
-            ended: false,
         }
     }
 
@@ -121,13 +119,14 @@ impl AsyncRead for ExportReader {
 
                 ReaderState::ExpectSizeLF => {
                     ready!(Self::poll_read_lf(this.socket, cx))?;
-                    // If even after encountering CR the chunk size is still 0,
-                    // then we reached the end of the stream.
+                    // We just read the chunk size separator.
+                    // If the chunk size is 0 at this stage, then
+                    // this is the final, empty, chunk so we'll end the reader.
                     if *this.chunk_size == 0 {
-                        *this.ended = true;
+                        *this.state = ReaderState::ExpectEndCR;
+                    } else {
+                        *this.state = ReaderState::ReadData;
                     }
-
-                    *this.state = ReaderState::ReadData;
                 }
 
                 ReaderState::ExpectDataCR => {
@@ -137,11 +136,17 @@ impl AsyncRead for ExportReader {
 
                 ReaderState::ExpectDataLF => {
                     ready!(Self::poll_read_lf(this.socket, cx))?;
-                    if *this.ended {
-                        *this.state = ReaderState::WriteResponse(0);
-                    } else {
-                        *this.state = ReaderState::ReadSize;
-                    }
+                    *this.state = ReaderState::ReadSize;
+                }
+
+                ReaderState::ExpectEndCR => {
+                    ready!(Self::poll_read_cr(this.socket, cx))?;
+                    *this.state = ReaderState::ExpectEndLF;
+                }
+
+                ReaderState::ExpectEndLF => {
+                    ready!(Self::poll_read_lf(this.socket, cx))?;
+                    *this.state = ReaderState::WriteResponse(0);
                 }
 
                 ReaderState::WriteResponse(offset) => {
@@ -166,9 +171,11 @@ enum ReaderState {
     SkipRequest([u8; 4]),
     ReadSize,
     ReadData,
+    ExpectSizeLF,
     ExpectDataCR,
     ExpectDataLF,
-    ExpectSizeLF,
+    ExpectEndCR,
+    ExpectEndLF,
     WriteResponse(usize),
 }
 
