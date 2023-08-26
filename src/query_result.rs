@@ -1,4 +1,6 @@
-#[derive(Debug, Default)]
+use std::ops::{Add, AddAssign};
+
+#[derive(Copy, Clone, Debug, Default)]
 pub struct ExaQueryResult {
     rows_affected: u64,
 }
@@ -18,5 +20,21 @@ impl Extend<ExaQueryResult> for ExaQueryResult {
         for elem in iter {
             self.rows_affected += elem.rows_affected
         }
+    }
+}
+
+impl Add for ExaQueryResult {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            rows_affected: self.rows_affected + rhs.rows_affected,
+        }
+    }
+}
+
+impl AddAssign for ExaQueryResult {
+    fn add_assign(&mut self, rhs: Self) {
+        self.rows_affected += rhs.rows_affected;
     }
 }

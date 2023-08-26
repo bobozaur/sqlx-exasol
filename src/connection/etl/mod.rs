@@ -8,14 +8,20 @@ mod traits;
 
 use std::net::{IpAddr, SocketAddrV4};
 
-use crate::ExaDatabaseError;
+use crate::{
+    error::{ExaProtocolError, ExaResultExt},
+    ExaConnection, ExaDatabaseError, ExaQueryResult,
+};
 use arrayvec::ArrayString;
 use futures_channel::oneshot::Receiver;
 use futures_core::future::BoxFuture;
+use futures_util::future::{select, try_join_all, Either};
 use sqlx_core::error::Error as SqlxError;
 use sqlx_core::net::Socket;
 
 use non_tls::non_tls_socket_spawners;
+
+use self::traits::EtlJob;
 
 use super::websocket::socket::ExaSocket;
 
@@ -25,12 +31,6 @@ pub use import::{ExaImport, ImportBuilder, Trim};
 /// Special Exasol packet that enables tunneling.
 /// Exasol responds with an internal address that can be used in query.
 const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
-
-const GZ_FILE_EXT: &str = "gz";
-const CSV_FILE_EXT: &str = "csv";
-
-const HTTP_SCHEME: &str = "http";
-const HTTPS_SCHEME: &str = "https";
 
 /// We do some implicit buffering as we have to parse
 /// the incoming HTTP request and ignore the headers, read chunk sizes, etc.
@@ -42,21 +42,57 @@ const HTTPS_SCHEME: &str = "https";
 /// TCP stream every time, so we instead use a small [`futures_util::io::BufReader`].
 const IMPLICIT_BUFFER_CAP: usize = 128;
 
-#[derive(Debug, Clone, Copy)]
-pub enum RowSeparator {
-    LF,
-    CR,
-    CRLF,
-}
+type SocketSpawner = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
 
-impl AsRef<str> for RowSeparator {
-    fn as_ref(&self) -> &str {
-        match self {
-            RowSeparator::LF => "LF",
-            RowSeparator::CR => "CR",
-            RowSeparator::CRLF => "CRLF",
-        }
-    }
+/// Type of the future that executes the ETL job.
+pub type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
+
+async fn prepare<'a, 'c, T>(
+    job: &'a T,
+    con: &'c mut ExaConnection,
+) -> Result<(JobFuture<'c>, Vec<T::Worker>), SqlxError>
+where
+    T: EtlJob,
+    'c: 'a,
+{
+    let ips = con.ws.get_hosts().await?;
+    let port = con.ws.socket_addr().port();
+    let with_tls = con.attributes().encryption_enabled;
+    let with_compression = job
+        .use_compression()
+        .unwrap_or(con.attributes().compression_enabled);
+
+    let (futures, rxs): (Vec<_>, Vec<_>) = socket_spawners(job.num_workers(), ips, port, with_tls)
+        .await?
+        .into_iter()
+        .unzip();
+
+    let addrs_fut = try_join_all(rxs);
+    let sockets_fut = try_join_all(futures);
+
+    let (addrs, sockets_fut): (Vec<_>, BoxFuture<'_, Result<Vec<ExaSocket>, SqlxError>>) =
+        match select(addrs_fut, sockets_fut).await {
+            Either::Left((addrs, sockets_fut)) => (addrs.to_sqlx_err()?, Box::pin(sockets_fut)),
+            Either::Right((sockets, addrs_fut)) => (
+                addrs_fut.await.to_sqlx_err()?,
+                Box::pin(async move { sockets }),
+            ),
+        };
+
+    let query = job.query(addrs, with_tls, with_compression);
+    let query_fut: JobFuture = Box::pin(con.execute_etl(query));
+
+    let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
+        Either::Right((sockets, f)) => (sockets?, f),
+        Either::Left((res, _)) => match res {
+            Ok(_) => Err(ExaProtocolError::EtlUnexpectedEnd)?,
+            Err(e) => Err(e)?,
+        },
+    };
+
+    let sockets = job.create_workers(sockets, with_compression);
+
+    Ok((query_fut, sockets))
 }
 
 async fn socket_spawners(
@@ -64,13 +100,7 @@ async fn socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     with_tls: bool,
-) -> Result<
-    Vec<(
-        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
-        Receiver<SocketAddrV4>,
-    )>,
-    SqlxError,
-> {
+) -> Result<Vec<(SocketSpawner, Receiver<SocketAddrV4>)>, SqlxError> {
     let num_sockets = if num > 0 { num } else { ips.len() };
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
@@ -83,28 +113,6 @@ async fn socket_spawners(
     match with_tls {
         true => Err(SqlxError::Tls("A TLS feature is required for ETL TLS")),
         false => non_tls_socket_spawners(num_sockets, ips, port).await,
-    }
-}
-
-fn append_filenames(
-    query: &mut String,
-    addrs: Vec<SocketAddrV4>,
-    with_tls: bool,
-    with_compression: bool,
-) {
-    let prefix = match with_tls {
-        false => HTTP_SCHEME,
-        true => HTTPS_SCHEME,
-    };
-
-    let ext = match with_compression {
-        false => CSV_FILE_EXT,
-        true => GZ_FILE_EXT,
-    };
-
-    for (idx, addr) in addrs.into_iter().enumerate() {
-        let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'\n", prefix, addr, idx, ext);
-        query.push_str(&filename);
     }
 }
 
@@ -154,4 +162,21 @@ where
     let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RowSeparator {
+    LF,
+    CR,
+    CRLF,
+}
+
+impl AsRef<str> for RowSeparator {
+    fn as_ref(&self) -> &str {
+        match self {
+            RowSeparator::LF => "LF",
+            RowSeparator::CR => "CR",
+            RowSeparator::CRLF => "CRLF",
+        }
+    }
 }

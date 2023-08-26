@@ -1,14 +1,11 @@
 use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
-use futures_core::future::BoxFuture;
+use sqlx_core::Error as SqlxError;
 
 use crate::{
-    connection::{
-        etl::{append_filenames, RowSeparator},
-        websocket::socket::ExaSocket,
-    },
-    etl::traits::{EtlJob, JobPrepOutput},
+    connection::{etl::RowSeparator, websocket::socket::ExaSocket},
+    etl::{prepare, traits::EtlJob, JobFuture},
     ExaConnection,
 };
 
@@ -52,14 +49,14 @@ impl<'a> ImportBuilder<'a> {
         }
     }
 
-    pub fn build<'c>(
+    pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> BoxFuture<'a, JobPrepOutput<'c, ExaImport>>
+    ) -> Result<(JobFuture<'c>, Vec<ExaImport>), SqlxError>
     where
         'c: 'a,
     {
-        <Self as EtlJob>::prepare(self, con)
+        prepare(self, con).await
     }
 
     /// Sets the number of writer jobs that will be started.
@@ -149,71 +146,50 @@ impl<'a> EtlJob for ImportBuilder<'a> {
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
         let mut query = String::new();
 
-        if let Some(com) = self.comment {
-            query.push_str("/*");
-            query.push_str(com);
-            query.push_str("*/\n");
+        if let Some(comment) = self.comment {
+            Self::push_comment(&mut query, comment);
         }
 
-        query.push_str("IMPORT INTO \"");
-        query.push_str(self.dest_table);
-        query.push_str("\" ");
+        query.push_str("IMPORT INTO ");
+        Self::push_ident(&mut query, self.dest_table);
+        query.push(' ');
 
+        // Push comma separated IMPORT columns
         if let Some(cols) = self.columns {
             query.push('(');
             for col in cols.iter() {
-                query.push('"');
-                query.push_str(col.as_ref());
-                query.push('"');
-                query.push(',');
+                Self::push_ident(&mut query, col);
+                query.push_str(", ");
             }
 
-            // Remove trailing comma
+            // Remove trailing comma and space
+            query.pop();
             query.pop();
             query.push_str(") ");
         }
 
         query.push_str("FROM CSV ");
-
-        append_filenames(&mut query, addrs, with_tls, with_compression);
+        Self::append_files(&mut query, addrs, with_tls, with_compression);
 
         if let Some(enc) = self.encoding {
-            query.push_str(" ENCODING = '");
-            query.push_str(enc);
-            query.push('\'');
+            Self::push_key_value(&mut query, "ENCODING", enc);
         }
 
-        query.push_str(" NULL = '");
-        query.push_str(self.null);
-        query.push('\'');
-
-        if let Some(trim) = self.trim {
-            query.push(' ');
-            query.push_str(trim.as_ref());
-        }
-
-        query.push_str(" ROW SEPARATOR = '");
-        query.push_str(self.row_separator.as_ref());
-        query.push('\'');
-
-        query.push_str(" COLUMN SEPARATOR = '");
-        query.push_str(self.column_separator);
-        query.push('\'');
-
-        query.push_str(" COLUMN DELIMITER = '");
-        query.push_str(self.column_delimiter);
-        query.push('\'');
+        Self::push_key_value(&mut query, "NULL", self.null);
+        Self::push_key_value(&mut query, "ROW SEPARATOR", self.row_separator.as_ref());
+        Self::push_key_value(&mut query, "COLUMN SEPARATOR", self.column_separator);
+        Self::push_key_value(&mut query, "COLUMN DELIMITER", self.column_delimiter);
 
         let mut skip_str = ArrayString::<20>::new_const();
         write!(&mut skip_str, "{}", self.skip).expect("u64 can't have more than 20 digits");
 
-        query.push_str(" SKIP = ");
+        // This is numeric, so no quoting
+        query.push_str("SKIP = ");
         query.push_str(&skip_str);
 
         if let Some(trim) = self.trim {
-            query.push_str(" TRIM = '");
             query.push_str(trim.as_ref());
-            query.push('\'');
+            query.push(' ');
         }
 
         query

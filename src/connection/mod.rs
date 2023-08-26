@@ -11,7 +11,6 @@ use lru::LruCache;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
-    error::BoxDynError,
     transaction::Transaction,
     Error as SqlxError,
 };
@@ -137,13 +136,12 @@ impl ExaConnection {
     pub(crate) async fn execute_etl<'a>(
         &'a mut self,
         query: String,
-    ) -> Result<ExaQueryResult, BoxDynError> {
+    ) -> Result<ExaQueryResult, SqlxError> {
         self.execute_plain(&query, fetcher_closure!('a))
             .await?
             .try_filter_map(|step| async move { Ok(step.map_left(Some).left_or(None)) })
             .try_collect()
             .await
-            .map_err(From::from)
     }
 
     async fn execute_query<'a, C, F>(

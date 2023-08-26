@@ -1,5 +1,5 @@
 mod job;
 mod worker;
 
-pub use job::{EtlJob, JobPrepOutput};
+pub use job::EtlJob;
 pub use worker::EtlWorker;

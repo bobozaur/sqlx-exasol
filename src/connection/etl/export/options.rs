@@ -1,15 +1,12 @@
 use std::{fmt::Debug, net::SocketAddrV4};
 
 use crate::{
-    connection::{
-        etl::{append_filenames, RowSeparator},
-        websocket::socket::ExaSocket,
-    },
-    etl::traits::{EtlJob, JobPrepOutput},
+    connection::{etl::RowSeparator, websocket::socket::ExaSocket},
+    etl::{prepare, traits::EtlJob, JobFuture},
     ExaConnection,
 };
 
-use futures_core::future::BoxFuture;
+use sqlx_core::Error as SqlxError;
 
 use super::{reader::ExportReader, ExaExport};
 
@@ -44,14 +41,14 @@ impl<'a> ExportBuilder<'a> {
         }
     }
 
-    pub fn build<'c>(
+    pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> BoxFuture<'a, JobPrepOutput<'c, ExaExport>>
+    ) -> Result<(JobFuture<'c>, Vec<ExaExport>), SqlxError>
     where
         'c: 'a,
     {
-        <Self as EtlJob>::prepare(self, con)
+        prepare(self, con).await
     }
 
     /// Sets the number of reader jobs that will be started.
@@ -126,52 +123,36 @@ impl<'a> EtlJob for ExportBuilder<'a> {
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
         let mut query = String::new();
 
-        if let Some(com) = self.comment {
-            query.push_str("/*");
-            query.push_str(com);
-            query.push_str("*/\n");
+        if let Some(comment) = self.comment {
+            Self::push_comment(&mut query, comment);
         }
 
         query.push_str("EXPORT ");
 
         match self.source {
-            QueryOrTable::Table(t) => {
-                query.push('"');
-                query.push_str(t);
-                query.push('"');
+            QueryOrTable::Table(tbl) => {
+                Self::push_ident(&mut query, tbl);
             }
-            QueryOrTable::Query(q) => {
+            QueryOrTable::Query(qr) => {
                 query.push_str("(\n");
-                query.push_str(q);
+                query.push_str(qr);
                 query.push_str("\n)");
             }
         };
 
-        query.push_str(" INTO CSV ");
+        query.push(' ');
 
-        append_filenames(&mut query, addrs, with_tls, with_compression);
+        query.push_str(" INTO CSV ");
+        Self::append_files(&mut query, addrs, with_tls, with_compression);
 
         if let Some(enc) = self.encoding {
-            query.push_str(" ENCODING = '");
-            query.push_str(enc);
-            query.push('\'');
+            Self::push_key_value(&mut query, "ENCODING", enc);
         }
 
-        query.push_str(" NULL = '");
-        query.push_str(self.null);
-        query.push('\'');
-
-        query.push_str(" ROW SEPARATOR = '");
-        query.push_str(self.row_separator.as_ref());
-        query.push('\'');
-
-        query.push_str(" COLUMN SEPARATOR = '");
-        query.push_str(self.column_separator);
-        query.push('\'');
-
-        query.push_str(" COLUMN DELIMITER = '");
-        query.push_str(self.column_delimiter);
-        query.push('\'');
+        Self::push_key_value(&mut query, "NULL", self.null);
+        Self::push_key_value(&mut query, "ROW SEPARATOR", self.row_separator.as_ref());
+        Self::push_key_value(&mut query, "COLUMN SEPARATOR", self.column_separator);
+        Self::push_key_value(&mut query, "COLUMN DELIMITER", self.column_delimiter);
 
         if self.with_column_names {
             query.push_str(" WITH COLUMN NAMES");

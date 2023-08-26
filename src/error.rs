@@ -27,6 +27,10 @@ pub enum ExaProtocolError {
     WebsocketClosed(String),
     #[error("feature 'compression' must be enabled to use compression")]
     CompressionDisabled,
+    #[error("worker could not transmit socket address for ETL job")]
+    EtlAddressFailure,
+    #[error("ETL job finished unexpectedly before its workers")]
+    EtlUnexpectedEnd
 }
 
 impl<'a> From<Option<CloseFrame<'a>>> for ExaProtocolError {

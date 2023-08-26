@@ -63,7 +63,7 @@ test_threaded_etl!(
     "compressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new(");TEST_ETL").skip(1).compression(true),
+    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
     #[cfg(feature = "compression")]
 );
 
@@ -112,9 +112,7 @@ mod macros {
                 let transport_futs = iter::zip(readers, writers).map($proc);
 
                 let (export_res, import_res, _) =
-                try_join3(export_fut, import_fut, try_join_all(transport_futs))
-                    .await
-                    .map_err(|e| anyhow::anyhow! {e})?;
+                try_join3(export_fut.map_err(From::from), import_fut.map_err(From::from), try_join_all(transport_futs)).await.map_err(|e| anyhow::anyhow! {e})?;
 
 
                 assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
