@@ -178,6 +178,12 @@ impl AsyncWrite for ImportWriter {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         ready!(self.as_mut().poll_flush(cx))?;
 
+        // Ensure we advanced the state machined
+        // past the request reading stage.
+        if matches!(self.state, WriterState::SkipRequest(_)) {
+            ready!(self.as_mut().poll_write(cx, &[]))?;
+        }
+
         // We write an empty buffer to artifically trigger the WriterState::End flow.
         self.state = WriterState::End(0);
         ready!(self.as_mut().poll_write(cx, &[]))?;
