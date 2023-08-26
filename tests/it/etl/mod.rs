@@ -18,53 +18,66 @@ const NUM_ROWS: usize = 1_000_000;
 test_threaded_etl!(
     single:
     "uncompressed",
-    ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT")),
-    ImportBuilder::new("TEST_HTTP_TRANSPORT").skip(1),
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ImportBuilder::new("TEST_ETL").skip(1),
 );
 
 test_threaded_etl!(
     single:
     "uncompressed_with_feature",
-    ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT")).compression(false),
-    ImportBuilder::new("TEST_HTTP_TRANSPORT").skip(1).compression(false),
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
+    ImportBuilder::new("TEST_ETL").skip(1).compression(false),
     #[cfg(feature = "compression")]
 );
 
 test_threaded_etl!(
     multi:
     "uncompressed",
-    ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT")),
-    ImportBuilder::new("TEST_HTTP_TRANSPORT").skip(1),
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ImportBuilder::new("TEST_ETL").skip(1),
 );
 
 test_threaded_etl!(
     multi:
     "uncompressed_with_feature",
-    ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT")).compression(false),
-    ImportBuilder::new("TEST_HTTP_TRANSPORT").skip(1).compression(false),
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
+    ImportBuilder::new("TEST_ETL").skip(1).compression(false),
     #[cfg(feature = "compression")]
 );
 
 test_threaded_etl!(
     single:
     "compressed",
-    ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT")).compression(true),
-    ImportBuilder::new("TEST_HTTP_TRANSPORT").skip(1).compression(true),
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
     #[cfg(feature = "compression")]
 );
 
 test_threaded_etl!(
     multi:
     "compressed",
-    ExportBuilder::new(QueryOrTable::Table("TEST_HTTP_TRANSPORT")).compression(true),
-    ImportBuilder::new("TEST_HTTP_TRANSPORT").skip(1).compression(true),
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ImportBuilder::new(");TEST_ETL").skip(1).compression(true),
     #[cfg(feature = "compression")]
 );
 
-mod macros {
+test_threaded_etl!(
+    single:
+    "query_export",
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Query("SELECT * FROM TEST_ETL")),
+    ImportBuilder::new("TEST_ETL").skip(1),
+);
 
+mod macros {
     macro_rules! test_threaded_etl {
-    ($type:literal, $name:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+    ($type:literal, $name:literal, $table:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
         paste::item! {
             $(#[$attr]),*
             #[sqlx::test]
@@ -84,10 +97,10 @@ mod macros {
                 let mut conn2 = pool.acquire().await?;
 
                 conn1
-                    .execute("CREATE TABLE TEST_HTTP_TRANSPORT ( col VARCHAR(200) );")
+                    .execute(concat!("CREATE TABLE ", $table, " ( col VARCHAR(200) );"))
                     .await?;
 
-                sqlx::query("INSERT INTO TEST_HTTP_TRANSPORT VALUES (?)")
+                sqlx::query(concat!("INSERT INTO ", $table, " VALUES (?)"))
                     .bind(vec!["dummy"; NUM_ROWS])
                     .execute(&mut *conn1)
                     .await?;
@@ -107,7 +120,7 @@ mod macros {
                 assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
                 assert_eq!(NUM_ROWS as u64, import_res.rows_affected());
 
-                let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_HTTP_TRANSPORT")
+                let num_rows: u64 = sqlx::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
                     .fetch_one(&mut *conn1)
                     .await?;
 
@@ -118,12 +131,12 @@ mod macros {
         }
     };
 
-    (single: $name:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-        test_threaded_etl!("single_threaded", $name, |(r,w)|  pipe(r, w), $export, $import, $(#[$attr]),*);
+    (single: $name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+        test_threaded_etl!("single_threaded", $name, $table, |(r,w)|  pipe(r, w), $export, $import, $(#[$attr]),*);
     };
 
-    (multi: $name:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-        test_threaded_etl!("multi_threaded", $name, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
+    (multi: $name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+        test_threaded_etl!("multi_threaded", $name, $table, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
     }
 }
 
