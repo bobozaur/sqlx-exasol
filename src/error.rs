@@ -30,7 +30,7 @@ pub enum ExaProtocolError {
     #[error("worker could not transmit socket address for ETL job")]
     EtlAddressFailure,
     #[error("ETL job finished unexpectedly before its workers")]
-    EtlUnexpectedEnd
+    EtlUnexpectedEnd,
 }
 
 impl<'a> From<Option<CloseFrame<'a>>> for ExaProtocolError {

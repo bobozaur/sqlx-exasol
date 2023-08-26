@@ -14,7 +14,7 @@ mod session_info;
 use std::fmt;
 
 use serde::{
-    de::{SeqAccess, Visitor},
+    de::{DeserializeSeed, SeqAccess, Visitor},
     Deserialize, Deserializer,
 };
 
@@ -26,6 +26,7 @@ pub use hosts::Hosts;
 pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;
 pub use result::{QueryResult, ResultSet, ResultSetOutput, Results};
+use serde_json::Value;
 pub use session_info::SessionInfo;
 
 use crate::ExaTypeInfo;
@@ -121,4 +122,70 @@ impl Parameters {
 #[serde(rename_all = "camelCase")]
 struct ExaParameterType {
     data_type: ExaTypeInfo,
+}
+
+/// Deserialization function used to turn Exasol's column major data into row major.
+fn to_row_major<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Vec<Value>>, D::Error> {
+    struct ColumnVisitor<'a>(&'a mut Vec<Vec<Value>>);
+
+    impl<'de, 'a> Visitor<'de> for ColumnVisitor<'a> {
+        type Value = ();
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(formatter, "An array")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<(), A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut index = 0;
+
+            while let Some(elem) = seq.next_element()? {
+                if let Some(row) = self.0.get_mut(index) {
+                    row.push(elem);
+                } else {
+                    self.0.push(vec![elem]);
+                }
+
+                index += 1;
+            }
+            Ok(())
+        }
+    }
+
+    struct Columns<'a>(&'a mut Vec<Vec<Value>>);
+
+    impl<'de, 'a> DeserializeSeed<'de> for Columns<'a> {
+        type Value = ();
+
+        fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_seq(ColumnVisitor(self.0))
+        }
+    }
+
+    struct DataVisitor;
+
+    impl<'de> Visitor<'de> for DataVisitor {
+        type Value = Vec<Vec<Value>>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(formatter, "An array of arrays")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut transposed = Vec::new();
+
+            while seq.next_element_seed(Columns(&mut transposed))?.is_some() {}
+            Ok(transposed)
+        }
+    }
+
+    deserializer.deserialize_seq(DataVisitor)
 }

@@ -3,6 +3,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    vec,
 };
 
 use either::Either;
@@ -360,7 +361,7 @@ struct ChunkIter {
     columns: Arc<[ExaColumn]>,
     chunk_rows_total: usize,
     chunk_rows_pos: usize,
-    data: Arc<[Vec<Value>]>,
+    data: vec::IntoIter<Vec<Value>>,
 }
 
 impl ChunkIter {
@@ -376,7 +377,7 @@ impl ChunkIter {
             columns,
             chunk_rows_total: 0,
             chunk_rows_pos: 0,
-            data: Arc::new([]),
+            data: Vec::new().into_iter(),
         }
     }
 }
@@ -385,7 +386,7 @@ impl ChunkIter {
     fn renew(&mut self, chunk: DataChunk) {
         self.chunk_rows_pos = 0;
         self.chunk_rows_total = chunk.num_rows;
-        self.data = chunk.data.into()
+        self.data = chunk.data.into_iter()
     }
 }
 
@@ -393,16 +394,10 @@ impl Iterator for ChunkIter {
     type Item = ExaRow;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.chunk_rows_pos >= self.chunk_rows_total {
-            return None;
-        }
+        debug_assert!(self.chunk_rows_pos <= self.chunk_rows_total);
 
-        let row = ExaRow::new(
-            self.data.clone(),
-            self.columns.clone(),
-            self.column_names.clone(),
-            self.chunk_rows_pos,
-        );
+        let Some(data) = self.data.next() else { return None; };
+        let row = ExaRow::new(data, self.columns.clone(), self.column_names.clone());
 
         self.chunk_rows_pos += 1;
         Some(row)

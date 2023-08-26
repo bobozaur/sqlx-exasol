@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{column::ExaColumn, error::ExaProtocolError};
 
-use super::columns::ExaColumns;
+use super::{columns::ExaColumns, to_row_major};
 
 /// The `results` field returned by Exasol after executing a query.
 /// We only work with one statement at a time, so we only ever expect a single
@@ -84,8 +84,7 @@ impl TryFrom<ResultSetDe> for ResultSet {
 /// A result set's data.
 /// Exasol will send all the data if the query outputs less than [1000 rows](<https://github.com/exasol/websocket-api/blob/master/docs/commands/executeV1.md>).
 /// Otherwise, it returns a handle using which the data can be fetched.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub enum ResultSetOutput {
     Handle(u16),
     Data(Vec<Vec<Value>>),
@@ -98,6 +97,7 @@ struct ResultSetDe {
     num_rows: usize,
     result_set_handle: Option<u16>,
     #[serde(default)]
+    #[serde(deserialize_with = "to_row_major")]
     data: Vec<Vec<Value>>,
     columns: ExaColumns,
     num_rows_in_message: usize,

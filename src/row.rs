@@ -15,22 +15,19 @@ use std::sync::Arc;
 pub struct ExaRow {
     column_names: Arc<HashMap<Arc<str>, usize>>,
     columns: Arc<[ExaColumn]>,
-    data: Arc<[Vec<Value>]>,
-    row_offset: usize,
+    data: Vec<Value>,
 }
 
 impl ExaRow {
     pub fn new(
-        data: Arc<[Vec<Value>]>,
+        data: Vec<Value>,
         columns: Arc<[ExaColumn]>,
         column_names: Arc<HashMap<Arc<str>, usize>>,
-        row_offset: usize,
     ) -> Self {
         Self {
             column_names,
             columns,
             data,
-            row_offset,
         }
     }
 }
@@ -55,13 +52,7 @@ impl Row for ExaRow {
             len: self.columns.len(),
         };
 
-        let value = self
-            .data
-            .get(col_idx)
-            .ok_or_else(err_fn)?
-            .get(self.row_offset)
-            .ok_or_else(|| SqlxError::RowNotFound)?;
-
+        let value = self.data.get(col_idx).ok_or_else(err_fn)?;
         let type_info = &self.columns.get(col_idx).ok_or_else(err_fn)?.data_type;
         let val = ExaValueRef { value, type_info };
 
