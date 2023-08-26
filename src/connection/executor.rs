@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use either::Either;
+use futures_core::{future::BoxFuture, stream::BoxStream};
 use sqlx_core::{
     database::{Database, HasStatement},
     describe::Describe,
@@ -27,7 +28,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn fetch_many<'e, 'q: 'e, E: 'q>(
         self,
         mut query: E,
-    ) -> futures_util::stream::BoxStream<
+    ) -> BoxStream<
         'e,
         Result<
             Either<<Self::Database as Database>::QueryResult, <Self::Database as Database>::Row>,
@@ -51,10 +52,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn fetch_optional<'e, 'q: 'e, E: 'q>(
         self,
         query: E,
-    ) -> futures_util::future::BoxFuture<
-        'e,
-        Result<Option<<Self::Database as Database>::Row>, SqlxError>,
-    >
+    ) -> BoxFuture<'e, Result<Option<<Self::Database as Database>::Row>, SqlxError>>
     where
         'c: 'e,
         E: Execute<'q, Self::Database>,
@@ -76,10 +74,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         self,
         sql: &'q str,
         _parameters: &'e [<Self::Database as Database>::TypeInfo],
-    ) -> futures_util::future::BoxFuture<
-        'e,
-        Result<<Self::Database as HasStatement<'q>>::Statement, SqlxError>,
-    >
+    ) -> BoxFuture<'e, Result<<Self::Database as HasStatement<'q>>::Statement, SqlxError>>
     where
         'c: 'e,
     {
@@ -103,7 +98,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn describe<'e, 'q: 'e>(
         self,
         sql: &'q str,
-    ) -> futures_util::future::BoxFuture<'e, Result<Describe<Self::Database>, SqlxError>>
+    ) -> BoxFuture<'e, Result<Describe<Self::Database>, SqlxError>>
     where
         'c: 'e,
     {
