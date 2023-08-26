@@ -124,6 +124,7 @@ where
         self.wants_write = true;
         let written = self.socket.try_write(buf)?;
         self.wants_write = false;
+
         Ok(written)
     }
 

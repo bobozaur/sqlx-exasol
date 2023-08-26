@@ -5,10 +5,10 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use crate::connection::{
+use crate::{connection::{
     etl::{poll_read_byte, poll_send_static, poll_until_double_crlf},
     websocket::socket::ExaSocket,
-};
+}, etl::IMPLICIT_BUFFER_CAP};
 
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::io::BufReader;
@@ -31,7 +31,7 @@ impl ExportReader {
 
     pub fn new(socket: ExaSocket) -> Self {
         Self {
-            socket: BufReader::new(socket),
+            socket: BufReader::with_capacity(IMPLICIT_BUFFER_CAP, socket),
             state: ReaderState::SkipRequest([0; 4]),
             chunk_size: 0,
         }

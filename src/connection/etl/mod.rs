@@ -37,6 +37,16 @@ const CSV_FILE_EXT: &str = "csv";
 const HTTP_SCHEME: &str = "http";
 const HTTPS_SCHEME: &str = "https";
 
+/// We do some implicit buffering as we have to parse
+/// the incoming HTTP request and ignore the headers, read chunk sizes, etc.
+/// 
+/// We do that by reading one byte at a time and keeping track
+/// of what we read to walk through states.
+/// 
+/// It would be higly inefficient to read a single byte from the 
+/// TCP stream every time, so we instead use a small [`futures_util::io::BufReader`].
+const IMPLICIT_BUFFER_CAP: usize = 128;
+
 #[derive(Debug, Clone, Copy)]
 pub enum RowSeparator {
     LF,

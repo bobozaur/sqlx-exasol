@@ -9,15 +9,14 @@ use pin_project::pin_project;
 
 use super::reader::ExportReader;
 
-/// Custom buffered reader, closely mimicking (as in blatantly copying)
-/// [`futures_util::io::BufReader`].
+/// Custom buffered reader (needed for compressed data export)
+/// closely mimicking (as in blatantly copying) [`futures_util::io::BufReader`].
 ///
 /// The difference is that this reader will ALWAYS buffer, even if
 /// the provided buffer is bigger than the internal one. This is so
-/// the second difference can take place: after reading from the underlying
-/// reader another read into an empty buffer takes place.
-///
-/// This is to ensure that the reader transitions through its states.
+/// that after reading from the underlying reader another read into
+/// an empty buffer takes place. This dummy read is to ensure that
+/// the reader transitions through its states.
 #[pin_project]
 #[derive(Debug)]
 pub struct ExportBufReader {
@@ -29,6 +28,7 @@ pub struct ExportBufReader {
 }
 
 impl ExportBufReader {
+    // Default size used in [`futures_util::io::BufReader`].
     const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
     pub fn new(inner: ExportReader) -> Self {

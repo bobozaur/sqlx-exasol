@@ -10,9 +10,12 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use crate::connection::{
-    etl::{poll_send_static, poll_until_double_crlf},
-    websocket::socket::ExaSocket,
+use crate::{
+    connection::{
+        etl::{poll_send_static, poll_until_double_crlf},
+        websocket::socket::ExaSocket,
+    },
+    etl::IMPLICIT_BUFFER_CAP,
 };
 
 #[pin_project]
@@ -49,7 +52,7 @@ impl ImportWriter {
         buf[Self::CHUNK_SIZE_RESERVED - 1] = b'\n';
 
         Self {
-            socket: BufReader::new(socket),
+            socket: BufReader::with_capacity(IMPLICIT_BUFFER_CAP, socket),
             buf,
             buf_start: None,
             buf_patched: false,
