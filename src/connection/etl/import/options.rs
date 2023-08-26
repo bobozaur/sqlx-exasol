@@ -7,7 +7,7 @@ use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use crate::{
     connection::{
-        etl::{append_filenames, spawn_sockets, RowSeparator},
+        etl::{append_filenames, socket_spawners, RowSeparator},
         websocket::socket::ExaSocket,
     },
     error::ExaResultExt,
@@ -79,10 +79,11 @@ where
             .compression
             .unwrap_or(con.attributes().compression_enabled);
 
-        let (futures, rxs): (Vec<_>, Vec<_>) = spawn_sockets(self.num_writers, ips, port, with_tls)
-            .await?
-            .into_iter()
-            .unzip();
+        let (futures, rxs): (Vec<_>, Vec<_>) =
+            socket_spawners(self.num_writers, ips, port, with_tls)
+                .await?
+                .into_iter()
+                .unzip();
 
         let addrs_fut = try_join_all(rxs);
         let sockets_fut = try_join_all(futures);

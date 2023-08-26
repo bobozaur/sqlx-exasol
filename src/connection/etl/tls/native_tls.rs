@@ -18,9 +18,9 @@ use crate::error::ExaResultExt;
 use crate::etl::get_etl_addr;
 use sqlx_core::net::WithSocket;
 
-use super::SyncSocket;
+use super::sync_socket::SyncSocket;
 
-pub async fn spawn_native_tls_sockets(
+pub async fn native_tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,

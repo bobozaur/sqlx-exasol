@@ -22,9 +22,9 @@ use crate::connection::websocket::socket::WithExaSocket;
 use crate::error::ExaResultExt;
 use crate::etl::get_etl_addr;
 
-use super::SyncSocket;
+use super::sync_socket::SyncSocket;
 
-pub async fn spawn_rustls_sockets(
+pub async fn rustls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,

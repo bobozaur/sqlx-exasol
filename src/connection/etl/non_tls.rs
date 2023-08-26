@@ -11,7 +11,7 @@ use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
 use super::get_etl_addr;
 
-pub async fn spawn_non_tls_sockets(
+pub async fn non_tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,

@@ -2,7 +2,7 @@ use std::{fmt::Debug, net::SocketAddrV4};
 
 use crate::{
     connection::{
-        etl::{append_filenames, spawn_sockets, RowSeparator},
+        etl::{append_filenames, socket_spawners, RowSeparator},
         websocket::socket::ExaSocket,
     },
     error::ExaResultExt,
@@ -64,10 +64,11 @@ impl<'a> ExportBuilder<'a> {
             .compression
             .unwrap_or(con.attributes().compression_enabled);
 
-        let (futures, rxs): (Vec<_>, Vec<_>) = spawn_sockets(self.num_readers, ips, port, with_tls)
-            .await?
-            .into_iter()
-            .unzip();
+        let (futures, rxs): (Vec<_>, Vec<_>) =
+            socket_spawners(self.num_readers, ips, port, with_tls)
+                .await?
+                .into_iter()
+                .unzip();
 
         let addrs_fut = try_join_all(rxs);
         let sockets_fut = try_join_all(futures);

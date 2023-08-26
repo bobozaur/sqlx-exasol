@@ -15,7 +15,7 @@ use futures_core::future::BoxFuture;
 use sqlx_core::error::Error as SqlxError;
 use sqlx_core::net::Socket;
 
-use non_tls::spawn_non_tls_sockets;
+use non_tls::non_tls_socket_spawners;
 
 use super::websocket::socket::ExaSocket;
 
@@ -59,7 +59,7 @@ impl AsRef<str> for RowSeparator {
     }
 }
 
-async fn spawn_sockets(
+async fn socket_spawners(
     num: usize,
     ips: Vec<IpAddr>,
     port: u16,
@@ -75,14 +75,14 @@ async fn spawn_sockets(
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
     match with_tls {
-        true => tls::spawn_tls_sockets(num_sockets, ips, port).await,
-        false => spawn_non_tls_sockets(num_sockets, ips, port).await,
+        true => tls::tls_socket_spawners(num_sockets, ips, port).await,
+        false => non_tls_socket_spawners(num_sockets, ips, port).await,
     }
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
         true => Err(SqlxError::Tls("A TLS feature is required for ETL TLS")),
-        false => spawn_non_tls_sockets(num_sockets, ips, port).await,
+        false => non_tls_socket_spawners(num_sockets, ips, port).await,
     }
 }
 
