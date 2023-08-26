@@ -66,7 +66,7 @@ impl ImportWriter {
 
         // Must only happen once per chunk.
         if !self.buf_patched {
-            self.as_mut().patch_buffer();
+            self.as_mut().patch_buffer()?;
         }
 
         let mut this = self.project();
@@ -92,10 +92,10 @@ impl ImportWriter {
 
     /// Patches the buffer to arrange the chunk size at the start
     /// and append CR LF at the end.
-    fn patch_buffer(mut self: Pin<&mut Self>) {
+    fn patch_buffer(mut self: Pin<&mut Self>) -> Result<(), ExaEtlError> {
         let mut chunk_size_str = ArrayString::<{ Self::CHUNK_SIZE_RESERVED }>::new_const();
         write!(&mut chunk_size_str, "{:X}\r\n", self.buffer_len())
-            .expect("buffer shouldn't be bigger than u64::MAX");
+            .map_err(|_| ExaEtlError::ChunkSizeOverflow)?;
 
         let chunk_size = chunk_size_str.as_bytes();
         let offset = Self::CHUNK_SIZE_RESERVED - chunk_size.len();
@@ -104,6 +104,8 @@ impl ImportWriter {
         self.buf.extend_from_slice(b"\r\n");
         self.buf_start = Some(offset);
         self.buf_patched = true;
+
+        Ok(())
     }
 
     fn buffer_len(&self) -> usize {

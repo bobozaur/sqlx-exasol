@@ -1,7 +1,5 @@
-use std::io::Write;
-
 use serde::Serialize;
-use sqlx_core::{arguments::Arguments, encode::Encode, types::Type};
+use sqlx_core::{arguments::Arguments, encode::Encode, types::Type, Error as SqlxError};
 
 use crate::{database::Exasol, error::ExaProtocolError, type_info::ExaTypeInfo};
 
@@ -35,10 +33,11 @@ impl<'q> Arguments<'q> for ExaArguments {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ExaBuffer {
     pub(crate) inner: Vec<u8>,
     pub(crate) num_param_sets: NumParamSets,
+    pub(crate) binding_err: Option<SqlxError>,
     params_count: usize,
 }
 
@@ -49,7 +48,13 @@ impl ExaBuffer {
         T: Serialize,
     {
         self.params_count += 1;
-        serde_json::to_writer(self, &value).unwrap()
+
+        // We can't error out here, so store the first error encountered for later
+        if let Err(e) = serde_json::to_writer(&mut self.inner, &value) {
+            if self.binding_err.is_none() {
+                self.binding_err = Some(SqlxError::Protocol(e.to_string()));
+            }
+        }
     }
 
     /// Serializes and appends an iterator of values to this buffer.
@@ -143,20 +148,11 @@ impl Default for ExaBuffer {
             inner,
             num_param_sets: NumParamSets::NotSet,
             params_count: 0,
+            binding_err: None,
         };
 
         buffer.start_seq();
         buffer
-    }
-}
-
-impl Write for ExaBuffer {
-    fn write(&mut self, buf: &[u8]) -> futures_io::Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> futures_io::Result<()> {
-        self.inner.flush()
     }
 }
 
