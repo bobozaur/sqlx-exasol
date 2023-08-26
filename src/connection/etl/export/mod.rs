@@ -1,3 +1,4 @@
+#[cfg(feature = "compression")]
 mod buf_reader;
 mod options;
 mod reader;
@@ -13,11 +14,10 @@ use async_compression::futures::bufread::GzipDecoder;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
 
-use reader::ExportReader;
-
-pub use options::{ExportBuilder, QueryOrTable};
-
+#[cfg(feature = "compression")]
 use buf_reader::ExportBufReader;
+pub use options::{ExportBuilder, QueryOrTable};
+use reader::ExportReader;
 
 #[pin_project(project = ExaExportProj)]
 #[derive(Debug)]
