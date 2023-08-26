@@ -30,7 +30,7 @@ pub use connection::etl;
 pub use connection::ExaConnection;
 
 pub use database::Exasol;
-pub use options::{ExaConnectOptions, ExaSslMode, ProtocolVersion};
+pub use options::{ExaConnectOptions, ExaConnectOptionsBuilder, ExaSslMode, ProtocolVersion};
 pub use query_result::ExaQueryResult;
 pub use responses::ExaDatabaseError;
 pub use row::ExaRow;

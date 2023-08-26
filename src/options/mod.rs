@@ -19,7 +19,7 @@ use url::Url;
 
 use crate::connection::ExaConnection;
 
-use builder::ExaConnectOptionsBuilder;
+pub use builder::ExaConnectOptionsBuilder;
 use error::ExaConfigError;
 use serializable::SerializableConOpts;
 
@@ -66,7 +66,7 @@ pub struct ExaConnectOptions {
 }
 
 impl ExaConnectOptions {
-    pub fn builder<'a>() -> ExaConnectOptionsBuilder<'a> {
+    pub fn builder() -> ExaConnectOptionsBuilder {
         ExaConnectOptionsBuilder::default()
     }
 }
@@ -85,7 +85,7 @@ impl FromStr for ExaConnectOptions {
 impl ConnectOptions for ExaConnectOptions {
     type Connection = ExaConnection;
 
-    fn from_url(url: &url::Url) -> Result<Self, SqlxError> {
+    fn from_url(url: &Url) -> Result<Self, SqlxError> {
         let scheme = url.scheme();
 
         if URL_SCHEME != scheme {
@@ -95,7 +95,7 @@ impl ConnectOptions for ExaConnectOptions {
         let mut builder = Self::builder();
 
         if let Some(host) = url.host_str() {
-            builder.host(host);
+            builder.host(host.to_owned());
         }
 
         let username = url.username();
