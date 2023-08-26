@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     connection::websocket::socket::ExaSocket,
-    etl::{error::ExaEtlError, traits::Worker, IMPLICIT_BUFFER_CAP},
+    etl::{error::ExaEtlError, traits::EtlWorker, IMPLICIT_BUFFER_CAP},
 };
 
 #[pin_project]

@@ -1,3 +1,5 @@
+mod job;
 mod worker;
 
-pub use worker::Worker;
+pub use job::{EtlJob, JobPrepOutput};
+pub use worker::EtlWorker;

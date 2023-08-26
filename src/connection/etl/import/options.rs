@@ -2,30 +2,25 @@ use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
-use futures_util::future::{select, try_join_all, Either};
-use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use crate::{
     connection::{
-        etl::{append_filenames, socket_spawners, RowSeparator},
+        etl::{append_filenames, RowSeparator},
         websocket::socket::ExaSocket,
     },
-    error::ExaResultExt,
-    ExaConnection, ExaQueryResult,
+    etl::traits::{EtlJob, JobPrepOutput},
+    ExaConnection,
 };
 
 use super::{writer::ImportWriter, ExaImport};
 
 #[derive(Clone, Debug)]
-pub struct ImportBuilder<'a, T = &'a str>
-where
-    T: AsRef<str>,
-{
+pub struct ImportBuilder<'a> {
     num_writers: usize,
     buffer_size: usize,
     compression: Option<bool>,
     dest_table: &'a str,
-    columns: Option<&'a [T]>,
+    columns: Option<&'a [&'a str]>,
     comment: Option<&'a str>,
     encoding: Option<&'a str>,
     null: &'a str,
@@ -37,6 +32,8 @@ where
 }
 
 impl<'a> ImportBuilder<'a> {
+    const DEFAULT_BUF_SIZE: usize = 65536;
+
     pub fn new(dest_table: &'a str) -> Self {
         Self {
             num_writers: 0,
@@ -54,64 +51,15 @@ impl<'a> ImportBuilder<'a> {
             trim: None,
         }
     }
-}
 
-impl<'a, T> ImportBuilder<'a, T>
-where
-    T: AsRef<str>,
-{
-    const DEFAULT_BUF_SIZE: usize = 65536;
-
-    pub async fn build<'b>(
-        &mut self,
-        con: &'b mut ExaConnection,
-    ) -> Result<
-        (
-            BoxFuture<'b, Result<ExaQueryResult, BoxDynError>>,
-            Vec<ExaImport>,
-        ),
-        SqlxError,
-    > {
-        let ips = con.ws.get_hosts().await?;
-        let port = con.ws.socket_addr().port();
-        let with_tls = con.attributes().encryption_enabled;
-        let with_compression = self
-            .compression
-            .unwrap_or(con.attributes().compression_enabled);
-
-        let (futures, rxs): (Vec<_>, Vec<_>) =
-            socket_spawners(self.num_writers, ips, port, with_tls)
-                .await?
-                .into_iter()
-                .unzip();
-
-        let addrs_fut = try_join_all(rxs);
-        let sockets_fut = try_join_all(futures);
-
-        let (addrs, sockets_fut): (Vec<_>, BoxFuture<'_, Result<Vec<ExaSocket>, SqlxError>>) =
-            match select(addrs_fut, sockets_fut).await {
-                Either::Left((addrs, sockets_fut)) => (addrs.to_sqlx_err()?, Box::pin(sockets_fut)),
-                Either::Right((sockets, addrs_fut)) => (
-                    addrs_fut.await.to_sqlx_err()?,
-                    Box::pin(async move { sockets }),
-                ),
-            };
-
-        let query = self.query(addrs, with_tls, with_compression);
-        let query_fut = Box::pin(con.execute_etl(query));
-
-        let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
-            Either::Right((sockets, f)) => (sockets?, f),
-            _ => unreachable!("ETL cannot finish before we use the sockets"),
-        };
-
-        let sockets = sockets
-            .into_iter()
-            .map(|s| ImportWriter::new(s, self.buffer_size))
-            .map(|w| ExaImport::new(w, with_compression))
-            .collect::<Vec<_>>();
-
-        Ok((query_fut, sockets))
+    pub fn build<'c>(
+        &'a self,
+        con: &'c mut ExaConnection,
+    ) -> BoxFuture<'a, JobPrepOutput<'c, ExaImport>>
+    where
+        'c: 'a,
+    {
+        <Self as EtlJob>::prepare(self, con)
     }
 
     /// Sets the number of writer jobs that will be started.
@@ -133,7 +81,7 @@ where
         self
     }
 
-    pub fn columns(&mut self, columns: Option<&'a [T]>) -> &mut Self {
+    pub fn columns(&mut self, columns: Option<&'a [&'a str]>) -> &mut Self {
         self.columns = columns;
         self
     }
@@ -176,6 +124,26 @@ where
     pub fn trim(&mut self, trim: Trim) -> &mut Self {
         self.trim = Some(trim);
         self
+    }
+}
+
+impl<'a> EtlJob for ImportBuilder<'a> {
+    type Worker = ExaImport;
+
+    fn use_compression(&self) -> Option<bool> {
+        self.compression
+    }
+
+    fn num_workers(&self) -> usize {
+        self.num_writers
+    }
+
+    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker> {
+        sockets
+            .into_iter()
+            .map(|s| ImportWriter::new(s, self.buffer_size))
+            .map(|w| ExaImport::new(w, with_compression))
+            .collect()
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

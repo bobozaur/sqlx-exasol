@@ -9,9 +9,9 @@ use futures_util::io::BufReader;
 
 use crate::{connection::websocket::socket::ExaSocket, etl::error::ExaEtlError};
 
-impl Worker for BufReader<ExaSocket> {}
+impl EtlWorker for BufReader<ExaSocket> {}
 
-pub trait Worker: AsyncBufRead + AsyncRead + AsyncWrite {
+pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
     const DOUBLE_CR_LF: &'static [u8; 4] = b"\r\n\r\n";
     const CR: u8 = b'\r';
     const LF: u8 = b'\n';

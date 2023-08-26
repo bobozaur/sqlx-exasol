@@ -2,17 +2,14 @@ use std::{fmt::Debug, net::SocketAddrV4};
 
 use crate::{
     connection::{
-        etl::{append_filenames, socket_spawners, RowSeparator},
+        etl::{append_filenames, RowSeparator},
         websocket::socket::ExaSocket,
     },
-    error::ExaResultExt,
-    ExaConnection, ExaQueryResult,
+    etl::traits::{EtlJob, JobPrepOutput},
+    ExaConnection,
 };
 
 use futures_core::future::BoxFuture;
-
-use futures_util::future::{select, try_join_all, Either};
-use sqlx_core::{error::BoxDynError, Error as SqlxError};
 
 use super::{reader::ExportReader, ExaExport};
 
@@ -47,56 +44,14 @@ impl<'a> ExportBuilder<'a> {
         }
     }
 
-    pub async fn build<'b>(
-        &mut self,
-        con: &'b mut ExaConnection,
-    ) -> Result<
-        (
-            BoxFuture<'b, Result<ExaQueryResult, BoxDynError>>,
-            Vec<ExaExport>,
-        ),
-        SqlxError,
-    > {
-        let ips = con.ws.get_hosts().await?;
-        let port = con.ws.socket_addr().port();
-        let with_tls = con.attributes().encryption_enabled;
-        let with_compression = self
-            .compression
-            .unwrap_or(con.attributes().compression_enabled);
-
-        let (futures, rxs): (Vec<_>, Vec<_>) =
-            socket_spawners(self.num_readers, ips, port, with_tls)
-                .await?
-                .into_iter()
-                .unzip();
-
-        let addrs_fut = try_join_all(rxs);
-        let sockets_fut = try_join_all(futures);
-
-        let (addrs, sockets_fut): (Vec<_>, BoxFuture<'_, Result<Vec<ExaSocket>, SqlxError>>) =
-            match select(addrs_fut, sockets_fut).await {
-                Either::Left((addrs, sockets_fut)) => (addrs.to_sqlx_err()?, Box::pin(sockets_fut)),
-                Either::Right((sockets, addrs_fut)) => (
-                    addrs_fut.await.to_sqlx_err()?,
-                    Box::pin(async move { sockets }),
-                ),
-            };
-
-        let query = self.query(addrs, with_tls, with_compression);
-        let query_fut = Box::pin(con.execute_etl(query));
-
-        let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
-            Either::Right((sockets, f)) => (sockets?, f),
-            _ => unreachable!("ETL cannot finish before we use the sockets"),
-        };
-
-        let sockets = sockets
-            .into_iter()
-            .map(ExportReader::new)
-            .map(|r| ExaExport::new(r, with_compression))
-            .collect();
-
-        Ok((query_fut, sockets))
+    pub fn build<'c>(
+        &'a self,
+        con: &'c mut ExaConnection,
+    ) -> BoxFuture<'a, JobPrepOutput<'c, ExaExport>>
+    where
+        'c: 'a,
+    {
+        <Self as EtlJob>::prepare(self, con)
     }
 
     /// Sets the number of reader jobs that will be started.
@@ -146,6 +101,26 @@ impl<'a> ExportBuilder<'a> {
     pub fn with_column_names(&mut self, flag: bool) -> &mut Self {
         self.with_column_names = flag;
         self
+    }
+}
+
+impl<'a> EtlJob for ExportBuilder<'a> {
+    type Worker = ExaExport;
+
+    fn use_compression(&self) -> Option<bool> {
+        self.compression
+    }
+
+    fn num_workers(&self) -> usize {
+        self.num_readers
+    }
+
+    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker> {
+        sockets
+            .into_iter()
+            .map(ExportReader::new)
+            .map(|r| ExaExport::new(r, with_compression))
+            .collect()
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
