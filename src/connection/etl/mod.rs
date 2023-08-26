@@ -1,24 +1,21 @@
+mod error;
 mod export;
 mod import;
+mod non_tls;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod tls;
+mod traits;
 
-use std::fmt::Write;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult};
-use std::net::{IpAddr, SocketAddr, SocketAddrV4};
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::net::{IpAddr, SocketAddrV4};
 
-use arrayvec::ArrayString;
-use futures_channel::oneshot::{self, Receiver, Sender};
-use futures_core::future::BoxFuture;
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::io::BufReader;
-use sqlx_core::error::Error as SqlxError;
-use sqlx_core::net::{Socket, WithSocket};
-
-use crate::connection::websocket::socket::WithExaSocket;
 use crate::ExaDatabaseError;
+use arrayvec::ArrayString;
+use futures_channel::oneshot::Receiver;
+use futures_core::future::BoxFuture;
+use sqlx_core::error::Error as SqlxError;
+use sqlx_core::net::Socket;
+
+use non_tls::spawn_non_tls_sockets;
 
 use super::websocket::socket::ExaSocket;
 
@@ -29,8 +26,6 @@ pub use import::{ExaImport, ImportBuilder, Trim};
 /// Exasol responds with an internal address that can be used in query.
 const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 
-const DOUBLE_CR_LF: &[u8; 4] = b"\r\n\r\n";
-
 const GZ_FILE_EXT: &str = "gz";
 const CSV_FILE_EXT: &str = "csv";
 
@@ -39,11 +34,11 @@ const HTTPS_SCHEME: &str = "https";
 
 /// We do some implicit buffering as we have to parse
 /// the incoming HTTP request and ignore the headers, read chunk sizes, etc.
-/// 
+///
 /// We do that by reading one byte at a time and keeping track
 /// of what we read to walk through states.
-/// 
-/// It would be higly inefficient to read a single byte from the 
+///
+/// It would be higly inefficient to read a single byte from the
 /// TCP stream every time, so we instead use a small [`futures_util::io::BufReader`].
 const IMPLICIT_BUFFER_CAP: usize = 128;
 
@@ -61,56 +56,6 @@ impl AsRef<str> for RowSeparator {
             RowSeparator::CR => "CR",
             RowSeparator::CRLF => "CRLF",
         }
-    }
-}
-
-fn poll_read_byte(socket: Pin<&mut BufReader<ExaSocket>>, cx: &mut Context) -> Poll<IoResult<u8>> {
-    let mut buffer = [0; 1];
-    let n = ready!(socket.poll_read(cx, &mut buffer))?;
-
-    if n != 1 {
-        let msg = "cannot read chunk byte";
-        let err = IoError::new(IoErrorKind::InvalidInput, msg);
-        Poll::Ready(Err(err))
-    } else {
-        Poll::Ready(Ok(buffer[0]))
-    }
-}
-
-/// Sends some static data, returning whether all of it was sent or not.
-fn poll_send_static(
-    socket: Pin<&mut BufReader<ExaSocket>>,
-    cx: &mut Context<'_>,
-    buf: &'static [u8],
-    offset: &mut usize,
-) -> Poll<IoResult<bool>> {
-    if *offset >= buf.len() {
-        return Poll::Ready(Ok(true));
-    }
-
-    let num_bytes = ready!(socket.poll_write(cx, &buf[*offset..]))?;
-    *offset += num_bytes;
-
-    Poll::Ready(Ok(false))
-}
-
-fn poll_until_double_crlf(
-    socket: Pin<&mut BufReader<ExaSocket>>,
-    cx: &mut Context,
-    buf: &mut [u8; 4],
-) -> Poll<IoResult<bool>> {
-    let byte = ready!(poll_read_byte(socket, cx))?;
-
-    // Shift bytes
-    buf[0] = buf[1];
-    buf[1] = buf[2];
-    buf[2] = buf[3];
-    buf[3] = byte;
-
-    // If true, all headers have been read
-    match buf == DOUBLE_CR_LF {
-        true => Poll::Ready(Ok(true)),
-        false => Poll::Ready(Ok(false)),
     }
 }
 
@@ -209,64 +154,4 @@ where
     let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))
-}
-
-async fn spawn_non_tls_sockets(
-    num_sockets: usize,
-    ips: Vec<IpAddr>,
-    port: u16,
-) -> Result<
-    Vec<(
-        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
-        Receiver<SocketAddrV4>,
-    )>,
-    SqlxError,
-> {
-    tracing::trace!("spawning {num_sockets} non-TLS sockets");
-
-    let mut output = Vec::with_capacity(num_sockets);
-
-    for ip in ips.into_iter().take(num_sockets) {
-        let mut ip_buf = ArrayString::<50>::new_const();
-        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
-        let (tx, rx) = oneshot::channel();
-
-        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithNonTlsSocket::new(wrapper, tx);
-        let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
-
-        output.push((future, rx));
-    }
-
-    Ok(output)
-}
-
-struct WithNonTlsSocket {
-    wrapper: WithExaSocket,
-    sender: Sender<SocketAddrV4>,
-}
-
-impl WithNonTlsSocket {
-    fn new(wrapper: WithExaSocket, sender: Sender<SocketAddrV4>) -> Self {
-        Self { wrapper, sender }
-    }
-}
-
-impl WithSocket for WithNonTlsSocket {
-    type Output = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
-
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithNonTlsSocket { wrapper, sender } = self;
-
-        Box::pin(async move {
-            let (socket, address) = get_etl_addr(socket).await?;
-            sender
-                .send(address)
-                .map_err(|_| "could not send socket address for ETL job".to_owned())
-                .map_err(SqlxError::Protocol)?;
-
-            let socket = wrapper.with_socket(socket);
-            Ok(socket)
-        })
-    }
 }

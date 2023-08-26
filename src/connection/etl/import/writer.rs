@@ -5,17 +5,14 @@ use pin_project::pin_project;
 
 use std::{
     fmt::Write,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
+    io::Result as IoResult,
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
 use crate::{
-    connection::{
-        etl::{poll_send_static, poll_until_double_crlf},
-        websocket::socket::ExaSocket,
-    },
-    etl::IMPLICIT_BUFFER_CAP,
+    connection::websocket::socket::ExaSocket,
+    etl::{error::ExaEtlError, traits::Worker, IMPLICIT_BUFFER_CAP},
 };
 
 #[pin_project]
@@ -79,7 +76,7 @@ impl ImportWriter {
                 let res = ready!(this.socket.as_mut().poll_write(cx, &this.buf[*start..]));
 
                 match res {
-                    Ok(0) => return write_zero_error(),
+                    Ok(0) => Err(ExaEtlError::WriteZero)?,
                     Ok(n) => *start += n,
                     Err(e) => return Poll::Ready(Err(e)),
                 }
@@ -128,14 +125,14 @@ impl AsyncWrite for ImportWriter {
             let this = self.as_mut().project();
             match this.state {
                 WriterState::SkipRequest(buf) => {
-                    let done = ready!(poll_until_double_crlf(this.socket, cx, buf))?;
+                    let done = ready!(this.socket.poll_until_double_crlf(cx, buf))?;
 
                     if done {
                         *this.state = WriterState::WriteResponse(0);
                     }
                 }
                 WriterState::WriteResponse(offset) => {
-                    let done = ready!(poll_send_static(this.socket, cx, Self::RESPONSE, offset))?;
+                    let done = ready!(this.socket.poll_send_static(cx, Self::RESPONSE, offset))?;
 
                     if done {
                         *this.state = WriterState::BufferData;
@@ -161,8 +158,7 @@ impl AsyncWrite for ImportWriter {
                 }
 
                 WriterState::End(offset) => {
-                    let done =
-                        ready!(poll_send_static(this.socket, cx, Self::EMPTY_CHUNK, offset))?;
+                    let done = ready!(this.socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
 
                     if done {
                         return Poll::Ready(Ok(0));
@@ -195,9 +191,4 @@ enum WriterState {
     BufferData,
     Send,
     End(usize),
-}
-
-fn write_zero_error() -> Poll<IoResult<()>> {
-    let err = IoError::new(IoErrorKind::WriteZero, "failed to write the buffered data");
-    Poll::Ready(Err(err))
 }
