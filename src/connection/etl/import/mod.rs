@@ -1,17 +1,18 @@
+mod options;
+mod writer;
+
 use std::{
     io::Result as IoResult,
     pin::Pin,
     task::{Context, Poll},
 };
 
+#[cfg(feature = "compression")]
 use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
 use pin_project::pin_project;
 
-use self::writer::ImportWriter;
-
-mod options;
-mod writer;
+use writer::ImportWriter;
 
 pub use options::{ImportBuilder, Trim};
 

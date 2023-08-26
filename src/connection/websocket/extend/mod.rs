@@ -1,18 +1,21 @@
+#[cfg(feature = "compression")]
+mod compressed;
+mod uncompressed;
+
 use std::net::SocketAddr;
 
 use crate::{error::ExaResultExt, responses::Response};
 
-use self::{compressed::CompressedWebSocket, uncompressed::PlainWebSocket};
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_util::{io::BufReader, SinkExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
-
-use super::socket::ExaSocket;
+use uncompressed::PlainWebSocket;
 
 #[cfg(feature = "compression")]
-mod compressed;
-mod uncompressed;
+use compressed::CompressedWebSocket;
+
+use super::socket::ExaSocket;
 
 /// Websocket extension enum that wraps the plain and compressed variants
 /// of the websocket used for a connection.
@@ -73,6 +76,7 @@ impl WebSocketExt {
     pub fn socket_addr(&self) -> SocketAddr {
         match self {
             WebSocketExt::Plain(ws) => ws.0.get_ref().get_ref().sock_addr,
+            #[cfg(feature = "compression")]
             WebSocketExt::Compressed(ws) => ws.0.get_ref().get_ref().sock_addr,
         }
     }
@@ -80,6 +84,7 @@ impl WebSocketExt {
     pub async fn ping(&mut self) -> Result<(), SqlxError> {
         let ws = match self {
             WebSocketExt::Plain(ws) => &mut ws.0,
+            #[cfg(feature = "compression")]
             WebSocketExt::Compressed(ws) => &mut ws.0,
         };
 

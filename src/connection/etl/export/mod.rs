@@ -8,6 +8,7 @@ use std::{
     task::{Context, Poll},
 };
 
+#[cfg(feature = "compression")]
 use async_compression::futures::bufread::GzipDecoder;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
@@ -16,7 +17,7 @@ use reader::ExportReader;
 
 pub use options::{ExportBuilder, QueryOrTable};
 
-use self::buf_reader::ExportBufReader;
+use buf_reader::ExportBufReader;
 
 #[pin_project(project = ExaExportProj)]
 #[derive(Debug)]

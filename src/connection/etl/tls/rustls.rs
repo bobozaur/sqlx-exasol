@@ -131,7 +131,7 @@ where
             self.close_notify_sent = true;
         }
 
-        futures_util::ready!(self.poll_complete_io(cx))?;
+        ready!(self.poll_complete_io(cx))?;
         Pin::new(&mut self.inner.socket).poll_shutdown(cx)
     }
 }
