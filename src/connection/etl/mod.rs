@@ -111,7 +111,7 @@ async fn socket_spawners(
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
-        true => Err(SqlxError::Tls("A TLS feature is required for ETL TLS")),
+        true => Err(SqlxError::Tls("No ETL TLS feature set".into())),
         false => non_tls_socket_spawners(num_sockets, ips, port).await,
     }
 }

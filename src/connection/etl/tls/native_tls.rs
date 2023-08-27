@@ -122,6 +122,7 @@ impl WithSocket for WithNativeTlsSocket {
 
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
+
             sender
                 .send(address)
                 .map_err(|_| "could not send socket address for ETL job".to_owned())

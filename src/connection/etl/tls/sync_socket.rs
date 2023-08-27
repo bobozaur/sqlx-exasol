@@ -38,7 +38,6 @@ where
         Poll::Ready(Ok(()))
     }
 
-    #[allow(dead_code)]
     pub async fn ready(&mut self) -> IoResult<()> {
         future::poll_fn(|cx| self.poll_ready(cx)).await
     }

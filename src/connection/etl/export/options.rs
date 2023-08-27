@@ -102,6 +102,8 @@ impl<'a> ExportBuilder<'a> {
 }
 
 impl<'a> EtlJob for ExportBuilder<'a> {
+    const JOB_TYPE: &'static str = "export";
+
     type Worker = ExaExport;
 
     fn use_compression(&self) -> Option<bool> {

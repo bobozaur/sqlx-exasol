@@ -125,6 +125,8 @@ impl<'a> ImportBuilder<'a> {
 }
 
 impl<'a> EtlJob for ImportBuilder<'a> {
+    const JOB_TYPE: &'static str = "import";
+
     type Worker = ExaImport;
 
     fn use_compression(&self) -> Option<bool> {

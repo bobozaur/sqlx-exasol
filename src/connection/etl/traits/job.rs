@@ -9,6 +9,8 @@ pub trait EtlJob: Send + Sync {
     const HTTP_SCHEME: &'static str = "http";
     const HTTPS_SCHEME: &'static str = "https";
 
+    const JOB_TYPE: &'static str;
+
     type Worker;
 
     fn use_compression(&self) -> Option<bool>;
@@ -36,7 +38,14 @@ pub trait EtlJob: Send + Sync {
         };
 
         for (idx, addr) in addrs.into_iter().enumerate() {
-            let filename = format!("AT '{}://{}' FILE '{:0>5}.{}'\n", prefix, addr, idx, ext);
+            let filename = format!(
+                "AT '{}://{}' FILE '{}_{:0>5}.{}'\n",
+                prefix,
+                addr,
+                Self::JOB_TYPE,
+                idx,
+                ext
+            );
             query.push_str(&filename);
         }
     }

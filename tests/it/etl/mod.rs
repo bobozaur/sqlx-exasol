@@ -1,6 +1,6 @@
 use exasol::etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable};
 use futures_util::{
-    future::{try_join3, try_join_all},
+    future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
 use sqlx::Executor;
@@ -9,18 +9,16 @@ use std::iter;
 
 const NUM_ROWS: usize = 1_000_000;
 
-use macros::test_threaded_etl;
+use macros::{test_etl_multi_threaded, test_etl_single_threaded};
 
-test_threaded_etl!(
-    single:
+test_etl_single_threaded!(
     "uncompressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL").skip(1),
 );
 
-test_threaded_etl!(
-    single:
+test_etl_single_threaded!(
     "uncompressed_with_feature",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
@@ -28,16 +26,14 @@ test_threaded_etl!(
     #[cfg(feature = "compression")]
 );
 
-test_threaded_etl!(
-    multi:
+test_etl_multi_threaded!(
     "uncompressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL").skip(1),
 );
 
-test_threaded_etl!(
-    multi:
+test_etl_multi_threaded!(
     "uncompressed_with_feature",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
@@ -45,8 +41,7 @@ test_threaded_etl!(
     #[cfg(feature = "compression")]
 );
 
-test_threaded_etl!(
-    single:
+test_etl_single_threaded!(
     "compressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
@@ -54,8 +49,7 @@ test_threaded_etl!(
     #[cfg(feature = "compression")]
 );
 
-test_threaded_etl!(
-    multi:
+test_etl_multi_threaded!(
     "compressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
@@ -63,24 +57,22 @@ test_threaded_etl!(
     #[cfg(feature = "compression")]
 );
 
-test_threaded_etl!(
-    single:
+test_etl_single_threaded!(
     "query_export",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Query("SELECT * FROM TEST_ETL")),
     ImportBuilder::new("TEST_ETL").skip(1),
 );
 
-test_threaded_etl!(
-    single:
-    "limit_workers",
+test_etl_single_threaded!(
+    "multiple_workers",
+    3,
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).num_readers(1),
-    ImportBuilder::new("TEST_ETL").skip(1).num_writers(1),
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ImportBuilder::new("TEST_ETL").skip(1),
 );
 
-test_threaded_etl!(
-    single:
+test_etl_single_threaded!(
     "all_arguments",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).num_readers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
@@ -91,6 +83,12 @@ test_threaded_etl!(
 #[should_panic]
 #[sqlx::test]
 async fn test_etl_invalid_query(pool: sqlx::Pool<exasol::Exasol>) {
+    async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
+        let mut buf = String::new();
+        reader.read_to_string(&mut buf).await?;
+        Ok(())
+    }
+
     let mut conn1 = pool.acquire().await.unwrap();
 
     conn1
@@ -104,10 +102,17 @@ async fn test_etl_invalid_query(pool: sqlx::Pool<exasol::Exasol>) {
         .await
         .unwrap();
 
-    ExportBuilder::new(QueryOrTable::Table(";)BAD_TABLE_NAME*&"))
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table(";)BAD_TABLE_NAME*&"))
         .build(&mut conn1)
         .await
         .unwrap();
+
+    try_join(
+        export_fut.map_err(From::from),
+        try_join_all(readers.into_iter().map(read_data)),
+    )
+    .await
+    .unwrap();
 }
 
 #[should_panic]
@@ -152,12 +157,13 @@ async fn test_etl_reader_drop(pool: sqlx::Pool<exasol::Exasol>) {
         .await
         .unwrap();
 
-    let (export_fut, readers) = (ExportBuilder::new(QueryOrTable::Table("TEST_ETL")))
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_ETL"))
         .build(&mut conn1)
         .await
         .unwrap();
 
-    let (import_fut, writers) = (ImportBuilder::new("TEST_ETL").skip(1))
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL")
+        .skip(1)
         .build(&mut conn2)
         .await
         .unwrap();
@@ -205,11 +211,12 @@ async fn test_etl_writer_flush_first(pool: sqlx::Pool<exasol::Exasol>) -> anyhow
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = (ExportBuilder::new(QueryOrTable::Table("TEST_ETL")))
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_ETL"))
         .build(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = (ImportBuilder::new("TEST_ETL").skip(1))
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL")
+        .skip(1)
         .build(&mut conn2)
         .await?;
 
@@ -254,11 +261,12 @@ async fn test_etl_writer_close_without_write(
         .execute(&mut *conn1)
         .await?;
 
-    let (export_fut, readers) = (ExportBuilder::new(QueryOrTable::Table("TEST_ETL")))
+    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_ETL"))
         .build(&mut conn1)
         .await?;
 
-    let (import_fut, writers) = (ImportBuilder::new("TEST_ETL").skip(1))
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL")
+        .skip(1)
         .build(&mut conn2)
         .await?;
 
@@ -276,12 +284,12 @@ async fn test_etl_writer_close_without_write(
 }
 
 mod macros {
-    macro_rules! test_threaded_etl {
-    ($type:literal, $name:literal, $table:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+    macro_rules! test_etl {
+    ($kind:literal, $name:literal, $num_workers:expr, $table:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
         paste::item! {
             $(#[$attr]),*
             #[sqlx::test]
-            async fn [< test_etl_ $type _ $name >](
+            async fn [< test_etl_ $kind _ $name >](
                 pool: sqlx::Pool<exasol::Exasol>,
             ) -> anyhow::Result<()> {
                 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
@@ -305,9 +313,12 @@ mod macros {
                     .execute(&mut *conn1)
                     .await?;
 
-                let (export_fut, readers) = $export.build(&mut conn1).await?;
+                let (export_fut, readers) = $export.num_readers($num_workers).build(&mut conn1).await?;
 
-                let (import_fut, writers) = $import.build(&mut conn2).await?;
+                let (import_fut, writers) = $import.num_writers($num_workers).build(&mut conn2).await?;
+
+                assert_eq!(readers.len(), $num_workers);
+                assert_eq!(writers.len(), $num_workers);
 
                 let transport_futs = iter::zip(readers, writers).map($proc);
 
@@ -328,15 +339,29 @@ mod macros {
             }
         }
     };
-
-    (single: $name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-        test_threaded_etl!("single_threaded", $name, $table, |(r,w)|  pipe(r, w), $export, $import, $(#[$attr]),*);
-    };
-
-    (multi: $name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-        test_threaded_etl!("multi_threaded", $name, $table, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
-    }
 }
 
-    pub(crate) use test_threaded_etl;
+    macro_rules! test_etl_single_threaded {
+        ($name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::etl::macros::test_etl_single_threaded!($name, 1, $table, $export, $import, $(#[$attr]),*);
+        };
+
+        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::etl::macros::test_etl!("single_threaded", $name, $num_workers, $table, |(r,w)|  pipe(r, w), $export, $import, $(#[$attr]),*);
+        }
+    }
+
+    macro_rules! test_etl_multi_threaded {
+        ($name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::etl::macros::test_etl_multi_threaded!($name, 1, $table, $export, $import, $(#[$attr]),*);
+        };
+
+        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::etl::macros::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
+        }
+    }
+
+    pub(crate) use test_etl;
+    pub(crate) use test_etl_multi_threaded;
+    pub(crate) use test_etl_single_threaded;
 }
