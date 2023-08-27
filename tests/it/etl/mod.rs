@@ -90,6 +90,28 @@ test_threaded_etl!(
 
 #[should_panic]
 #[sqlx::test]
+async fn test_etl_invalid_query(pool: sqlx::Pool<exasol::Exasol>) {
+    let mut conn1 = pool.acquire().await.unwrap();
+
+    conn1
+        .execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
+        .execute(&mut *conn1)
+        .await
+        .unwrap();
+
+    ExportBuilder::new(QueryOrTable::Table(";)BAD_TABLE_NAME*&"))
+        .build(&mut conn1)
+        .await
+        .unwrap();
+}
+
+#[should_panic]
+#[sqlx::test]
 async fn test_etl_reader_drop(pool: sqlx::Pool<exasol::Exasol>) {
     async fn drop_some_readers(
         idx: usize,
