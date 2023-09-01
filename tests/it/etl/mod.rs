@@ -72,12 +72,30 @@ test_etl_single_threaded!(
     ImportBuilder::new("TEST_ETL").skip(1),
 );
 
+test_etl_single_threaded!(
+    "multiple_workers_compressed",
+    3,
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    #[cfg(feature = "compression")]
+);
+
 test_etl_multi_threaded!(
     "multiple_workers",
     3,
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL").skip(1),
+);
+
+test_etl_multi_threaded!(
+    "multiple_workers_compressed",
+    3,
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    #[cfg(feature = "compression")]
 );
 
 test_etl_single_threaded!(
@@ -241,54 +259,38 @@ async fn test_etl_writer_flush_first(pool: sqlx::Pool<exasol::Exasol>) -> anyhow
     Ok(())
 }
 
+#[should_panic]
 #[sqlx::test]
-async fn test_etl_writer_close_without_write(
-    pool: sqlx::Pool<exasol::Exasol>,
-) -> anyhow::Result<()> {
-    async fn pipe_flush_writers(
-        mut reader: ExaExport,
-        mut writer: ExaImport,
-    ) -> Result<(), BoxDynError> {
+async fn test_etl_writer_close_without_write(pool: sqlx::Pool<exasol::Exasol>) {
+    async fn close_writer(mut writer: ExaImport) -> Result<(), BoxDynError> {
         writer.close().await?;
-
-        let mut buf = String::new();
-        reader.read_to_string(&mut buf).await?;
-
         Ok(())
     }
 
-    let mut conn1 = pool.acquire().await?;
-    let mut conn2 = pool.acquire().await?;
+    let mut conn1 = pool.acquire().await.unwrap();
 
     conn1
         .execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
-        .await?;
+        .await
+        .unwrap();
 
     sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn1)
-        .await?;
-
-    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_ETL"))
-        .build(&mut conn1)
-        .await?;
+        .await
+        .unwrap();
 
     let (import_fut, writers) = ImportBuilder::new("TEST_ETL")
-        .skip(1)
-        .build(&mut conn2)
-        .await?;
+        .build(&mut conn1)
+        .await
+        .unwrap();
 
-    let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe_flush_writers(r, w));
+    let transport_futs = writers.into_iter().map(close_writer);
 
-    try_join3(
-        export_fut.map_err(From::from),
-        import_fut.map_err(From::from),
-        try_join_all(transport_futs),
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    Ok(())
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))
+        .unwrap();
 }
 
 mod macros {

@@ -124,7 +124,7 @@ impl AsyncWrite for ImportWriter {
         buf: &[u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let this = self.as_mut().project();
+            let mut this = self.as_mut().project();
             match this.state {
                 WriterState::SkipRequest(buf) => {
                     let done = ready!(this.socket.poll_until_double_crlf(cx, buf))?;
@@ -160,9 +160,11 @@ impl AsyncWrite for ImportWriter {
                 }
 
                 WriterState::End(offset) => {
-                    let done = ready!(this.socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
+                    let socket = this.socket.as_mut();
+                    let done = ready!(socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
 
                     if done {
+                        ready!(this.socket.poll_flush(cx))?;
                         return Poll::Ready(Ok(0));
                     }
                 }
@@ -179,11 +181,13 @@ impl AsyncWrite for ImportWriter {
         ready!(self.as_mut().poll_flush(cx))?;
 
         // Ensure all preliminary steps and buffered data sending are done.
-        // The only state where this is a no-op is the one we want to reach, `BufferData`.
-        ready!(self.as_mut().poll_write(cx, &[]))?;
+        // Upon reaching the buffering data state, this becomes a no-op.
+        if !matches!(self.state, WriterState::End(_)) {
+            ready!(self.as_mut().poll_write(cx, &[]))?;
+            self.state = WriterState::End(0);
+        }
 
         // We write another empty buffer to artifically trigger the WriterState::End flow.
-        self.state = WriterState::End(0);
         ready!(self.as_mut().poll_write(cx, &[]))?;
 
         self.project().socket.poll_close(cx)
