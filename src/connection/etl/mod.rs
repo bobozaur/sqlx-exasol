@@ -15,7 +15,6 @@ use crate::responses::{QueryResult, Results};
 use crate::{ExaConnection, ExaDatabaseError, ExaQueryResult};
 use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
-use futures_util::future::try_join_all;
 use sqlx_core::error::Error as SqlxError;
 use sqlx_core::net::Socket;
 
@@ -61,7 +60,7 @@ where
         .unwrap_or(con.attributes().compression_enabled);
 
     let (addrs, futures): (Vec<_>, Vec<_>) =
-        try_join_all(socket_spawners(job.num_workers(), ips, port, with_tls).await?)
+        socket_spawners(job.num_workers(), ips, port, with_tls)
             .await?
             .into_iter()
             .unzip();
@@ -88,15 +87,7 @@ async fn socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     with_tls: bool,
-) -> Result<
-    Vec<
-        BoxFuture<
-            'static,
-            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-        >,
-    >,
-    SqlxError,
-> {
+) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
     let num_sockets = if num > 0 { num } else { ips.len() };
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]

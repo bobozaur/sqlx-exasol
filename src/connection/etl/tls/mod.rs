@@ -19,23 +19,15 @@ use rsa::RsaPrivateKey;
 
 use crate::error::ExaResultExt;
 
-// #[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
-// compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
+#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
+compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
 
 #[allow(unreachable_code)]
 pub async fn tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
-) -> Result<
-    Vec<
-        BoxFuture<
-            'static,
-            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-        >,
-    >,
-    SqlxError,
-> {
+) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
     let cert = make_cert()?;
 
     #[cfg(feature = "etl_native_tls")]

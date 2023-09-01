@@ -28,15 +28,7 @@ pub async fn rustls_socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     cert: Certificate,
-) -> Result<
-    Vec<
-        BoxFuture<
-            'static,
-            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-        >,
-    >,
-    SqlxError,
-> {
+) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
     tracing::trace!("spawning {num_sockets} TLS sockets through 'rustls'");
 
     let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
@@ -60,9 +52,11 @@ pub async fn rustls_socket_spawners(
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
         let with_socket = WithRustlsSocket::new(wrapper, config.clone());
-        let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
+        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
+            .await?
+            .await?;
 
-        output.push(future);
+        output.push((addr, future));
     }
 
     Ok(output)

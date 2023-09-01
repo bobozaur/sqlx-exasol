@@ -15,15 +15,7 @@ pub async fn non_tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
-) -> Result<
-    Vec<
-        BoxFuture<
-            'static,
-            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-        >,
-    >,
-    SqlxError,
-> {
+) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
     tracing::trace!("spawning {num_sockets} non-TLS sockets");
 
     let mut output = Vec::with_capacity(num_sockets);
@@ -34,9 +26,11 @@ pub async fn non_tls_socket_spawners(
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
         let with_socket = WithNonTlsSocket(wrapper);
-        let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
+        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
+            .await?
+            .await?;
 
-        output.push(future);
+        output.push((addr, future));
     }
 
     Ok(output)
