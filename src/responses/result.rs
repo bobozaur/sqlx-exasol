@@ -27,7 +27,6 @@ impl From<Results> for QueryResult {
 }
 
 /// Struct representing the result of a single query.
-#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 #[serde(tag = "resultType", rename_all = "camelCase")]
 pub enum QueryResult {

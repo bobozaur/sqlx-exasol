@@ -12,7 +12,7 @@
 /// and create a new future.
 macro_rules! fetcher_closure {
     ($lt:lifetime) => {
-        move |ws: &$lt mut ExaWebSocket, handle: u16, pos: usize| {
+        move |ws: &$lt mut $crate::connection::ExaWebSocket, handle: u16, pos: usize| {
             let fetch_size = ws.attributes.fetch_size;
             let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
             let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };

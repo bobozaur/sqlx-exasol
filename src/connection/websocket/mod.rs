@@ -397,7 +397,7 @@ impl ExaWebSocket {
     }
 
     /// Sends a [`Command`] to the database.
-    async fn send(&mut self, cmd: Command) -> Result<(), SqlxError> {
+    pub(crate) async fn send(&mut self, cmd: Command) -> Result<(), SqlxError> {
         let cmd = cmd.into_inner();
         tracing::debug!("sending command to database: {cmd}");
 
@@ -406,7 +406,7 @@ impl ExaWebSocket {
 
     /// Receives a database response containing attributes,
     /// processes the attributes and returns the inner data.
-    async fn recv<T>(&mut self) -> Result<T, SqlxError>
+    pub(crate) async fn recv<T>(&mut self) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
     {

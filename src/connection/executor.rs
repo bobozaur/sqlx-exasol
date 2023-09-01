@@ -20,7 +20,7 @@ use crate::{
     ExaConnection,
 };
 
-use super::{macros::fetcher_closure, stream::ResultStream, websocket::ExaWebSocket};
+use super::{macros::fetcher_closure, stream::ResultStream};
 
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;
