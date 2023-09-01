@@ -1,6 +1,8 @@
+use std::io::Result as IoResult;
 use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
+use futures_core::future::BoxFuture;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
@@ -9,7 +11,7 @@ use crate::{
     ExaConnection,
 };
 
-use super::{writer::ImportWriter, ExaImport};
+use super::ExaImport;
 
 #[derive(Clone, Debug)]
 pub struct ImportBuilder<'a> {
@@ -137,11 +139,14 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         self.num_writers
     }
 
-    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker> {
-        sockets
+    fn create_workers(
+        &self,
+        socket_futures: Vec<BoxFuture<'static, IoResult<ExaSocket>>>,
+        with_compression: bool,
+    ) -> Vec<Self::Worker> {
+        socket_futures
             .into_iter()
-            .map(|s| ImportWriter::new(s, self.buffer_size))
-            .map(|w| ExaImport::new(w, with_compression))
+            .map(|f| ExaImport::Setup(f, self.buffer_size, with_compression))
             .collect()
     }
 

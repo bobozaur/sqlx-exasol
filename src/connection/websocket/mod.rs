@@ -199,7 +199,7 @@ impl ExaWebSocket {
     /// Sends a rollback to the database and awaits the response.
     pub async fn rollback(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
-        self.send(cmd).await?;
+        self.raw_send(cmd).await?;
         self.recv::<Option<IgnoredAny>>().await?;
 
         // We explicitly set the attribute after
@@ -385,6 +385,12 @@ impl ExaWebSocket {
     where
         T: DeserializeOwned + Debug,
     {
+        self.send(cmd).await?;
+        self.recv().await
+    }
+
+    /// Sends a [`Command`] to the database, also ensuring a rollback is issued if pending.
+    pub(crate) async fn send(&mut self, cmd: Command) -> Result<(), SqlxError> {
         // If a rollback is pending, which really only happens when a transaction is dropped
         // then we need to send that first before the actual command.
         if self.pending_rollback {
@@ -392,12 +398,11 @@ impl ExaWebSocket {
             self.pending_rollback = false;
         }
 
-        self.send(cmd).await?;
-        self.recv().await
+        self.raw_send(cmd).await
     }
 
     /// Sends a [`Command`] to the database.
-    pub(crate) async fn send(&mut self, cmd: Command) -> Result<(), SqlxError> {
+    async fn raw_send(&mut self, cmd: Command) -> Result<(), SqlxError> {
         let cmd = cmd.into_inner();
         tracing::debug!("sending command to database: {cmd}");
 

@@ -1,3 +1,4 @@
+use std::io::Result as IoResult;
 use std::{fmt::Debug, net::SocketAddrV4};
 
 use crate::{
@@ -6,9 +7,10 @@ use crate::{
     ExaConnection,
 };
 
+use futures_core::future::BoxFuture;
 use sqlx_core::Error as SqlxError;
 
-use super::{reader::ExportReader, ExaExport};
+use super::ExaExport;
 
 /// Export options
 #[derive(Debug)]
@@ -114,11 +116,14 @@ impl<'a> EtlJob for ExportBuilder<'a> {
         self.num_readers
     }
 
-    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker> {
-        sockets
+    fn create_workers(
+        &self,
+        socket_futures: Vec<BoxFuture<'static, IoResult<ExaSocket>>>,
+        with_compression: bool,
+    ) -> Vec<Self::Worker> {
+        socket_futures
             .into_iter()
-            .map(ExportReader::new)
-            .map(|r| ExaExport::new(r, with_compression))
+            .map(|f| ExaExport::Setup(f, with_compression))
             .collect()
     }
 

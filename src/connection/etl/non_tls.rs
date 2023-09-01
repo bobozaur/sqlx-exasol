@@ -1,8 +1,8 @@
 use std::fmt::Write;
+use std::io::Result as IoResult;
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 
 use arrayvec::ArrayString;
-use futures_channel::oneshot::{self, Receiver, Sender};
 use futures_core::future::BoxFuture;
 use sqlx_core::error::Error as SqlxError;
 use sqlx_core::net::{Socket, WithSocket};
@@ -16,10 +16,12 @@ pub async fn non_tls_socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
 ) -> Result<
-    Vec<(
-        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
-        Receiver<SocketAddrV4>,
-    )>,
+    Vec<
+        BoxFuture<
+            'static,
+            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
+        >,
+    >,
     SqlxError,
 > {
     tracing::trace!("spawning {num_sockets} non-TLS sockets");
@@ -29,44 +31,37 @@ pub async fn non_tls_socket_spawners(
     for ip in ips.into_iter().take(num_sockets) {
         let mut ip_buf = ArrayString::<50>::new_const();
         write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
-        let (tx, rx) = oneshot::channel();
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithNonTlsSocket::new(wrapper, tx);
+        let with_socket = WithNonTlsSocket(wrapper);
         let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
 
-        output.push((future, rx));
+        output.push(future);
     }
 
     Ok(output)
 }
 
-struct WithNonTlsSocket {
-    wrapper: WithExaSocket,
-    sender: Sender<SocketAddrV4>,
-}
-
-impl WithNonTlsSocket {
-    fn new(wrapper: WithExaSocket, sender: Sender<SocketAddrV4>) -> Self {
-        Self { wrapper, sender }
-    }
-}
+struct WithNonTlsSocket(WithExaSocket);
 
 impl WithSocket for WithNonTlsSocket {
-    type Output = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
+    type Output = BoxFuture<
+        'static,
+        Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
+    >;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithNonTlsSocket { wrapper, sender } = self;
+        let wrapper = self.0;
 
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
-            sender
-                .send(address)
-                .map_err(|_| "could not send socket address for ETL job".to_owned())
-                .map_err(SqlxError::Protocol)?;
 
-            let socket = wrapper.with_socket(socket);
-            Ok(socket)
+            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+                let socket = wrapper.with_socket(socket);
+                Ok(socket)
+            });
+
+            Ok((address, future))
         })
     }
 }

@@ -1,13 +1,12 @@
 use std::fmt::Write as _;
 use std::future;
-use std::io::{ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{ready, Context, Poll};
 
 use arrayvec::ArrayString;
-use futures_channel::oneshot::{self, Receiver, Sender};
 use futures_core::future::BoxFuture;
 use rcgen::Certificate;
 use rustls::PrivateKey;
@@ -30,10 +29,12 @@ pub async fn rustls_socket_spawners(
     port: u16,
     cert: Certificate,
 ) -> Result<
-    Vec<(
-        BoxFuture<'static, Result<ExaSocket, SqlxError>>,
-        Receiver<SocketAddrV4>,
-    )>,
+    Vec<
+        BoxFuture<
+            'static,
+            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
+        >,
+    >,
     SqlxError,
 > {
     tracing::trace!("spawning {num_sockets} TLS sockets through 'rustls'");
@@ -56,13 +57,12 @@ pub async fn rustls_socket_spawners(
     for ip in ips.into_iter().take(num_sockets) {
         let mut ip_buf = ArrayString::<50>::new_const();
         write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
-        let (tx, rx) = oneshot::channel();
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithRustlsSocket::new(wrapper, config.clone(), tx);
+        let with_socket = WithRustlsSocket::new(wrapper, config.clone());
         let future = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await?;
 
-        output.push((future, rx));
+        output.push(future);
     }
 
     Ok(output)
@@ -139,52 +139,43 @@ where
 struct WithRustlsSocket {
     wrapper: WithExaSocket,
     config: Arc<ServerConfig>,
-    sender: Sender<SocketAddrV4>,
 }
 
 impl WithRustlsSocket {
-    fn new(
-        wrapper: WithExaSocket,
-        config: Arc<ServerConfig>,
-        sender: Sender<SocketAddrV4>,
-    ) -> Self {
-        Self {
-            wrapper,
-            config,
-            sender,
-        }
+    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
+        Self { wrapper, config }
     }
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
+    type Output = BoxFuture<
+        'static,
+        Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
+    >;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithRustlsSocket {
-            wrapper,
-            config,
-            sender,
-        } = self;
+        let WithRustlsSocket { wrapper, config } = self;
 
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
-            sender
-                .send(address)
-                .map_err(|_| "could not send socket address for ETL job".to_owned())
-                .map_err(SqlxError::Protocol)?;
 
-            let state = ServerConnection::new(config).to_sqlx_err()?;
-            let mut socket = RustlsSocket {
-                inner: SyncSocket::new(socket),
-                state,
-                close_notify_sent: false,
-            };
+            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+                let state = ServerConnection::new(config)
+                    .map_err(|e| IoError::new(IoErrorKind::Other, e))?;
+                let mut socket = RustlsSocket {
+                    inner: SyncSocket::new(socket),
+                    state,
+                    close_notify_sent: false,
+                };
 
-            // Performs the TLS handshake or bails
-            socket.complete_io().await?;
+                // Performs the TLS handshake or bails
+                socket.complete_io().await?;
 
-            let socket = wrapper.with_socket(socket);
-            Ok(socket)
+                let socket = wrapper.with_socket(socket);
+                Ok(socket)
+            });
+
+            Ok((address, future))
         })
     }
 }

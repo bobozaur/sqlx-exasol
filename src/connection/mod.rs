@@ -15,7 +15,7 @@ use sqlx_core::{
     Error as SqlxError,
 };
 
-use futures_util::{Future, TryStreamExt};
+use futures_util::Future;
 
 use crate::{
     arguments::ExaArguments,
@@ -24,13 +24,12 @@ use crate::{
     error::ExaProtocolError,
     options::ExaConnectOptions,
     responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
-    ExaQueryResult,
 };
 
 use stream::QueryResultStream;
 use websocket::{socket::WithExaSocket, ExaWebSocket};
 
-use self::{macros::fetcher_closure, websocket::WithMaybeTlsExaSocket};
+use self::websocket::WithMaybeTlsExaSocket;
 
 #[derive(Debug)]
 pub struct ExaConnection {
@@ -129,19 +128,6 @@ impl ExaConnection {
         };
 
         Ok(con)
-    }
-
-    #[cfg(feature = "etl")]
-    #[allow(clippy::needless_lifetimes)]
-    pub(crate) async fn execute_etl<'a>(
-        &'a mut self,
-        query: String,
-    ) -> Result<ExaQueryResult, SqlxError> {
-        self.execute_plain(&query, fetcher_closure!('a))
-            .await?
-            .try_filter_map(|step| async move { Ok(step.map_left(Some).left_or(None)) })
-            .try_collect()
-            .await
     }
 
     async fn execute_query<'a, C, F>(

@@ -6,16 +6,16 @@ mod non_tls;
 mod tls;
 mod traits;
 
+use std::io::Result as IoResult;
 use std::net::{IpAddr, SocketAddrV4};
 
-use crate::{
-    error::{ExaProtocolError, ExaResultExt},
-    ExaConnection, ExaDatabaseError, ExaQueryResult,
-};
+use crate::command::ExaCommand;
+use crate::error::ExaProtocolError;
+use crate::responses::{QueryResult, Results};
+use crate::{ExaConnection, ExaDatabaseError, ExaQueryResult};
 use arrayvec::ArrayString;
-use futures_channel::oneshot::Receiver;
 use futures_core::future::BoxFuture;
-use futures_util::future::{select, try_join_all, Either};
+use futures_util::future::try_join_all;
 use sqlx_core::error::Error as SqlxError;
 use sqlx_core::net::Socket;
 
@@ -42,8 +42,6 @@ const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 /// TCP stream every time, so we instead use a small [`futures_util::io::BufReader`].
 const IMPLICIT_BUFFER_CAP: usize = 128;
 
-type SocketSpawner = BoxFuture<'static, Result<ExaSocket, SqlxError>>;
-
 /// Type of the future that executes the ETL job.
 pub type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 
@@ -62,37 +60,27 @@ where
         .use_compression()
         .unwrap_or(con.attributes().compression_enabled);
 
-    let (futures, rxs): (Vec<_>, Vec<_>) = socket_spawners(job.num_workers(), ips, port, with_tls)
-        .await?
-        .into_iter()
-        .unzip();
-
-    let addrs_fut = try_join_all(rxs);
-    let sockets_fut = try_join_all(futures);
-
-    let (addrs, sockets_fut): (Vec<_>, BoxFuture<'_, Result<Vec<ExaSocket>, SqlxError>>) =
-        match select(addrs_fut, sockets_fut).await {
-            Either::Left((addrs, sockets_fut)) => (addrs.to_sqlx_err()?, Box::pin(sockets_fut)),
-            Either::Right((sockets, addrs_fut)) => (
-                addrs_fut.await.to_sqlx_err()?,
-                Box::pin(async move { sockets }),
-            ),
-        };
+    let (addrs, futures): (Vec<_>, Vec<_>) =
+        try_join_all(socket_spawners(job.num_workers(), ips, port, with_tls).await?)
+            .await?
+            .into_iter()
+            .unzip();
 
     let query = job.query(addrs, with_tls, with_compression);
-    let query_fut: JobFuture = Box::pin(con.execute_etl(query));
+    let cmd = ExaCommand::new_execute(&query, &con.ws.attributes).try_into()?;
+    con.ws.send(cmd).await?;
 
-    let (sockets, query_fut) = match select(query_fut, sockets_fut).await {
-        Either::Right((sockets, f)) => (sockets?, f),
-        Either::Left((res, _)) => match res {
-            Ok(_) => Err(ExaProtocolError::EtlUnexpectedEnd)?,
-            Err(e) => Err(e)?,
-        },
-    };
+    let sockets = job.create_workers(futures, with_compression);
 
-    let sockets = job.create_workers(sockets, with_compression);
+    let future = Box::pin(async move {
+        let query_res: QueryResult = con.ws.recv::<Results>().await?.into();
+        match query_res {
+            QueryResult::ResultSet { .. } => Err(ExaProtocolError::ResultSetFromEtl)?,
+            QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),
+        }
+    });
 
-    Ok((query_fut, sockets))
+    Ok((future, sockets))
 }
 
 async fn socket_spawners(
@@ -100,7 +88,15 @@ async fn socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     with_tls: bool,
-) -> Result<Vec<(SocketSpawner, Receiver<SocketAddrV4>)>, SqlxError> {
+) -> Result<
+    Vec<
+        BoxFuture<
+            'static,
+            Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
+        >,
+    >,
+    SqlxError,
+> {
     let num_sockets = if num > 0 { num } else { ips.len() };
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]

@@ -72,6 +72,14 @@ test_etl_single_threaded!(
     ImportBuilder::new("TEST_ETL").skip(1),
 );
 
+test_etl_multi_threaded!(
+    "multiple_workers",
+    3,
+    "TEST_ETL",
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ImportBuilder::new("TEST_ETL").skip(1),
+);
+
 test_etl_single_threaded!(
     "all_arguments",
     "TEST_ETL",

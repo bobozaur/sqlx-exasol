@@ -180,7 +180,10 @@ impl AsyncWrite for ImportWriter {
 
         // Ensure we advanced the state machined
         // past the request reading stage.
-        if matches!(self.state, WriterState::SkipRequest(_)) {
+        if matches!(
+            self.state,
+            WriterState::SkipRequest(_) | WriterState::WriteResponse(_)
+        ) {
             ready!(self.as_mut().poll_write(cx, &[]))?;
         }
 

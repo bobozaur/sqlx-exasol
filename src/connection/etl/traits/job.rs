@@ -1,4 +1,7 @@
+use std::io::Result as IoResult;
 use std::net::SocketAddrV4;
+
+use futures_core::future::BoxFuture;
 
 use crate::connection::websocket::socket::ExaSocket;
 
@@ -17,7 +20,11 @@ pub trait EtlJob: Send + Sync {
 
     fn num_workers(&self) -> usize;
 
-    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker>;
+    fn create_workers(
+        &self,
+        socket_futures: Vec<BoxFuture<'static, IoResult<ExaSocket>>>,
+        with_compression: bool,
+    ) -> Vec<Self::Worker>;
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String;
 
