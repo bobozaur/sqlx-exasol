@@ -1,7 +1,7 @@
-use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaRow, Exasol};
 use futures_util::TryStreamExt;
 use sqlx::{Column, Connection, Executor, Row, Statement, TypeInfo};
 use sqlx_core::pool::PoolConnection;
+use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaRow, Exasol};
 
 #[sqlx::test]
 async fn it_connects(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {

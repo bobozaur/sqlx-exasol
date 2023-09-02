@@ -1,6 +1,6 @@
-use sqlx_exasol::Exasol;
 use sqlx::{Column, Executor, Type, TypeInfo};
 use sqlx_core::pool::PoolConnection;
+use sqlx_exasol::Exasol;
 
 #[sqlx::test(migrations = "tests/it/setup")]
 async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
