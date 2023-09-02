@@ -39,7 +39,7 @@ impl<'a> ExportBuilder<'a> {
             row_separator: RowSeparator::CRLF,
             column_separator: ",",
             column_delimiter: "\"",
-            with_column_names: true,
+            with_column_names: false,
         }
     }
 

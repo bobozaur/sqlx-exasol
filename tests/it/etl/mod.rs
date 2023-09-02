@@ -25,14 +25,14 @@ test_etl_single_threaded!(
     "uncompressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL").skip(1),
+    ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_single_threaded!(
     "uncompressed_with_feature",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(false),
+    ImportBuilder::new("TEST_ETL").compression(false),
     #[cfg(feature = "compression")]
 );
 
@@ -40,14 +40,14 @@ test_etl_multi_threaded!(
     "uncompressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL").skip(1),
+    ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_multi_threaded!(
     "uncompressed_with_feature",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(false),
+    ImportBuilder::new("TEST_ETL").compression(false),
     #[cfg(feature = "compression")]
 );
 
@@ -55,7 +55,7 @@ test_etl_single_threaded!(
     "compressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
 
@@ -63,7 +63,7 @@ test_etl_multi_threaded!(
     "compressed",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
 
@@ -71,7 +71,7 @@ test_etl_single_threaded!(
     "query_export",
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Query("SELECT * FROM TEST_ETL")),
-    ImportBuilder::new("TEST_ETL").skip(1),
+    ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_single_threaded!(
@@ -79,7 +79,7 @@ test_etl_single_threaded!(
     3,
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL").skip(1),
+    ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_single_threaded!(
@@ -87,7 +87,7 @@ test_etl_single_threaded!(
     3,
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
 
@@ -96,7 +96,7 @@ test_etl_multi_threaded!(
     3,
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL").skip(1),
+    ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_multi_threaded!(
@@ -104,7 +104,7 @@ test_etl_multi_threaded!(
     3,
     "TEST_ETL",
     ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
 
@@ -122,8 +122,8 @@ test_etl!(
     1,
     "TEST_ETL",
     |(r, w)| pipe_flush_writers(r, w),
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").skip(1).compression(true),
+    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ImportBuilder::new("TEST_ETL"),
 );
 
 // ##########################################
