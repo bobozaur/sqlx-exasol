@@ -81,7 +81,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         PoolOptions::new()
             // Exasol supports 100 connections.
             // This should be more than enough for testing purposes.
-            .max_connections(10)
+            .max_connections(20)
             // Immediately close master connections. Tokio's I/O streams don't like hopping runtimes.
             .after_release(|_conn, _| Box::pin(async move { Ok(false) }))
             .connect_lazy_with(master_opts.clone())
