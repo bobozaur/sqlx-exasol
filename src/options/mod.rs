@@ -266,6 +266,7 @@ impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "migrate")]
 #[allow(unused_imports)]
 mod tests {
     use sqlx::Executor;

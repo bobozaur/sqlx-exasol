@@ -1,4 +1,4 @@
-use exasol::Exasol;
+use sqlx_exasol::Exasol;
 use sqlx::{Column, Executor, Type, TypeInfo};
 use sqlx_core::pool::PoolConnection;
 

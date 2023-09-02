@@ -44,7 +44,7 @@ impl Encode<'_, Exasol> for DateTime<Utc> {
 impl<'r> Decode<'r, Exasol> for DateTime<Utc> {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
         let naive: NaiveDateTime = Decode::<Exasol>::decode(value)?;
-        Ok(DateTime::from_utc(naive, Utc))
+        Ok(DateTime::from_naive_utc_and_offset(naive, Utc))
     }
 }
 

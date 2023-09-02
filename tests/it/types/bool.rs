@@ -1,5 +1,5 @@
 use super::*;
-use exasol::ExaIter;
+use sqlx_exasol::ExaIter;
 use std::collections::HashSet;
 
 test_type_valid!(bool::"BOOLEAN"::(false, true));

@@ -1,4 +1,4 @@
-use exasol::ExaPool;
+use sqlx_exasol::ExaPool;
 
 const MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("tests/it/migrations");
 

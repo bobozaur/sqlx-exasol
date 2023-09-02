@@ -1,4 +1,4 @@
-use exasol::{ExaConnection, Exasol};
+use sqlx_exasol::{ExaConnection, Exasol};
 use sqlx::migrate::Migrator;
 use sqlx::pool::PoolConnection;
 use sqlx::Executor;

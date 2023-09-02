@@ -2,11 +2,7 @@ mod extend;
 pub mod socket;
 mod tls;
 
-use std::{
-    borrow::Cow,
-    fmt::Debug,
-    net::{IpAddr, SocketAddr},
-};
+use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
 
 use futures_util::{io::BufReader, Future};
 use lru::LruCache;
@@ -21,10 +17,15 @@ use crate::{
         ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
     },
     responses::{
-        DataChunk, DescribeStatement, ExaAttributes, Hosts, PreparedStatement, PublicKey,
-        QueryResult, Results, SessionInfo,
+        DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, PublicKey, QueryResult,
+        Results, SessionInfo,
     },
 };
+
+#[cfg(feature = "etl")]
+use crate::responses::Hosts;
+#[cfg(feature = "etl")]
+use std::net::IpAddr;
 
 use socket::ExaSocket;
 

@@ -1,4 +1,4 @@
-use exasol::Exasol;
+use sqlx_exasol::Exasol;
 use sqlx::error::ErrorKind;
 use sqlx_core::pool::PoolConnection;
 

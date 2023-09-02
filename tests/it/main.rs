@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod common;
 mod describe;
 mod error;

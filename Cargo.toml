@@ -11,12 +11,22 @@ exclude = ["tests/*"]
 categories = ["database"]
 
 [features]
+# ############################################
+# ########### User-facing features ###########
+# ############################################
+
 compression = ["dep:async-compression", "dep:flate2"]
 uuid = ["dep:uuid"]
+chrono = ["dep:chrono"]
+rust_decimal = ["dep:rust_decimal"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
 etl = []
 etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
 etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
+
+# ############################################
+# ############################################
+# ############################################
 
 [dependencies]
 rand = "0.8.5"
