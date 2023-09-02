@@ -1,8 +1,8 @@
-use sqlx_exasol::{ExaConnection, Exasol};
 use sqlx::migrate::Migrator;
 use sqlx::pool::PoolConnection;
 use sqlx::Executor;
 use sqlx::Row;
+use sqlx_exasol::{ExaConnection, Exasol};
 use std::path::Path;
 
 #[sqlx::test(migrations = false)]

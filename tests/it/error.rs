@@ -1,6 +1,6 @@
-use sqlx_exasol::Exasol;
 use sqlx::error::ErrorKind;
 use sqlx_core::pool::PoolConnection;
+use sqlx_exasol::Exasol;
 
 #[sqlx::test(migrations = "tests/it/setup")]
 async fn it_fails_with_unique_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {

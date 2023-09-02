@@ -14,7 +14,7 @@ use crate::{arguments::ExaBuffer, Exasol};
 /// references than owning variants
 ///
 /// ```rust
-/// use exasol::ExaIter;
+/// use sqlx_exasol::ExaIter;
 ///
 /// // Don't do this, as the iterator gets cloned internally.
 /// let vector = vec![1, 2, 3];
@@ -76,7 +76,7 @@ where
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.value.clone().into_iter());
+        buf.append_iter(self.value.clone());
         IsNull::No
     }
 
