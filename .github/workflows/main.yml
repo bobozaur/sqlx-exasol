@@ -46,9 +46,33 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
+        env:
+          RUSTFLAGS: -D warnings
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
           args: --features migrate,rust_decimal,uuid,chrono
         env:
           RUSTFLAGS: -D warnings
+
+  clippy_etl:
+    name: Clippy ETL
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        etl: [etl_native_tls, etl_rustls, etl]
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
 
       - uses: actions-rs/cargo@v1
         with:
