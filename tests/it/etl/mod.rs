@@ -4,7 +4,7 @@ use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
-use sqlx::Executor;
+use sqlx::{Connection, Executor};
 use sqlx_core::{
     error::BoxDynError,
     pool::{PoolConnection, PoolOptions},
@@ -190,11 +190,6 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
 #[ignore]
 #[sqlx::test]
 async fn test_etl_writer_close_without_write(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    async fn close_writer(mut writer: ExaImport) -> Result<(), BoxDynError> {
-        writer.close().await?;
-        Ok(())
-    }
-
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -215,9 +210,81 @@ async fn test_etl_writer_close_without_write(mut conn: PoolConnection<Exasol>) -
     Ok(())
 }
 
+#[ignore]
+#[sqlx::test]
+async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+        .await?;
+
+    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
+        .execute(&mut *conn)
+        .await?;
+
+    let mut tx = conn.begin().await?;
+
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut tx).await?;
+
+    let transport_futs = writers.into_iter().map(write_one_row);
+
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    tx.rollback().await?;
+
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+        .fetch_one(&mut *conn)
+        .await?;
+
+    assert_eq!(num_rows, NUM_ROWS as u64);
+
+    Ok(())
+}
+
+#[ignore]
+#[sqlx::test]
+async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+        .await?;
+
+    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
+        .execute(&mut *conn)
+        .await?;
+
+    let mut tx = conn.begin().await?;
+
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut tx).await?;
+    let num_writers = writers.len();
+
+    let transport_futs = writers.into_iter().map(write_one_row);
+
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    tx.commit().await?;
+
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+        .fetch_one(&mut *conn)
+        .await?;
+
+    assert_eq!(num_rows, (NUM_ROWS + num_writers) as u64);
+
+    Ok(())
+}
+
 // ##########################################
 // ############### Utilities ################
 // ##########################################
+
+async fn write_one_row(mut writer: ExaImport) -> Result<(), BoxDynError> {
+    writer.write_all(b"blabla\r\n").await?;
+    writer.close().await?;
+    Ok(())
+}
+
 async fn drop_some_readers(idx: usize, mut reader: ExaExport) -> Result<(), BoxDynError> {
     if idx % 2 == 0 {
         let _ = reader.read(&mut [0; 1000]).await?;
@@ -239,6 +306,11 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
     writer.write_all(buf.as_bytes()).await?;
     writer.close().await?;
 
+    Ok(())
+}
+
+async fn close_writer(mut writer: ExaImport) -> Result<(), BoxDynError> {
+    writer.close().await?;
     Ok(())
 }
 
