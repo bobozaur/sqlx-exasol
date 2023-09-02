@@ -10,6 +10,25 @@ keywords = ["database", "sql", "exasol", "sqlx", "driver"]
 exclude = ["tests/*"]
 categories = ["database"]
 
+[package.metadata.cargo-all-features]
+skip_feature_sets = [
+    [
+        "etl",
+        "etl_native_tls",
+    ],
+    [
+        "etl",
+        "etl_rustls",
+    ],
+    [
+        "etl_rustls",
+        "etl_native_tls",
+    ],
+]
+skip_optional_dependencies = true
+extra_features = ["uuid", "chrono", "rust_decimal"]
+
+
 [features]
 # ############################################
 # ########### User-facing features ###########

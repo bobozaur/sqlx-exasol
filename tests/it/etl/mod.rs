@@ -1,4 +1,4 @@
-use exasol::etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable};
+use sqlx_exasol::etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable};
 use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
