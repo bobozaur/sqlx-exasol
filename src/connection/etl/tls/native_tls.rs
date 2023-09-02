@@ -6,6 +6,7 @@ use sqlx_core::error::Error as SqlxError;
 use sqlx_core::io::ReadBuf;
 use sqlx_core::net::Socket;
 use std::fmt::Write as _;
+use std::future;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
@@ -117,7 +118,7 @@ impl WithSocket for WithNativeTlsSocket {
                 };
 
                 loop {
-                    hs.get_mut().ready().await?;
+                    future::poll_fn(|cx| hs.get_mut().poll_ready(cx)).await?;
 
                     match hs.handshake() {
                         Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),

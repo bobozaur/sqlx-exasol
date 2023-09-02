@@ -1,4 +1,3 @@
-use std::future;
 use std::io::{Read, Result as IoResult, Write};
 use std::task::{ready, Context, Poll};
 
@@ -36,10 +35,6 @@ where
         }
 
         Poll::Ready(Ok(()))
-    }
-
-    pub async fn ready(&mut self) -> IoResult<()> {
-        future::poll_fn(|cx| self.poll_ready(cx)).await
     }
 }
 

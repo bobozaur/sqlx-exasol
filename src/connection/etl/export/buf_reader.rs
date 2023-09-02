@@ -76,11 +76,16 @@ impl AsyncBufRead for ExportBufReader {
         if *this.pos >= *this.cap {
             debug_assert!(*this.pos == *this.cap);
             *this.cap = ready!(this.inner.as_mut().poll_read(cx, this.buffer))?;
-            // Force the underlying reader to further go
-            // through its states if needed.
-            ready!(this.inner.poll_read(cx, &mut []))?;
             *this.pos = 0;
         }
+
+        // If we just buffered some data
+        if *this.pos == 0 {
+            // Force the underlying reader to further go through its states if needed.
+            // This ensures that the HTTP response is sent on reaching EOF.
+            ready!(this.inner.poll_read(cx, &mut []))?;
+        }
+
         Poll::Ready(Ok(&this.buffer[*this.pos..*this.cap]))
     }
 
