@@ -76,7 +76,7 @@ where
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.value.clone().into_iter());
+        buf.append_iter(self.value.clone());
         IsNull::No
     }
 

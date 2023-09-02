@@ -272,7 +272,9 @@ impl Attributes {
     where
         D: Deserializer<'de>,
     {
-        let Some(value) = Option::deserialize(deserializer)? else {return Ok(None)};
+        let Some(value) = Option::deserialize(deserializer)? else {
+            return Ok(None);
+        };
 
         match value {
             0 => Ok(Some(false)),
@@ -288,7 +290,9 @@ impl Attributes {
     where
         D: Deserializer<'de>,
     {
-        let Some(value) = Option::deserialize(deserializer)? else {return Ok(None)};
+        let Some(value) = Option::deserialize(deserializer)? else {
+            return Ok(None);
+        };
 
         match String::is_empty(&value) {
             true => Ok(None),
