@@ -18,7 +18,7 @@ use macros::test_type_valid;
 
 #[sqlx::test]
 async fn test_equal_arrays(
-    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
 ) -> Result<(), sqlx_core::error::BoxDynError> {
     use sqlx_core::{executor::Executor, query::query, query_as::query_as};
     use std::iter::zip;
@@ -41,16 +41,16 @@ async fn test_equal_arrays(
 
     assert_eq!(query_result.rows_affected(), 3);
 
-    let values: Vec<(bool, u32, Option<String>)> = query_as("SELECT * FROM sqlx_test_type;")
-        .fetch_all(&mut *con)
-        .await?;
+    let values: Vec<(bool, u32, Option<String>)> =
+        query_as("SELECT * FROM sqlx_test_type ORDER BY col2;")
+            .fetch_all(&mut *con)
+            .await?;
 
     // Exasol treats empty strings as NULL
     strings.pop();
     strings.push(None);
 
     let expected = zip(zip(bools, ints), strings).map(|((b, i), s)| (b, i, s));
-
     for (v, e) in zip(values, expected) {
         assert_eq!(v, e);
     }
@@ -60,7 +60,7 @@ async fn test_equal_arrays(
 
 #[sqlx::test]
 async fn test_unequal_arrays(
-    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
 ) -> Result<(), sqlx_core::error::BoxDynError> {
     use sqlx_core::{executor::Executor, query::query};
 
@@ -86,7 +86,7 @@ async fn test_unequal_arrays(
 
 #[sqlx::test]
 async fn test_exceeding_arrays(
-    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
 ) -> Result<(), sqlx_core::error::BoxDynError> {
     use sqlx_core::{executor::Executor, query::query};
 
@@ -112,7 +112,7 @@ async fn test_exceeding_arrays(
 
 #[sqlx::test]
 async fn test_decode_error(
-    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
 ) -> Result<(), sqlx_core::error::BoxDynError> {
     use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
 
@@ -140,7 +140,7 @@ mod macros {
         paste::item! {
             #[sqlx::test]
             async fn [< test_type_valid_ $name >] (
-                mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+                mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
             ) -> Result<(), sqlx_core::error::BoxDynError> {
                 use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
 
@@ -198,7 +198,7 @@ mod macros {
         paste::item! {
             #[sqlx::test]
             async fn [< test_type_array_ $name >] (
-                mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+                mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
             ) -> Result<(), sqlx_core::error::BoxDynError> {
                 use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
 
@@ -230,7 +230,7 @@ mod macros {
             paste::item! {
                 #[sqlx::test]
                 async fn [< test_type_invalid_ $name >] (
-                    mut con: sqlx_core::pool::PoolConnection<exasol::Exasol>,
+                    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
                 ) -> Result<(), sqlx_core::error::BoxDynError> {
                     use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
 

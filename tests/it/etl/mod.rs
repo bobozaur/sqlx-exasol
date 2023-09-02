@@ -1,10 +1,10 @@
-use sqlx_exasol::etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable};
 use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
 use sqlx::Executor;
 use sqlx_core::error::BoxDynError;
+use sqlx_exasol::etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable};
 use std::iter;
 
 const NUM_ROWS: usize = 1_000_000;
@@ -108,7 +108,7 @@ test_etl_single_threaded!(
 
 #[should_panic]
 #[sqlx::test]
-async fn test_etl_invalid_query(pool: sqlx::Pool<exasol::Exasol>) {
+async fn test_etl_invalid_query(pool: sqlx::Pool<sqlx_exasol::Exasol>) {
     async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
         let mut buf = String::new();
         reader.read_to_string(&mut buf).await?;
@@ -143,7 +143,7 @@ async fn test_etl_invalid_query(pool: sqlx::Pool<exasol::Exasol>) {
 
 #[should_panic]
 #[sqlx::test]
-async fn test_etl_reader_drop(pool: sqlx::Pool<exasol::Exasol>) {
+async fn test_etl_reader_drop(pool: sqlx::Pool<sqlx_exasol::Exasol>) {
     async fn drop_some_readers(
         idx: usize,
         mut reader: ExaExport,
@@ -208,7 +208,7 @@ async fn test_etl_reader_drop(pool: sqlx::Pool<exasol::Exasol>) {
 }
 
 #[sqlx::test]
-async fn test_etl_writer_flush_first(pool: sqlx::Pool<exasol::Exasol>) -> anyhow::Result<()> {
+async fn test_etl_writer_flush_first(pool: sqlx::Pool<sqlx_exasol::Exasol>) -> anyhow::Result<()> {
     async fn pipe_flush_writers(
         mut reader: ExaExport,
         mut writer: ExaImport,
@@ -261,7 +261,7 @@ async fn test_etl_writer_flush_first(pool: sqlx::Pool<exasol::Exasol>) -> anyhow
 
 #[should_panic]
 #[sqlx::test]
-async fn test_etl_writer_close_without_write(pool: sqlx::Pool<exasol::Exasol>) {
+async fn test_etl_writer_close_without_write(pool: sqlx::Pool<sqlx_exasol::Exasol>) {
     async fn close_writer(mut writer: ExaImport) -> Result<(), BoxDynError> {
         writer.close().await?;
         Ok(())
@@ -300,7 +300,7 @@ mod macros {
             $(#[$attr]),*
             #[sqlx::test]
             async fn [< test_etl_ $kind _ $name >](
-                pool: sqlx::Pool<exasol::Exasol>,
+                pool: sqlx::Pool<sqlx_exasol::Exasol>,
             ) -> anyhow::Result<()> {
                 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
                     let mut buf = String::new();
