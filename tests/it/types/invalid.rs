@@ -7,6 +7,10 @@ test_type_invalid!(u32_into_u16<u32>::"DECIMAL(5,0)"::(u32::MAX));
 test_type_invalid!(u64_into_u8<u64>::"DECIMAL(3,0)"::(u64::MAX));
 test_type_invalid!(u64_into_u16<u64>::"DECIMAL(5,0)"::(u64::MAX));
 test_type_invalid!(u64_into_u32<u64>::"DECIMAL(10,0)"::(u64::MAX));
+test_type_invalid!(u128_into_u8<u128>::"DECIMAL(3,0)"::(340_282_366_920_938_463_463_374_607_431_768_211u128));
+test_type_invalid!(u128_into_u16<u128>::"DECIMAL(5,0)"::(340_282_366_920_938_463_463_374_607_431_768_211u128));
+test_type_invalid!(u128_into_u32<u128>::"DECIMAL(10,0)"::(340_282_366_920_938_463_463_374_607_431_768_211u128));
+test_type_invalid!(u128_into_u64<u128>::"DECIMAL(20,0)"::(340_282_366_920_938_463_463_374_607_431_768_211u128));
 
 test_type_invalid!(i16_into_i8<i16>::"DECIMAL(3,0)"::(i16::MAX));
 test_type_invalid!(i32_into_i8<i32>::"DECIMAL(3,0)"::(i32::MAX));
@@ -14,6 +18,10 @@ test_type_invalid!(i32_into_i16<i32>::"DECIMAL(5,0)"::(i32::MAX));
 test_type_invalid!(i64_into_i8<i64>::"DECIMAL(3,0)"::(i64::MAX));
 test_type_invalid!(i64_into_i16<i64>::"DECIMAL(5,0)"::(i64::MAX));
 test_type_invalid!(i64_into_i32<i64>::"DECIMAL(10,0)"::(i64::MAX));
+test_type_invalid!(i128_into_i8<i128>::"DECIMAL(3,0)"::(340_282_366_920_938_463_463_374_607_431_768_211i128));
+test_type_invalid!(i128_into_i16<i128>::"DECIMAL(5,0)"::(340_282_366_920_938_463_463_374_607_431_768_211i128));
+test_type_invalid!(i128_into_i32<i128>::"DECIMAL(10,0)"::(340_282_366_920_938_463_463_374_607_431_768_211i128));
+test_type_invalid!(i128_into_i64<i128>::"DECIMAL(20,0)"::(340_282_366_920_938_463_463_374_607_431_768_211i128));
 
 // Not enough room due to scale eating up space
 test_type_invalid!(u16_no_room<u16>::"DECIMAL(5,2)"::(u16::MAX));
@@ -22,6 +30,10 @@ test_type_invalid!(u64_no_room<u64>::"DECIMAL(20,2)"::(u64::MAX));
 test_type_invalid!(i16_no_room<i16>::"DECIMAL(5,2)"::(i16::MAX));
 test_type_invalid!(i32_no_room<i32>::"DECIMAL(10,2)"::(i32::MAX));
 test_type_invalid!(i64_no_room<i64>::"DECIMAL(20,2)"::(i64::MAX));
+
+// Not enough room due to number being too large
+test_type_invalid!(u128_no_room<u128>::"DECIMAL(36,0)"::(u128::MAX));
+test_type_invalid!(i128_no_room<i128>::"DECIMAL(36,0)"::(i128::MAX));
 
 test_type_invalid!(f32_no_scale<f32>::"DECIMAL(20,0)"::(f32::MAX));
 test_type_invalid!(f64_no_scale<f64>::"DECIMAL(20,0)"::(f64::MAX));
