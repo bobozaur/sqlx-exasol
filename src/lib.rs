@@ -87,7 +87,7 @@
 //! };
 //! use sqlx_exasol::{etl::*, *};
 //!
-//! async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
+//! async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
 //!     let mut buf = [0; 10240];
 //!     let mut read = 1;
 //!
@@ -106,18 +106,19 @@
 //! # async {
 //! #
 //! let pool = ExaPool::connect(&env::var("DATABASE_URL").unwrap()).await?;
-//! let mut con = pool.acquire().await?;
+//! let mut con1 = pool.acquire().await?;
+//! let mut con2 = pool.acquire().await?;
 //!
 //! // Build EXPORT job
 //! let (export_fut, readers) = ExportBuilder::new(ExportSource::Table("TEST_ETL"))
-//!     .build(&mut conn)
+//!     .build(&mut con1)
 //!     .await?;
 //!
 //! // Build IMPORT job
-//! let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut conn).await?;
+//! let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut con2).await?;
 //!
 //! // Use readers and writers in some futures
-//! let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
+//! let transport_futs = std::iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
 //!
 //! // Execute the EXPORT and IMPORT query futures along with the worker futures
 //! let (export_res, import_res, _) = try_join3(
@@ -125,8 +126,7 @@
 //!     import_fut.map_err(From::from),
 //!     try_join_all(transport_futs),
 //! )
-//! .await
-//! .map_err(|e| anyhow::anyhow! {e})?;
+//! .await?;
 //!
 //! assert_eq!(export_res.rows_affected(), import_res.rows_affected());
 //! #

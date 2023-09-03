@@ -130,6 +130,7 @@ jobs:
           DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
 
       - name: ETL tests
+        timeout-minutes: 15
         run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
 
   tls_etl_tests:
@@ -161,7 +162,9 @@ jobs:
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
 
       - name: Native-TLS ETL tests
+        timeout-minutes: 15
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
 
       - name: Rustls ETL tests
+        timeout-minutes: 15
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
