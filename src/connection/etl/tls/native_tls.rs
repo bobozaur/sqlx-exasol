@@ -1,24 +1,28 @@
+use std::{
+    fmt::Write as _,
+    future,
+    io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
+    net::{IpAddr, SocketAddr, SocketAddrV4},
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
 use native_tls::{HandshakeError, Identity, TlsAcceptor};
 use rcgen::Certificate;
-use sqlx_core::error::Error as SqlxError;
-use sqlx_core::io::ReadBuf;
-use sqlx_core::net::Socket;
-use std::fmt::Write as _;
-use std::future;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
-use std::net::{IpAddr, SocketAddr, SocketAddrV4};
-use std::sync::Arc;
-use std::task::{Context, Poll};
-
-use crate::connection::websocket::socket::ExaSocket;
-use crate::connection::websocket::socket::WithExaSocket;
-use crate::error::ExaResultExt;
-use crate::etl::{get_etl_addr, SocketFuture};
-use sqlx_core::net::WithSocket;
+use sqlx_core::{
+    error::Error as SqlxError,
+    io::ReadBuf,
+    net::{Socket, WithSocket},
+};
 
 use super::sync_socket::SyncSocket;
+use crate::{
+    connection::websocket::socket::{ExaSocket, WithExaSocket},
+    error::ExaResultExt,
+    etl::{get_etl_addr, SocketFuture},
+};
 
 pub async fn native_tls_socket_spawners(
     num_sockets: usize,
@@ -105,7 +109,7 @@ impl WithSocket for WithNativeTlsSocket {
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
 
-            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
                 let mut hs = match acceptor.accept(SyncSocket::new(socket)) {
                     Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
                     Err(HandshakeError::Failure(e)) => {

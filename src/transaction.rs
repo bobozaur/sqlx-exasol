@@ -3,13 +3,14 @@ use sqlx_core::{transaction::TransactionManager, Error as SqlxError};
 
 use crate::{database::Exasol, ExaConnection};
 
+#[derive(Debug, Clone, Copy)]
 pub struct ExaTransactionManager;
 
 impl TransactionManager for ExaTransactionManager {
     type Database = Exasol;
 
     fn begin(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(async move { conn.ws.begin().await })
+        Box::pin(async move { conn.ws.begin() })
     }
 
     fn commit(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {

@@ -1,14 +1,14 @@
-use arrayvec::ArrayString;
-use futures_io::AsyncWrite;
-use futures_util::io::BufReader;
-use pin_project::pin_project;
-
 use std::{
     fmt::Write,
     io::Result as IoResult,
     pin::Pin,
     task::{ready, Context, Poll},
 };
+
+use arrayvec::ArrayString;
+use futures_io::AsyncWrite;
+use futures_util::io::BufReader;
+use pin_project::pin_project;
 
 use crate::{
     connection::websocket::socket::ExaSocket,

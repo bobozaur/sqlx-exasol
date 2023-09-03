@@ -282,7 +282,7 @@ impl PreparedStmtData {
 impl Serialize for PreparedStmtData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         let raw_value: &RawValue = serde_json::from_slice(&self.inner).map_err(Error::custom)?;
         raw_value.serialize(serializer)

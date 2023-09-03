@@ -14,7 +14,7 @@ impl<'q> Arguments<'q> for ExaArguments {
 
     fn reserve(&mut self, additional: usize, size: usize) {
         self.types.reserve(additional);
-        self.buf.inner.reserve(size)
+        self.buf.inner.reserve(size);
     }
 
     fn add<T>(&mut self, value: T)

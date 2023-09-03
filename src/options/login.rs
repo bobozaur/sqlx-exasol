@@ -96,7 +96,7 @@ impl<'a> CredentialsRef<'a> {
     ///
     /// When connecting using [`Login::Credentials`], Exasol first sends out
     /// a public key to encrypt the password with.
-    pub fn encrypt_password(&mut self, key: RsaPublicKey) -> Result<(), SqlxError> {
+    pub fn encrypt_password(&mut self, key: &RsaPublicKey) -> Result<(), SqlxError> {
         let mut rng = OsRng;
 
         let padding = Pkcs1v15Encrypt;

@@ -10,7 +10,6 @@ use futures_io::AsyncWrite;
 use pin_project::pin_project;
 
 use super::writer::ImportWriter;
-
 use crate::connection::websocket::socket::ExaSocket;
 
 #[pin_project(project = ExaImportWriterProj)]

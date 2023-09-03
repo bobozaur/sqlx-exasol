@@ -5,27 +5,24 @@ mod protocol_version;
 mod serializable;
 mod ssl_mode;
 
-use std::net::SocketAddr;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
+pub use builder::ExaConnectOptionsBuilder;
+use error::ExaConfigError;
+pub use login::{Credentials, CredentialsRef, Login, LoginRef};
+pub use protocol_version::ProtocolVersion;
 use serde::Serialize;
-use sqlx_core::connection::{ConnectOptions, LogSettings};
-use sqlx_core::net::tls::CertificateInput;
-use sqlx_core::Error as SqlxError;
+use serializable::SerializableConOpts;
+use sqlx_core::{
+    connection::{ConnectOptions, LogSettings},
+    net::tls::CertificateInput,
+    Error as SqlxError,
+};
+pub use ssl_mode::ExaSslMode;
 use tracing::log;
 use url::Url;
 
 use crate::connection::ExaConnection;
-
-pub use builder::ExaConnectOptionsBuilder;
-use error::ExaConfigError;
-use serializable::SerializableConOpts;
-
-pub use login::{Credentials, CredentialsRef, Login, LoginRef};
-pub use protocol_version::ProtocolVersion;
-pub use ssl_mode::ExaSslMode;
 
 pub(crate) const URL_SCHEME: &str = "exa";
 
@@ -219,7 +216,7 @@ impl ConnectOptions for ExaConnectOptions {
 /// Serialization helper that borrows as much data as possible.
 /// This type cannot be [`Copy`] because of [`LoginRef`].
 #[derive(Debug, Clone, Serialize)]
-#[serde(into = "SerializableConOpts")]
+#[serde(into = "SerializableConOpts<'_>")]
 pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) login: LoginRef<'a>,
     pub(crate) protocol_version: ProtocolVersion,

@@ -9,13 +9,12 @@ use std::{
 
 #[cfg(feature = "compression")]
 use async_compression::futures::bufread::GzipDecoder;
+#[cfg(feature = "compression")]
+use buf_reader::ExportBufReader;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
 
 use super::reader::ExportReader;
-#[cfg(feature = "compression")]
-use buf_reader::ExportBufReader;
-
 use crate::connection::websocket::socket::ExaSocket;
 
 #[pin_project(project = ExaExportReaderProj)]

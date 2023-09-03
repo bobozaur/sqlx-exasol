@@ -4,18 +4,16 @@ mod uncompressed;
 
 use std::net::SocketAddr;
 
-use crate::{error::ExaResultExt, responses::Response};
-
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
+#[cfg(feature = "compression")]
+use compressed::CompressedWebSocket;
 use futures_util::{io::BufReader, SinkExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
 use uncompressed::PlainWebSocket;
 
-#[cfg(feature = "compression")]
-use compressed::CompressedWebSocket;
-
 use super::socket::ExaSocket;
+use crate::{error::ExaResultExt, responses::Response};
 
 /// Websocket extension enum that wraps the plain and compressed variants
 /// of the websocket used for a connection.

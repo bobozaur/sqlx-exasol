@@ -1,27 +1,29 @@
-use std::fmt::Write as _;
-use std::future;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
-use std::net::{IpAddr, SocketAddr, SocketAddrV4};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{ready, Context, Poll};
+use std::{
+    fmt::Write as _,
+    future,
+    io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
+    net::{IpAddr, SocketAddr, SocketAddrV4},
+    pin::Pin,
+    sync::Arc,
+    task::{ready, Context, Poll},
+};
 
 use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
 use rcgen::Certificate;
-use rustls::PrivateKey;
-use rustls::ServerConfig;
-use rustls::{Certificate as RustlsCert, ServerConnection};
-use sqlx_core::error::Error as SqlxError;
-use sqlx_core::io::ReadBuf;
-use sqlx_core::net::{Socket, WithSocket};
-
-use crate::connection::websocket::socket::ExaSocket;
-use crate::connection::websocket::socket::WithExaSocket;
-use crate::error::ExaResultExt;
-use crate::etl::{get_etl_addr, SocketFuture};
+use rustls::{Certificate as RustlsCert, PrivateKey, ServerConfig, ServerConnection};
+use sqlx_core::{
+    error::Error as SqlxError,
+    io::ReadBuf,
+    net::{Socket, WithSocket},
+};
 
 use super::sync_socket::SyncSocket;
+use crate::{
+    connection::websocket::socket::{ExaSocket, WithExaSocket},
+    error::ExaResultExt,
+    etl::{get_etl_addr, SocketFuture},
+};
 
 pub async fn rustls_socket_spawners(
     num_sockets: usize,
@@ -150,7 +152,7 @@ impl WithSocket for WithRustlsSocket {
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
 
-            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
                 let state = ServerConnection::new(config)
                     .map_err(|e| IoError::new(IoErrorKind::Other, e))?;
                 let mut socket = RustlsSocket {

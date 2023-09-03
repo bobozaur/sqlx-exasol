@@ -9,13 +9,11 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use compression::ExaImportWriter;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
-use pin_project::pin_project;
-
 pub use options::{ImportBuilder, Trim};
-
-use compression::ExaImportWriter;
+use pin_project::pin_project;
 
 use super::SocketFuture;
 
@@ -48,7 +46,7 @@ impl AsyncWrite for ExaImport {
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer))
+            self.set(Self::Writing(writer));
         }
     }
 
@@ -60,7 +58,7 @@ impl AsyncWrite for ExaImport {
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer))
+            self.set(Self::Writing(writer));
         }
     }
 
@@ -72,7 +70,7 @@ impl AsyncWrite for ExaImport {
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer))
+            self.set(Self::Writing(writer));
         }
     }
 }

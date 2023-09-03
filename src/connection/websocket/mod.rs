@@ -2,38 +2,31 @@ mod extend;
 pub mod socket;
 mod tls;
 
+#[cfg(feature = "etl")]
+use std::net::IpAddr;
 use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
 
+use extend::WebSocketExt;
 use futures_util::{io::BufReader, Future};
 use lru::LruCache;
 use rsa::RsaPublicKey;
 use serde::de::{DeserializeOwned, IgnoredAny};
+use socket::ExaSocket;
 use sqlx_core::Error as SqlxError;
+pub use tls::WithMaybeTlsExaSocket;
 
+use super::stream::QueryResultStream;
+#[cfg(feature = "etl")]
+use crate::responses::Hosts;
 use crate::{
     command::{Command, ExaCommand},
     error::{ExaProtocolError, ExaResultExt},
-    options::{
-        ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
-    },
+    options::{CredentialsRef, ExaConnectOptionsRef, LoginRef, ProtocolVersion},
     responses::{
         DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, PublicKey, QueryResult,
         Results, SessionInfo,
     },
 };
-
-#[cfg(feature = "etl")]
-use crate::responses::Hosts;
-#[cfg(feature = "etl")]
-use std::net::IpAddr;
-
-use socket::ExaSocket;
-
-use extend::WebSocketExt;
-
-use super::stream::QueryResultStream;
-
-pub use tls::WithMaybeTlsExaSocket;
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
@@ -68,7 +61,7 @@ impl ExaWebSocket {
 
         let mut this = Self {
             ws,
-            attributes: Default::default(),
+            attributes: ExaAttributes::default(),
             pending_rollback: false,
         };
 
@@ -93,9 +86,7 @@ impl ExaWebSocket {
         mut opts: ExaConnectOptionsRef<'_>,
     ) -> Result<SessionInfo, SqlxError> {
         match &mut opts.login {
-            LoginRef::Credentials(creds) => {
-                self.login_credentials(creds, opts.protocol_version).await?
-            }
+            LoginRef::Credentials(creds) => self.login_creds(creds, opts.protocol_version).await?,
             _ => self.login_token(opts.protocol_version).await?,
         }
 
@@ -159,8 +150,8 @@ impl ExaWebSocket {
     #[cfg(feature = "etl")]
     pub async fn get_hosts(&mut self) -> Result<Vec<IpAddr>, SqlxError> {
         let host_ip = self.socket_addr().ip();
-        let _cmd = ExaCommand::new_get_hosts(host_ip).try_into()?;
-        self.send_and_recv::<Hosts>(_cmd).await.map(From::from)
+        let cmd = ExaCommand::new_get_hosts(host_ip).try_into()?;
+        self.send_and_recv::<Hosts>(cmd).await.map(From::from)
     }
 
     pub async fn get_attributes(&mut self) -> Result<(), SqlxError> {
@@ -168,7 +159,7 @@ impl ExaWebSocket {
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub async fn begin(&mut self) -> Result<(), SqlxError> {
+    pub fn begin(&mut self) -> Result<(), SqlxError> {
         // Exasol does not have nested transactions.
         if self.attributes.open_transaction {
             return Err(ExaProtocolError::TransactionAlreadyOpen)?;
@@ -346,13 +337,13 @@ impl ExaWebSocket {
         self.ws.socket_addr()
     }
 
-    async fn login_credentials(
+    async fn login_creds(
         &mut self,
         credentials: &mut CredentialsRef<'_>,
         protocol_version: ProtocolVersion,
     ) -> Result<(), SqlxError> {
         let key = self.get_public_key(protocol_version).await?;
-        credentials.encrypt_password(key)?;
+        credentials.encrypt_password(&key)?;
         Ok(())
     }
 
@@ -373,15 +364,16 @@ impl ExaWebSocket {
         self.send_and_recv(cmd).await
     }
 
-    /// Utility method for when the `response_data` field of the [`Response`] is not of any interest.
-    /// Note that attributes will still get updated.
+    /// Utility method for when the `response_data` field of the [`Response`] is not of any
+    /// interest. Note that attributes will still get updated.
     async fn send_cmd_ignore_response(&mut self, cmd: Command) -> Result<(), SqlxError> {
         self.send_and_recv::<Option<IgnoredAny>>(cmd).await?;
         Ok(())
     }
 
-    /// Sends a [`Command`] to the database and returns the `response_data` field of the [`Response`].
-    /// We will also await on the response from a previously started command, if needed.
+    /// Sends a [`Command`] to the database and returns the `response_data` field of the
+    /// [`Response`]. We will also await on the response from a previously started command, if
+    /// needed.
     async fn send_and_recv<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
@@ -420,7 +412,7 @@ impl ExaWebSocket {
 
         if let Some(attributes) = attributes {
             tracing::debug!("updating connection attributes using:\n{attributes:#?}");
-            self.attributes.update(attributes)
+            self.attributes.update(attributes);
         }
 
         tracing::trace!("database response:\n{response_data:#?}");

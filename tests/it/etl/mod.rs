@@ -1,5 +1,6 @@
-use anyhow::Result as AnyResult;
+use std::iter;
 
+use anyhow::Result as AnyResult;
 use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
@@ -13,7 +14,6 @@ use sqlx_exasol::{
     etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable},
     ExaConnectOptions, Exasol,
 };
-use std::iter;
 
 const NUM_ROWS: usize = 1_000_000;
 

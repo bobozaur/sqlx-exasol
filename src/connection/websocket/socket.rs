@@ -68,7 +68,7 @@ impl AsyncWrite for ExaSocket {
         while !buf.is_empty() {
             match self.inner.try_write(buf) {
                 Err(e) if e.kind() == IoErrorKind::WouldBlock => {
-                    ready!(self.inner.poll_write_ready(cx)?)
+                    ready!(self.inner.poll_write_ready(cx)?);
                 }
                 ready => return Poll::Ready(ready),
             }

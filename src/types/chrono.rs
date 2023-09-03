@@ -155,7 +155,8 @@ impl Encode<'_, Exasol> for chrono::Duration {
     }
 
     fn size_hint(&self) -> usize {
-        // 1 sign + max days precision + 1 space + 2 hours + 1 column + 2 minutes + 1 column + 2 seconds + 1 dot + max milliseconds fraction
+        // 1 sign + max days precision + 1 space + 2 hours + 1 column + 2 minutes + 1 column + 2
+        // seconds + 1 dot + max milliseconds fraction
         1 + IntervalDayToSecond::MAX_PRECISION as usize
             + 10
             + IntervalDayToSecond::MAX_SUPPORTED_FRACTION as usize
@@ -247,7 +248,7 @@ impl Encode<'_, Exasol> for Months {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         let years = self.0 / 12;
         let months = (self.0 % 12).abs();
-        buf.append(format_args!("{}-{}", years, months));
+        buf.append(format_args!("{years}-{months}"));
 
         IsNull::No
     }

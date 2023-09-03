@@ -24,6 +24,7 @@ use crate::{arguments::ExaBuffer, Exasol};
 /// let vector = vec![1, 2, 3];
 /// let borrowed_iter = ExaIter::from(vector.as_slice());
 /// ```
+#[derive(Debug)]
 pub struct ExaIter<I, T>
 where
     I: IntoIterator<Item = T> + Clone,
@@ -64,7 +65,7 @@ where
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self.value.clone().into_iter() {
+        for value in self.value.clone() {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
@@ -108,7 +109,7 @@ where
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self.iter() {
+        for value in *self {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
@@ -190,7 +191,7 @@ where
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self.iter() {
+        for value in self {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
@@ -231,7 +232,7 @@ where
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self.iter() {
+        for value in self {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),

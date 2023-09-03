@@ -1,20 +1,16 @@
-use crate::{
-    error::{ExaProtocolError, ExaResultExt},
-    responses::Response,
-};
-use async_tungstenite::WebSocketStream;
-use futures_util::io::BufReader;
+use std::io::Write;
 
-use async_tungstenite::tungstenite::Message;
-use futures_util::{SinkExt, StreamExt};
+use async_tungstenite::{tungstenite::Message, WebSocketStream};
+use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+use futures_util::{io::BufReader, SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
 
-use std::io::Write;
-
-use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
-
-use crate::connection::websocket::socket::ExaSocket;
+use crate::{
+    connection::websocket::socket::ExaSocket,
+    error::{ExaProtocolError, ExaResultExt},
+    responses::Response,
+};
 
 #[derive(Debug)]
 pub struct CompressedWebSocket(pub WebSocketStream<BufReader<ExaSocket>>);

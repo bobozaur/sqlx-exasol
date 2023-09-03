@@ -1,5 +1,7 @@
-use std::io::{Read, Result as IoResult, Write};
-use std::task::{ready, Context, Poll};
+use std::{
+    io::{Read, Result as IoResult, Write},
+    task::{ready, Context, Poll},
+};
 
 use sqlx_core::net::Socket;
 

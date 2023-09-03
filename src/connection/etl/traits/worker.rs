@@ -16,7 +16,7 @@ pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
     const CR: u8 = b'\r';
     const LF: u8 = b'\n';
 
-    fn poll_read_byte(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<u8>> {
+    fn poll_read_byte(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<u8>> {
         let mut buffer = [0; 1];
 
         loop {
@@ -47,7 +47,7 @@ pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
 
     fn poll_until_double_crlf(
         mut self: Pin<&mut Self>,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         buf: &mut [u8; 4],
     ) -> Poll<IoResult<()>> {
         loop {
@@ -66,23 +66,23 @@ pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
         }
     }
 
-    fn poll_read_cr(self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<()>> {
+    fn poll_read_cr(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         let byte = ready!(self.poll_read_byte(cx))?;
 
-        if byte != Self::CR {
-            Err(ExaEtlError::InvalidByte(Self::CR, byte))?
-        } else {
+        if byte == Self::CR {
             Poll::Ready(Ok(()))
+        } else {
+            Err(ExaEtlError::InvalidByte(Self::CR, byte))?
         }
     }
 
-    fn poll_read_lf(self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<()>> {
+    fn poll_read_lf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         let byte = ready!(self.poll_read_byte(cx))?;
 
-        if byte != Self::LF {
-            Err(ExaEtlError::InvalidByte(Self::LF, byte))?
-        } else {
+        if byte == Self::LF {
             Poll::Ready(Ok(()))
+        } else {
+            Err(ExaEtlError::InvalidByte(Self::LF, byte))?
         }
     }
 }

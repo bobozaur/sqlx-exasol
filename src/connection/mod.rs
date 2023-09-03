@@ -7,6 +7,7 @@ mod websocket;
 
 use std::{iter, net::SocketAddr};
 
+use futures_util::Future;
 use lru::LruCache;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
@@ -14,9 +15,10 @@ use sqlx_core::{
     transaction::Transaction,
     Error as SqlxError,
 };
+use stream::QueryResultStream;
+use websocket::{socket::WithExaSocket, ExaWebSocket};
 
-use futures_util::Future;
-
+use self::websocket::WithMaybeTlsExaSocket;
 use crate::{
     arguments::ExaArguments,
     command::ExaCommand,
@@ -25,11 +27,6 @@ use crate::{
     options::ExaConnectOptions,
     responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
 };
-
-use stream::QueryResultStream;
-use websocket::{socket::WithExaSocket, ExaWebSocket};
-
-use self::websocket::WithMaybeTlsExaSocket;
 
 #[derive(Debug)]
 pub struct ExaConnection {
@@ -58,6 +55,10 @@ impl ExaConnection {
     }
 
     /// Flushes the current [`ExaAttributes`] to Exasol.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if sending the attributes fails.
     pub async fn flush_attributes(&mut self) -> Result<(), SqlxError> {
         self.ws.set_attributes().await
     }
@@ -273,7 +274,7 @@ impl Connection for ExaConnection {
     {
         Box::pin(async {
             while let Some((_, prep)) = self.statement_cache.pop_lru() {
-                self.ws.close_prepared(prep.statement_handle).await?
+                self.ws.close_prepared(prep.statement_handle).await?;
             }
 
             Ok(())

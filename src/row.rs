@@ -1,14 +1,14 @@
-use crate::column::ExaColumn;
-use crate::database::Exasol;
-use crate::value::ExaValueRef;
+use std::{fmt::Debug, sync::Arc};
 
 use serde_json::Value;
-use sqlx_core::column::ColumnIndex;
-use sqlx_core::database::{Database, HasValueRef};
-use sqlx_core::row::Row;
-use sqlx_core::{Error as SqlxError, HashMap};
-use std::fmt::Debug;
-use std::sync::Arc;
+use sqlx_core::{
+    column::ColumnIndex,
+    database::{Database, HasValueRef},
+    row::Row,
+    Error as SqlxError, HashMap,
+};
+
+use crate::{column::ExaColumn, database::Exasol, value::ExaValueRef};
 
 /// Struct representing a result set row.
 #[derive(Debug)]
@@ -66,6 +66,6 @@ impl ColumnIndex<ExaRow> for &'_ str {
             .column_names
             .get(*self)
             .copied()
-            .ok_or_else(|| SqlxError::ColumnNotFound(self.to_string()))
+            .ok_or_else(|| SqlxError::ColumnNotFound((*self).to_string()))
     }
 }

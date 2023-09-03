@@ -1,10 +1,9 @@
-use async_tungstenite::tungstenite::protocol::CloseFrame;
-use async_tungstenite::tungstenite::Error as WsError;
+use std::fmt::Debug;
+
+use async_tungstenite::tungstenite::{protocol::CloseFrame, Error as WsError};
 use rsa::errors::Error as RsaError;
 use serde_json::error::Error as JsonError;
 use sqlx_core::Error as SqlxError;
-
-use std::fmt::Debug;
 use thiserror::Error as ThisError;
 
 /// Enum representing protocol implementation errors.
@@ -33,10 +32,7 @@ pub enum ExaProtocolError {
 
 impl<'a> From<Option<CloseFrame<'a>>> for ExaProtocolError {
     fn from(value: Option<CloseFrame<'a>>) -> Self {
-        let msg = value
-            .map(|c| c.to_string())
-            .unwrap_or("unknown reason".to_owned());
-
+        let msg = value.map_or("unknown reason".to_owned(), |c| c.to_string());
         Self::WebsocketClosed(msg)
     }
 }
@@ -47,7 +43,7 @@ impl From<ExaProtocolError> for SqlxError {
     }
 }
 
-/// Helper trait used for converting errors from various underlying libraries to SQLx.
+/// Helper trait used for converting errors from various underlying libraries to `SQLx`.
 pub(crate) trait ExaResultExt<T> {
     fn to_sqlx_err(self) -> Result<T, SqlxError>;
 }

@@ -1,23 +1,20 @@
-use std::str::FromStr;
-use std::time::Duration;
-use std::time::Instant;
+use std::{
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
 use futures_core::future::BoxFuture;
+use sqlx_core::{
+    connection::{ConnectOptions, Connection},
+    executor::Executor,
+    migrate::{AppliedMigration, Migrate, MigrateDatabase, MigrateError, Migration},
+    query::query,
+    query_as::query_as,
+    query_scalar::query_scalar,
+    Error as SqlxError,
+};
 
-use sqlx_core::connection::ConnectOptions;
-use sqlx_core::connection::Connection;
-use sqlx_core::executor::Executor;
-use sqlx_core::migrate::MigrateError;
-use sqlx_core::migrate::{AppliedMigration, Migration};
-use sqlx_core::migrate::{Migrate, MigrateDatabase};
-use sqlx_core::query::query;
-use sqlx_core::query_as::query_as;
-use sqlx_core::query_scalar::query_scalar;
-use sqlx_core::Error as SqlxError;
-
-use crate::connection::ExaConnection;
-use crate::database::Exasol;
-use crate::options::ExaConnectOptions;
+use crate::{connection::ExaConnection, database::Exasol, options::ExaConnectOptions};
 
 const LOCK_WARN: &str = "Exasol does not support database locking!";
 
@@ -67,7 +64,7 @@ impl MigrateDatabase for Exasol {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
 
-            let query = format!("DROP SCHEMA IF EXISTS `{}`", database);
+            let query = format!("DROP SCHEMA IF EXISTS `{database}`");
             let _ = conn.execute(&*query).await?;
 
             Ok(())
@@ -182,6 +179,7 @@ impl Migrate for ExaConnection {
             tx.commit().await?;
 
             let elapsed = start.elapsed();
+            let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
 
             let query_str = r#"
                 UPDATE "_sqlx_migrations" 
@@ -190,7 +188,7 @@ impl Migrate for ExaConnection {
                 "#;
 
             let _ = query(query_str)
-                .bind(elapsed.as_nanos() as i64)
+                .bind(nanos)
                 .bind(migration.version)
                 .execute(self)
                 .await?;

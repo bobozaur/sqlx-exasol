@@ -7,9 +7,8 @@ use sqlx_core::{
     Error as SqlxError,
 };
 
-use crate::{options::ExaTlsOptionsRef, ExaSslMode};
-
 use super::socket::{ExaSocket, WithExaSocket};
+use crate::{options::ExaTlsOptionsRef, ExaSslMode};
 
 pub struct WithMaybeTlsExaSocket<'a> {
     wrapper: WithExaSocket,

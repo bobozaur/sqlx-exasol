@@ -9,13 +9,11 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use compression::ExaExportReader;
 use futures_io::AsyncRead;
 use futures_util::FutureExt;
-use pin_project::pin_project;
-
 pub use options::{ExportBuilder, QueryOrTable};
-
-use compression::ExaExportReader;
+use pin_project::pin_project;
 
 use super::SocketFuture;
 
@@ -48,7 +46,7 @@ impl AsyncRead for ExaExport {
             };
 
             let reader = ExaExportReader::new(socket, with_compression);
-            self.set(Self::Reading(reader))
+            self.set(Self::Reading(reader));
         }
     }
 }

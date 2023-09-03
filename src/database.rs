@@ -12,7 +12,7 @@ use crate::{
     value::{ExaValue, ExaValueRef},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Exasol;
 
 impl Database for Exasol {

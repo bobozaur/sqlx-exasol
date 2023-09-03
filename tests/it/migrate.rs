@@ -1,9 +1,7 @@
-use sqlx::migrate::Migrator;
-use sqlx::pool::PoolConnection;
-use sqlx::Executor;
-use sqlx::Row;
-use sqlx_exasol::{ExaConnection, Exasol};
 use std::path::Path;
+
+use sqlx::{migrate::Migrator, pool::PoolConnection, Executor, Row};
+use sqlx_exasol::{ExaConnection, Exasol};
 
 #[sqlx::test(migrations = false)]
 async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {

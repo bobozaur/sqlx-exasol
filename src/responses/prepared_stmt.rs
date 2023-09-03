@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use crate::{column::ExaColumn, ExaTypeInfo};
-
 use super::{OutputColumns, Parameters};
+use crate::{column::ExaColumn, ExaTypeInfo};
 
 /// Struct representing a prepared statement handle and column parameters metadata.
 #[derive(Clone, Debug, Deserialize)]

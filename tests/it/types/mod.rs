@@ -12,16 +12,15 @@ mod uint;
 #[cfg(feature = "uuid")]
 mod uuid;
 
-use macros::test_type_array;
-use macros::test_type_invalid;
-use macros::test_type_valid;
+use macros::{test_type_array, test_type_invalid, test_type_valid};
 
 #[sqlx::test]
 async fn test_equal_arrays(
     mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
 ) -> Result<(), sqlx_core::error::BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query, query_as::query_as};
     use std::iter::zip;
+
+    use sqlx_core::{executor::Executor, query::query, query_as::query_as};
 
     con.execute(
         "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",

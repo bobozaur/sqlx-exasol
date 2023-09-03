@@ -1,15 +1,18 @@
-use std::fmt::Write;
-use std::io::Result as IoResult;
-use std::net::{IpAddr, SocketAddr, SocketAddrV4};
+use std::{
+    fmt::Write,
+    io::Result as IoResult,
+    net::{IpAddr, SocketAddr, SocketAddrV4},
+};
 
 use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
-use sqlx_core::error::Error as SqlxError;
-use sqlx_core::net::{Socket, WithSocket};
-
-use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
+use sqlx_core::{
+    error::Error as SqlxError,
+    net::{Socket, WithSocket},
+};
 
 use super::{get_etl_addr, SocketFuture};
+use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
 pub async fn non_tls_socket_spawners(
     num_sockets: usize,
@@ -47,7 +50,7 @@ impl WithSocket for WithNonTlsSocket {
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
 
-            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
                 let socket = wrapper.with_socket(socket);
                 Ok(socket)
             });

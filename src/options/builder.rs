@@ -1,5 +1,7 @@
 use std::{net::ToSocketAddrs, num::NonZeroUsize};
 
+use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
+
 use super::{
     error::ExaConfigError,
     login::{AccessToken, RefreshToken},
@@ -7,7 +9,6 @@ use super::{
     Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
     DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
-use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
 
 /// Builder for [`ExaConnectOptions`].
 #[derive(Clone, Debug)]
@@ -56,6 +57,11 @@ impl Default for ExaConnectOptionsBuilder {
 }
 
 impl ExaConnectOptionsBuilder {
+    /// Consumes this builder and returns an instance of [`ExaConnectOptions`].
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if resolving the hostname to [`std::net::SocketAddr`] fails.
     pub fn build(self) -> Result<ExaConnectOptions, SqlxError> {
         let hostname = self.host.ok_or(ExaConfigError::MissingHost)?;
         let password = self.password.unwrap_or_default();
@@ -209,8 +215,9 @@ impl ExaConnectOptionsBuilder {
             // No range? No problem! Return early.
             let idx = search_str.find("..")?;
 
-            // While if someone actually uses some "..thisismyhostname" host in the connection string
-            // would be absolutely insane, it's still somewhat nicer not have this overflow.
+            // While if someone actually uses some "..thisismyhostname" host in the connection
+            // string would be absolutely insane, it's still somewhat nicer not have
+            // this overflow.
             //
             // But really, if you read this and your host looks like that, you really should
             // re-evaluate your taste in domain names.
@@ -330,7 +337,7 @@ mod tests {
         let hostname = "myhost127..125.com";
 
         let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
-        assert!(generated.is_empty())
+        assert!(generated.is_empty());
     }
 
     #[test]

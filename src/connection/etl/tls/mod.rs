@@ -5,16 +5,17 @@ mod rustls;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod sync_socket;
 
-use sqlx_core::error::Error as SqlxError;
 use std::net::{IpAddr, SocketAddrV4};
 
 use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
-use rsa::pkcs8::{EncodePrivateKey, LineEnding};
-use rsa::RsaPrivateKey;
-
-use crate::error::ExaResultExt;
+use rsa::{
+    pkcs8::{EncodePrivateKey, LineEnding},
+    RsaPrivateKey,
+};
+use sqlx_core::error::Error as SqlxError;
 
 use super::SocketFuture;
+use crate::error::ExaResultExt;
 
 #[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
 compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
