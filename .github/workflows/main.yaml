@@ -50,7 +50,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --features ${{ matrix.etl }}${{ matrix.features }}${{ matrix.compression }}
+          args: --tests --features ${{ matrix.etl }}${{ matrix.features }}${{ matrix.compression }}
         env:
           RUSTFLAGS: -D warnings
 
