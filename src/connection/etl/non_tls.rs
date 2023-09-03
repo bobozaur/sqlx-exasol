@@ -9,13 +9,13 @@ use sqlx_core::net::{Socket, WithSocket};
 
 use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
-use super::get_etl_addr;
+use super::{get_etl_addr, SocketFuture};
 
 pub async fn non_tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
-) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
     tracing::trace!("spawning {num_sockets} non-TLS sockets");
 
     let mut output = Vec::with_capacity(num_sockets);
@@ -39,10 +39,7 @@ pub async fn non_tls_socket_spawners(
 struct WithNonTlsSocket(WithExaSocket);
 
 impl WithSocket for WithNonTlsSocket {
-    type Output = BoxFuture<
-        'static,
-        Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-    >;
+    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let wrapper = self.0;

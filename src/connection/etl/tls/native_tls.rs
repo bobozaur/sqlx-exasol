@@ -15,7 +15,7 @@ use std::task::{Context, Poll};
 use crate::connection::websocket::socket::ExaSocket;
 use crate::connection::websocket::socket::WithExaSocket;
 use crate::error::ExaResultExt;
-use crate::etl::get_etl_addr;
+use crate::etl::{get_etl_addr, SocketFuture};
 use sqlx_core::net::WithSocket;
 
 use super::sync_socket::SyncSocket;
@@ -25,7 +25,7 @@ pub async fn native_tls_socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     cert: Certificate,
-) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
     tracing::trace!("spawning {num_sockets} TLS sockets through 'native-tls'");
 
     let tls_cert = cert.serialize_pem().to_sqlx_err()?;
@@ -97,10 +97,7 @@ impl WithNativeTlsSocket {
 }
 
 impl WithSocket for WithNativeTlsSocket {
-    type Output = BoxFuture<
-        'static,
-        Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-    >;
+    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let WithNativeTlsSocket { wrapper, acceptor } = self;

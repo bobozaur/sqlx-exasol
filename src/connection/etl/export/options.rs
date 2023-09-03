@@ -1,13 +1,12 @@
-use std::io::Result as IoResult;
 use std::{fmt::Debug, net::SocketAddrV4};
 
+use crate::etl::SocketFuture;
 use crate::{
-    connection::{etl::RowSeparator, websocket::socket::ExaSocket},
+    connection::etl::RowSeparator,
     etl::{prepare, traits::EtlJob, JobFuture},
     ExaConnection,
 };
 
-use futures_core::future::BoxFuture;
 use sqlx_core::Error as SqlxError;
 
 use super::ExaExport;
@@ -118,7 +117,7 @@ impl<'a> EtlJob for ExportBuilder<'a> {
 
     fn create_workers(
         &self,
-        socket_futures: Vec<BoxFuture<'static, IoResult<ExaSocket>>>,
+        socket_futures: Vec<SocketFuture>,
         with_compression: bool,
     ) -> Vec<Self::Worker> {
         socket_futures

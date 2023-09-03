@@ -1,13 +1,11 @@
-use std::io::Result as IoResult;
 use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
-use futures_core::future::BoxFuture;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    connection::{etl::RowSeparator, websocket::socket::ExaSocket},
-    etl::{prepare, traits::EtlJob, JobFuture},
+    connection::etl::RowSeparator,
+    etl::{prepare, traits::EtlJob, JobFuture, SocketFuture},
     ExaConnection,
 };
 
@@ -141,7 +139,7 @@ impl<'a> EtlJob for ImportBuilder<'a> {
 
     fn create_workers(
         &self,
-        socket_futures: Vec<BoxFuture<'static, IoResult<ExaSocket>>>,
+        socket_futures: Vec<SocketFuture>,
         with_compression: bool,
     ) -> Vec<Self::Worker> {
         socket_futures

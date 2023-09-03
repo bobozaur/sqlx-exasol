@@ -9,21 +9,20 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use futures_core::future::BoxFuture;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
 use pin_project::pin_project;
 
 pub use options::{ImportBuilder, Trim};
 
-use crate::connection::websocket::socket::ExaSocket;
-
 use compression::ExaImportWriter;
+
+use super::SocketFuture;
 
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaImportProj)]
 pub enum ExaImport {
-    Setup(#[pin] BoxFuture<'static, IoResult<ExaSocket>>, usize, bool),
+    Setup(#[pin] SocketFuture, usize, bool),
     Writing(#[pin] ExaImportWriter),
 }
 

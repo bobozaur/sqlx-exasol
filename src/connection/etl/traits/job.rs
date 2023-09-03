@@ -1,9 +1,5 @@
-use std::io::Result as IoResult;
+use crate::etl::SocketFuture;
 use std::net::SocketAddrV4;
-
-use futures_core::future::BoxFuture;
-
-use crate::connection::websocket::socket::ExaSocket;
 
 pub trait EtlJob: Send + Sync {
     const GZ_FILE_EXT: &'static str = "gz";
@@ -22,7 +18,7 @@ pub trait EtlJob: Send + Sync {
 
     fn create_workers(
         &self,
-        socket_futures: Vec<BoxFuture<'static, IoResult<ExaSocket>>>,
+        socket_futures: Vec<SocketFuture>,
         with_compression: bool,
     ) -> Vec<Self::Worker>;
 

@@ -5,19 +5,16 @@ mod rustls;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod sync_socket;
 
-use std::io::Result as IoResult;
-use std::net::{IpAddr, SocketAddrV4};
-
-use futures_core::future::BoxFuture;
 use sqlx_core::error::Error as SqlxError;
-
-use crate::connection::websocket::socket::ExaSocket;
+use std::net::{IpAddr, SocketAddrV4};
 
 use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
 use rsa::pkcs8::{EncodePrivateKey, LineEnding};
 use rsa::RsaPrivateKey;
 
 use crate::error::ExaResultExt;
+
+use super::SocketFuture;
 
 #[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
 compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
@@ -27,7 +24,7 @@ pub async fn tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
-) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
     let cert = make_cert()?;
 
     #[cfg(feature = "etl_native_tls")]
