@@ -1,14 +1,12 @@
 use std::{
-    fmt::Write as _,
     future,
     io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
-    net::{IpAddr, SocketAddr, SocketAddrV4},
+    net::SocketAddrV4,
     pin::Pin,
     sync::Arc,
     task::{ready, Context, Poll},
 };
 
-use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
 use rcgen::Certificate;
 use rustls::{Certificate as RustlsCert, PrivateKey, ServerConfig, ServerConnection};
@@ -22,46 +20,80 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, SocketFuture},
+    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
 };
 
-pub async fn rustls_socket_spawners(
-    num_sockets: usize,
-    ips: Vec<IpAddr>,
-    port: u16,
-    cert: Certificate,
-) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
-    tracing::trace!("spawning {num_sockets} TLS sockets through 'rustls'");
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
+pub struct RustlsSocketSpawner(Arc<ServerConfig>);
 
-    let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
-    let key = PrivateKey(cert.serialize_private_key_der());
+impl RustlsSocketSpawner {
+    pub fn new(cert: &Certificate) -> Result<Self, SqlxError> {
+        tracing::trace!("creating 'rustls' socket spawner");
 
-    let config = {
-        Arc::new(
-            ServerConfig::builder()
-                .with_safe_defaults()
-                .with_no_client_auth()
-                .with_single_cert(vec![tls_cert], key)
-                .to_sqlx_err()?,
-        )
-    };
+        let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
+        let key = PrivateKey(cert.serialize_private_key_der());
 
-    let mut output = Vec::with_capacity(ips.len());
+        let config = {
+            Arc::new(
+                ServerConfig::builder()
+                    .with_safe_defaults()
+                    .with_no_client_auth()
+                    .with_single_cert(vec![tls_cert], key)
+                    .to_sqlx_err()?,
+            )
+        };
 
-    for ip in ips.into_iter().take(num_sockets) {
-        let mut ip_buf = ArrayString::<50>::new_const();
-        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
-
-        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithRustlsSocket::new(wrapper, config.clone());
-        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
-
-        output.push((addr, future));
+        Ok(Self(config))
     }
+}
 
-    Ok(output)
+impl WithSocketMaker for RustlsSocketSpawner {
+    type WithSocket = WithRustlsSocket;
+
+    fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
+        WithRustlsSocket::new(wrapper, self.0.clone())
+    }
+}
+
+pub struct WithRustlsSocket {
+    wrapper: WithExaSocket,
+    config: Arc<ServerConfig>,
+}
+
+impl WithRustlsSocket {
+    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
+        Self { wrapper, config }
+    }
+}
+
+impl WithSocket for WithRustlsSocket {
+    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
+
+    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        let WithRustlsSocket { wrapper, config } = self;
+
+        Box::pin(async move {
+            let (socket, address) = get_etl_addr(socket).await?;
+
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
+                let state = ServerConnection::new(config)
+                    .map_err(|e| IoError::new(IoErrorKind::Other, e))?;
+                let mut socket = RustlsSocket {
+                    inner: SyncSocket::new(socket),
+                    state,
+                    close_notify_sent: false,
+                };
+
+                // Performs the TLS handshake or bails
+                socket.complete_io().await?;
+
+                let socket = wrapper.with_socket(socket);
+                Ok(socket)
+            });
+
+            Ok((address, future))
+        })
+    }
 }
 
 struct RustlsSocket<S>
@@ -132,43 +164,8 @@ where
     }
 }
 
-struct WithRustlsSocket {
-    wrapper: WithExaSocket,
-    config: Arc<ServerConfig>,
-}
-
-impl WithRustlsSocket {
-    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
-        Self { wrapper, config }
-    }
-}
-
-impl WithSocket for WithRustlsSocket {
-    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
-
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithRustlsSocket { wrapper, config } = self;
-
-        Box::pin(async move {
-            let (socket, address) = get_etl_addr(socket).await?;
-
-            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
-                let state = ServerConnection::new(config)
-                    .map_err(|e| IoError::new(IoErrorKind::Other, e))?;
-                let mut socket = RustlsSocket {
-                    inner: SyncSocket::new(socket),
-                    state,
-                    close_notify_sent: false,
-                };
-
-                // Performs the TLS handshake or bails
-                socket.complete_io().await?;
-
-                let socket = wrapper.with_socket(socket);
-                Ok(socket)
-            });
-
-            Ok((address, future))
-        })
+impl<T> ExaResultExt<T> for Result<T, rustls::Error> {
+    fn to_sqlx_err(self) -> Result<T, SqlxError> {
+        self.map_err(|e| SqlxError::Tls(e.into()))
     }
 }

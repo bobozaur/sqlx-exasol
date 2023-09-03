@@ -5,10 +5,13 @@ edition = "2021"
 authors = ["bobozaur"]
 description = "Exasol driver for the SQLx framework."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/bobozaur/rust-exasol"
+repository = "https://github.com/bobozaur/sqlx-exasol"
 keywords = ["database", "sql", "exasol", "sqlx", "driver"]
 exclude = ["tests/*"]
 categories = ["database"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 # ############################################
@@ -40,7 +43,6 @@ futures-util = "0.3.28"
 futures-core = "0.3.28"
 serde_json = { version = "1.0.100", features = ["raw_value"] }
 serde = { version = "1.0.169", features = ["derive"] }
-either = "1.8.1"
 pin-project = "1.1.2"
 lru = "0.11.0"
 sqlx-core = "=0.7.1"

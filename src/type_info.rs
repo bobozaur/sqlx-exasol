@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
 
 /// Information about an Exasol data type.
-///
-/// Note that the [`DataTypeName`] is automatically constructed
-/// from the provided [`ExaDataType`].
+// Note that the [`DataTypeName`] is automatically constructed from the provided [`ExaDataType`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(from = "ExaDataType")]
 pub struct ExaTypeInfo {
@@ -21,7 +19,7 @@ pub struct ExaTypeInfo {
 impl ExaTypeInfo {
     /// Checks compatibility with other data types.
     ///
-    /// Returns true if the [`self`] instance is compatible/bigger/able to
+    /// Returns true if the [`ExaTypeInfo`] instance is compatible/bigger/able to
     /// accommodate the `other` instance.
     pub fn compatible(&self, other: &Self) -> bool {
         self.datatype.compatible(&other.datatype)
@@ -442,7 +440,7 @@ impl PartialOrd for IntervalDayToSecond {
 
 impl IntervalDayToSecond {
     /// The fraction has the weird behavior of shifting the milliseconds up
-    /// value and mixing it with the seconds, minutes, hours or even the days
+    /// the value and mixing it with the seconds, minutes, hours or even the days
     /// when the value exceeds 3 (the max milliseconds digits limit).
     ///
     /// See: <`https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval`>

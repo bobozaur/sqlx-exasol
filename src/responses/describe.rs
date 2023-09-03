@@ -3,6 +3,8 @@ use serde::Deserialize;
 use super::{OutputColumns, Parameters};
 use crate::{ExaColumn, ExaTypeInfo};
 
+/// A makeshift type representing the description of a statement.
+/// It is essentially a trimmed down version of a [`super::PreparedStatement`].
 #[derive(Clone, Debug, Deserialize)]
 #[serde(from = "DescribeStatementDe")]
 pub struct DescribeStatement {

@@ -1,30 +1,15 @@
-use std::{borrow::Cow, fmt::Display};
+use std::{borrow::Cow, error::Error, fmt::Display};
 
 use serde::Deserialize;
 use sqlx_core::error::{self, ErrorKind};
 
 /// An error directly issued by the Exasol database.
-/// Represents the [`super::Response::Error`] variant.
+// Represents the [`super::Response::Error`] variant.
 #[derive(Debug, Deserialize)]
 pub struct ExaDatabaseError {
     text: String,
     #[serde(rename = "sqlCode")]
     code: String,
-}
-
-#[cfg(feature = "etl")]
-impl ExaDatabaseError {
-    const UNKNOWN_ERROR_CODE: &str = "00000";
-
-    pub(crate) fn unknown<E>(err: E) -> Self
-    where
-        E: std::error::Error,
-    {
-        Self {
-            text: err.to_string(),
-            code: Self::UNKNOWN_ERROR_CODE.to_owned(),
-        }
-    }
 }
 
 impl Display for ExaDatabaseError {
@@ -33,8 +18,8 @@ impl Display for ExaDatabaseError {
     }
 }
 
-impl std::error::Error for ExaDatabaseError {}
-impl std::error::Error for &mut ExaDatabaseError {}
+impl Error for ExaDatabaseError {}
+impl Error for &mut ExaDatabaseError {}
 
 impl error::DatabaseError for ExaDatabaseError {
     fn message(&self) -> &str {
@@ -45,15 +30,15 @@ impl error::DatabaseError for ExaDatabaseError {
         Some(Cow::Borrowed(&self.code))
     }
 
-    fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+    fn as_error(&self) -> &(dyn Error + Send + Sync + 'static) {
         self
     }
 
-    fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+    fn as_error_mut(&mut self) -> &mut (dyn Error + Send + Sync + 'static) {
         self
     }
 
-    fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+    fn into_error(self: Box<Self>) -> Box<dyn Error + Send + Sync + 'static> {
         self
     }
 

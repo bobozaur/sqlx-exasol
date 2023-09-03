@@ -2,29 +2,34 @@ mod error;
 mod export;
 mod import;
 mod non_tls;
+mod row_separator;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod tls;
 mod traits;
 
 use std::{
-    io::Result as IoResult,
-    net::{IpAddr, SocketAddrV4},
+    fmt::Write as _,
+    io::{Error as IoError, Result as IoResult},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
 };
 
 use arrayvec::ArrayString;
-pub use export::{ExaExport, ExportBuilder, QueryOrTable};
+pub use export::{ExaExport, ExportBuilder, ExportSource};
 use futures_core::future::BoxFuture;
 pub use import::{ExaImport, ImportBuilder, Trim};
-use non_tls::non_tls_socket_spawners;
+pub use row_separator::RowSeparator;
 use sqlx_core::{error::Error as SqlxError, net::Socket};
 
-use self::traits::EtlJob;
-use super::websocket::socket::ExaSocket;
+use self::{
+    error::ExaEtlError,
+    non_tls::NonTlsSocketSpawner,
+    traits::{EtlJob, WithSocketMaker},
+};
+use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
     command::ExaCommand,
-    error::ExaProtocolError,
     responses::{QueryResult, Results},
-    ExaConnection, ExaDatabaseError, ExaQueryResult,
+    ExaConnection, ExaQueryResult,
 };
 
 /// Special Exasol packet that enables tunneling.
@@ -45,7 +50,9 @@ const IMPLICIT_BUFFER_CAP: usize = 128;
 type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
 
-async fn prepare<'a, 'c, T>(
+/// Builds an ETL job comprising of a [`JobFuture`], that drives the execution
+/// of the ETL query, and an array of workers that perform the IO.
+async fn build_etl<'a, 'c, T>(
     job: &'a T,
     con: &'c mut ExaConnection,
 ) -> Result<(JobFuture<'c>, Vec<T::Worker>), SqlxError>
@@ -60,22 +67,27 @@ where
         .use_compression()
         .unwrap_or(con.attributes().compression_enabled);
 
+    // Get the internal Exasol node addresses and the socket spawning futures
     let (addrs, futures): (Vec<_>, Vec<_>) =
         socket_spawners(job.num_workers(), ips, port, with_tls)
             .await?
             .into_iter()
             .unzip();
 
+    // Construct and send query
     let query = job.query(addrs, with_tls, with_compression);
     let cmd = ExaCommand::new_execute(&query, &con.ws.attributes).try_into()?;
     con.ws.send(cmd).await?;
 
+    // Create the ETL workers
     let sockets = job.create_workers(futures, with_compression);
 
+    // Query execution driving future to be returned and awaited
+    // alongside the worker IO operations
     let future = Box::pin(async move {
         let query_res: QueryResult = con.ws.recv::<Results>().await?.into();
         match query_res {
-            QueryResult::ResultSet { .. } => Err(ExaProtocolError::ResultSetFromEtl)?,
+            QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),
         }
     });
@@ -83,6 +95,7 @@ where
     Ok((future, sockets))
 }
 
+/// Wrapper over [`_socket_spawners`] used to handle TLS/non-TLS reasoning.
 async fn socket_spawners(
     num: usize,
     ips: Vec<IpAddr>,
@@ -93,15 +106,45 @@ async fn socket_spawners(
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
     match with_tls {
-        true => tls::tls_socket_spawners(num_sockets, ips, port).await,
-        false => non_tls_socket_spawners(num_sockets, ips, port).await,
+        true => _socket_spawners(tls::tls_with_socket_maker()?, num_sockets, ips, port).await,
+        false => _socket_spawners(NonTlsSocketSpawner, num_sockets, ips, port).await,
     }
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
         true => Err(SqlxError::Tls("No ETL TLS feature set".into())),
-        false => non_tls_socket_spawners(num_sockets, ips, port).await,
+        false => _socket_spawners(NonTlsSocketSpawner, num_sockets, ips, port).await,
     }
+}
+
+/// Creates a socket making future for each IP address provided.
+/// The internal socket address of the corresponding Exasol node
+/// is provided alongside the future, to be used in query generation.
+async fn _socket_spawners<T>(
+    socket_spawner: T,
+    num_sockets: usize,
+    ips: Vec<IpAddr>,
+    port: u16,
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError>
+where
+    T: WithSocketMaker,
+{
+    let mut output = Vec::with_capacity(num_sockets);
+
+    for ip in ips.into_iter().take(num_sockets) {
+        let mut ip_buf = ArrayString::<50>::new_const();
+        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+
+        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
+        let with_socket = socket_spawner.make_with_socket(wrapper);
+        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
+            .await?
+            .await?;
+
+        output.push((addr, future));
+    }
+
+    Ok(output)
 }
 
 /// Behind the scenes Exasol will import/export to a file located on the
@@ -146,25 +189,11 @@ where
         .for_each(|b| ip_buf.push(char::from(*b)));
 
     let port = u16::from_le_bytes([buf[4], buf[5]]);
-    let ip = ip_buf.parse().map_err(ExaDatabaseError::unknown)?;
+    let ip = ip_buf
+        .parse::<Ipv4Addr>()
+        .map_err(ExaEtlError::from)
+        .map_err(IoError::from)?;
     let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum RowSeparator {
-    LF,
-    CR,
-    CRLF,
-}
-
-impl AsRef<str> for RowSeparator {
-    fn as_ref(&self) -> &str {
-        match self {
-            RowSeparator::LF => "LF",
-            RowSeparator::CR => "CR",
-            RowSeparator::CRLF => "CRLF",
-        }
-    }
 }

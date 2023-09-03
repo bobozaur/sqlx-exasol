@@ -17,6 +17,9 @@ use pin_project::pin_project;
 use super::reader::ExportReader;
 use crate::connection::websocket::socket::ExaSocket;
 
+/// Wrapper enum that handles the compression support for the [`ExportReader`].
+/// It makes use of [`ExportBufReader`] because the [`GzipDecoder`] needs a type
+/// implementing [`futures_io::AsyncBufRead`].
 #[pin_project(project = ExaExportReaderProj)]
 #[derive(Debug)]
 pub enum ExaExportReader {
@@ -39,11 +42,11 @@ impl ExaExportReader {
 
 impl AsyncRead for ExaExportReader {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
-        match self.as_mut().project() {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaExportReaderProj::Compressed(r) => r.poll_read(cx, buf),
             ExaExportReaderProj::Plain(r) => r.poll_read(cx, buf),

@@ -213,9 +213,7 @@ impl ExaAttributes {
             };
         }
 
-        if let Some(schema) = other.current_schema {
-            self.current_schema = Some(schema);
-        }
+        self.current_schema = other.current_schema;
 
         other_or_prev!(autocommit);
         other_or_prev!(feedback_interval);
@@ -234,8 +232,17 @@ impl ExaAttributes {
     }
 }
 
-/// Struct representing only the attributes returned from Exasol.
-#[allow(dead_code)]
+/// Helper type representing only the attributes returned from Exasol.
+///
+/// While [`ExaAttributes`] are stored by connections and sent to
+/// the database, this type is used for deserialization of the attributes
+/// that Exasol sends to us.
+///
+/// The returned attributes are then used to update a connection's [`ExaAttributes`].
+//
+// Exasol can return virtually any combination of these attributes and
+// accommodating that into [`ExaAttributes`] would be more convoluted than
+// having this as a helper type.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attributes {

@@ -43,6 +43,10 @@ pub(crate) const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
 pub(crate) const PARAM_COMPRESSION: &str = "compression";
 pub(crate) const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
+/// Options for connecting to the Exasol database.
+///
+/// While generally automatically created through a connection string,
+/// [`ExaConnectOptions::builder()`] can be used to get a [`ExaConnectOptionsBuilder`].
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
     pub(crate) hosts_details: Vec<(String, Vec<SocketAddr>)>,
@@ -53,11 +57,11 @@ pub struct ExaConnectOptions {
     pub(crate) ssl_client_key: Option<CertificateInput>,
     pub(crate) statement_cache_capacity: NonZeroUsize,
     pub(crate) schema: Option<String>,
+    pub(crate) compression: bool,
     login: Login,
     protocol_version: ProtocolVersion,
     fetch_size: usize,
     query_timeout: u64,
-    compression: bool,
     feedback_interval: u8,
     log_settings: LogSettings,
 }
@@ -215,6 +219,11 @@ impl ConnectOptions for ExaConnectOptions {
 
 /// Serialization helper that borrows as much data as possible.
 /// This type cannot be [`Copy`] because of [`LoginRef`].
+//
+// We use a single set of connection options to create a connections pool,
+// yet each connection's password is encrypted individually with a
+// public key specific to that connection, so it will be different and is
+// stored as such.
 #[derive(Debug, Clone, Serialize)]
 #[serde(into = "SerializableConOpts<'_>")]
 pub(crate) struct ExaConnectOptionsRef<'a> {
@@ -243,6 +252,7 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
     }
 }
 
+/// Helper containing TLS related options.
 #[derive(Debug, Clone, Copy)]
 pub struct ExaTlsOptionsRef<'a> {
     pub(crate) ssl_mode: ExaSslMode,
@@ -259,52 +269,5 @@ impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {
             ssl_client_cert: value.ssl_client_cert.as_ref(),
             ssl_client_key: value.ssl_client_key.as_ref(),
         }
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "migrate")]
-#[allow(unused_imports)]
-mod tests {
-    use sqlx::Executor;
-    use sqlx_core::{error::BoxDynError, pool::PoolOptions};
-
-    use crate::{ExaConnectOptions, Exasol};
-
-    #[cfg(feature = "compression")]
-    #[sqlx::test]
-    async fn test_compression_works(
-        pool_opts: PoolOptions<Exasol>,
-        mut exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        exa_opts.compression = true;
-
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-        let schema = "TEST_SWITCH_SCHEMA";
-
-        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
-            .await?;
-
-        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
-            .await?;
-
-        assert_eq!(schema, new_schema);
-
-        Ok(())
-    }
-
-    #[cfg(not(feature = "compression"))]
-    #[sqlx::test]
-    async fn test_compression_no_flag(
-        pool_opts: PoolOptions<Exasol>,
-        mut exa_opts: ExaConnectOptions,
-    ) {
-        exa_opts.compression = true;
-        assert!(pool_opts.connect_with(exa_opts).await.is_err());
     }
 }

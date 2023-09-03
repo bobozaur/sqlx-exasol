@@ -1,45 +1,28 @@
-use std::{
-    fmt::Write,
-    io::Result as IoResult,
-    net::{IpAddr, SocketAddr, SocketAddrV4},
-};
+use std::{io::Result as IoResult, net::SocketAddrV4};
 
-use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
 use sqlx_core::{
     error::Error as SqlxError,
     net::{Socket, WithSocket},
 };
 
-use super::{get_etl_addr, SocketFuture};
+use super::{get_etl_addr, traits::WithSocketMaker, SocketFuture};
 use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
-pub async fn non_tls_socket_spawners(
-    num_sockets: usize,
-    ips: Vec<IpAddr>,
-    port: u16,
-) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
-    tracing::trace!("spawning {num_sockets} non-TLS sockets");
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithNonTlsSocket`].
+pub struct NonTlsSocketSpawner;
 
-    let mut output = Vec::with_capacity(num_sockets);
+impl WithSocketMaker for NonTlsSocketSpawner {
+    type WithSocket = WithNonTlsSocket;
 
-    for ip in ips.into_iter().take(num_sockets) {
-        let mut ip_buf = ArrayString::<50>::new_const();
-        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
-
-        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithNonTlsSocket(wrapper);
-        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
-
-        output.push((addr, future));
+    fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
+        WithNonTlsSocket(wrapper)
     }
-
-    Ok(output)
 }
 
-struct WithNonTlsSocket(WithExaSocket);
+/// Newtype implemented for uniform ETL socket spawning, even
+/// though without TLS there's no need to return a future.
+pub struct WithNonTlsSocket(WithExaSocket);
 
 impl WithSocket for WithNonTlsSocket {
     type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;

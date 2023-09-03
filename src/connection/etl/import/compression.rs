@@ -12,6 +12,7 @@ use pin_project::pin_project;
 use super::writer::ImportWriter;
 use crate::connection::websocket::socket::ExaSocket;
 
+/// Wrapper enum that handles the compression support for the [`ImportWriter`].
 #[pin_project(project = ExaImportWriterProj)]
 #[derive(Debug)]
 pub enum ExaImportWriter {
@@ -33,28 +34,24 @@ impl ExaImportWriter {
 }
 
 impl AsyncWrite for ExaImportWriter {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
-        match self.as_mut().project() {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaImportWriterProj::Compressed(s) => s.poll_write(cx, buf),
             ExaImportWriterProj::Plain(s) => s.poll_write(cx, buf),
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.as_mut().project() {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaImportWriterProj::Compressed(s) => s.poll_flush(cx),
             ExaImportWriterProj::Plain(s) => s.poll_flush(cx),
         }
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.as_mut().project() {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaImportWriterProj::Compressed(s) => s.poll_close(cx),
             ExaImportWriterProj::Plain(s) => s.poll_close(cx),

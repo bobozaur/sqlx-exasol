@@ -14,6 +14,7 @@ use crate::{
     etl::{error::ExaEtlError, traits::EtlWorker, IMPLICIT_BUFFER_CAP},
 };
 
+/// Low-level async reader used to read chunked HTTP data from Exasol.
 #[pin_project]
 #[derive(Debug)]
 pub struct ExportReader {

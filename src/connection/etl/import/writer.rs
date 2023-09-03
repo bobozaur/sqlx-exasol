@@ -15,6 +15,9 @@ use crate::{
     etl::{error::ExaEtlError, traits::EtlWorker, IMPLICIT_BUFFER_CAP},
 };
 
+/// Low-level async writer used to send chunked HTTP data to Exasol.
+/// The writer must be closed to finalize the import, as otherwise
+/// Exasol will keep expecting more data.
 #[pin_project]
 #[derive(Debug)]
 pub struct ImportWriter {

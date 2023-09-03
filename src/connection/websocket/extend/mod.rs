@@ -10,7 +10,7 @@ use compressed::CompressedWebSocket;
 use futures_util::{io::BufReader, SinkExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
-use uncompressed::PlainWebSocket;
+pub use uncompressed::PlainWebSocket;
 
 use super::socket::ExaSocket;
 use crate::{error::ExaResultExt, responses::Response};
@@ -25,19 +25,8 @@ pub enum WebSocketExt {
 }
 
 impl WebSocketExt {
-    // We always begin a connection with uncompressed messages.
-    pub fn new(websocket: WebSocketStream<BufReader<ExaSocket>>) -> Self {
-        Self::Plain(PlainWebSocket(websocket))
-    }
-
-    pub fn adjust_compression(self, should_compress: bool) -> Self {
-        let ws = match self {
-            WebSocketExt::Plain(ws) => ws.0,
-            #[cfg(feature = "compression")]
-            WebSocketExt::Compressed(ws) => ws.0,
-        };
-
-        match should_compress {
+    pub fn new(ws: WebSocketStream<BufReader<ExaSocket>>, use_compression: bool) -> Self {
+        match use_compression {
             #[cfg(feature = "compression")]
             true => WebSocketExt::Compressed(CompressedWebSocket(ws)),
             _ => WebSocketExt::Plain(PlainWebSocket(ws)),

@@ -1,12 +1,11 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use either::Either;
 use sqlx_core::{
     column::ColumnIndex,
     database::{Database, HasStatement},
     impl_statement_query,
     statement::Statement,
-    Error as SqlxError,
+    Either, Error as SqlxError,
 };
 
 use crate::{arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};

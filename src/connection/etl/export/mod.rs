@@ -1,4 +1,5 @@
 mod compression;
+mod export_source;
 mod options;
 mod reader;
 
@@ -10,13 +11,18 @@ use std::{
 };
 
 use compression::ExaExportReader;
+pub use export_source::ExportSource;
 use futures_io::AsyncRead;
 use futures_util::FutureExt;
-pub use options::{ExportBuilder, QueryOrTable};
+pub use options::ExportBuilder;
 use pin_project::pin_project;
 
 use super::SocketFuture;
 
+/// An ETL EXPORT worker.
+///
+/// The type implements [`AsyncRead`] and is [`Send`] and [`Sync`] so it can be freely used
+/// in any data pipeline.
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaExportProj)]
 pub enum ExaExport {

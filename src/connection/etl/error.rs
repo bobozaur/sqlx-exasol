@@ -1,9 +1,12 @@
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::{
+    io::{Error as IoError, ErrorKind as IoErrorKind},
+    net::AddrParseError,
+};
 
 use thiserror::Error as ThisError;
 
 /// Enum representing ETL errors.
-#[derive(Clone, Copy, Debug, ThisError)]
+#[derive(Clone, Debug, ThisError)]
 pub enum ExaEtlError {
     #[error("chunk size overflowed 64 bits")]
     ChunkSizeOverflow,
@@ -13,6 +16,10 @@ pub enum ExaEtlError {
     InvalidByte(u8, u8),
     #[error("failed to write the buffered data")]
     WriteZero,
+    #[error("Unexpected output, a result set, returned by ETL job")]
+    ResultSetFromEtl,
+    #[error("Failed to parse ETL internal IP address: {0}")]
+    InvalidInternalAddr(#[from] AddrParseError),
 }
 
 impl From<ExaEtlError> for IoError {
@@ -20,7 +27,9 @@ impl From<ExaEtlError> for IoError {
         let kind = match &value {
             ExaEtlError::ChunkSizeOverflow
             | ExaEtlError::InvalidChunkSizeByte(_)
-            | ExaEtlError::InvalidByte(_, _) => IoErrorKind::InvalidData,
+            | ExaEtlError::InvalidByte(_, _)
+            | ExaEtlError::ResultSetFromEtl
+            | ExaEtlError::InvalidInternalAddr(_) => IoErrorKind::InvalidData,
             ExaEtlError::WriteZero => IoErrorKind::WriteZero,
         };
 

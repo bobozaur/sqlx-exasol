@@ -66,17 +66,25 @@ impl<T> From<Response<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> 
 enum OutputColumns {
     #[serde(rename_all = "camelCase")]
     ResultSet {
-        result_set: ColumnSet,
+        result_set: ResultSetColumns,
     },
     RowCount {},
 }
 
+/// Deserialization helper.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ColumnSet {
+struct ResultSetColumns {
     columns: ExaColumns,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExaParameterType {
+    data_type: ExaTypeInfo,
+}
+
+/// The `parameter_data` field of a [`PreparedStatement`].
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Parameters {
@@ -85,8 +93,8 @@ struct Parameters {
 }
 
 impl Parameters {
-    /// Helper allowing us to deserialize what would be an [`ExaColumn`]
-    /// directly to an [`ExaTypeInfo`].
+    /// Helper allowing us to deserialize what would be an [`crate::ExaColumn`]
+    /// directly to an [`ExaTypeInfo`] as sometimes the other information is redundant.
     fn datatype_from_column<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Vec<ExaTypeInfo>, D::Error> {
@@ -115,12 +123,6 @@ impl Parameters {
 
         deserializer.deserialize_seq(TypeInfoVisitor)
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExaParameterType {
-    data_type: ExaTypeInfo,
 }
 
 /// Deserialization function used to turn Exasol's column major data into row major.

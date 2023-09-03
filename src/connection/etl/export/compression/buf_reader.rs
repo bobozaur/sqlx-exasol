@@ -48,8 +48,10 @@ impl AsyncRead for ExportBufReader {
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
         let mut rem = ready!(self.as_mut().poll_fill_buf(cx))?;
+
         let nread = rem.read(buf)?;
         self.consume(nread);
+
         Poll::Ready(Ok(nread))
     }
 
@@ -59,8 +61,10 @@ impl AsyncRead for ExportBufReader {
         bufs: &mut [IoSliceMut<'_>],
     ) -> Poll<IoResult<usize>> {
         let mut rem = ready!(self.as_mut().poll_fill_buf(cx))?;
+
         let nread = rem.read_vectored(bufs)?;
         self.consume(nread);
+
         Poll::Ready(Ok(nread))
     }
 }

@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use either::Either;
 use futures_core::{future::BoxFuture, stream::BoxStream};
 use futures_util::TryStreamExt;
 use sqlx_core::{
@@ -8,7 +7,7 @@ use sqlx_core::{
     describe::Describe,
     executor::{Execute, Executor},
     logger::QueryLogger,
-    Error as SqlxError,
+    Either, Error as SqlxError,
 };
 
 use super::{macros::fetcher_closure, stream::ResultStream};

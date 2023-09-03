@@ -156,6 +156,8 @@ impl Default for ExaBuffer {
     }
 }
 
+/// Enum illustrating the state of the parameter sets number
+/// provided as bind arguments to a query.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum NumParamSets {
     NotSet,
