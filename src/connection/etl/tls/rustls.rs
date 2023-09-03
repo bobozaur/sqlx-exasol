@@ -172,3 +172,9 @@ impl WithSocket for WithRustlsSocket {
         })
     }
 }
+
+impl<T> ExaResultExt<T> for Result<T, rustls::Error> {
+    fn to_sqlx_err(self) -> Result<T, SqlxError> {
+        self.map_err(|e| SqlxError::Tls(e.into()))
+    }
+}

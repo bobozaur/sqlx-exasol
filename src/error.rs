@@ -25,9 +25,6 @@ pub enum ExaProtocolError {
     WebsocketClosed(String),
     #[error("feature 'compression' must be enabled to use compression")]
     CompressionDisabled,
-    #[cfg(feature = "etl")]
-    #[error("Unexpected output, a result set, returned by ETL job")]
-    ResultSetFromEtl,
 }
 
 impl<'a> From<Option<CloseFrame<'a>>> for ExaProtocolError {
@@ -81,33 +78,5 @@ impl<T> ExaResultExt<T> for Result<T, RsaError> {
 impl<T> ExaResultExt<T> for Result<T, JsonError> {
     fn to_sqlx_err(self) -> Result<T, SqlxError> {
         self.map_err(|e| SqlxError::Protocol(e.to_string()))
-    }
-}
-
-#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
-impl<T> ExaResultExt<T> for Result<T, rcgen::RcgenError> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
-    }
-}
-
-#[cfg(feature = "etl_native_tls")]
-impl<T> ExaResultExt<T> for Result<T, native_tls::Error> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
-    }
-}
-
-#[cfg(feature = "etl_native_tls")]
-impl<T, S> ExaResultExt<T> for Result<T, native_tls::HandshakeError<S>> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|_| SqlxError::Tls("native_tls handshake error".into()))
-    }
-}
-
-#[cfg(feature = "etl_rustls")]
-impl<T> ExaResultExt<T> for Result<T, rustls::Error> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
     }
 }

@@ -68,10 +68,10 @@ pub use types::ExaIter;
 pub use types::Months;
 pub use value::{ExaValue, ExaValueRef};
 
-/// An alias for [`Pool`][crate::pool::Pool], specialized for Exasol.
+/// An alias for [`Pool`][sqlx_core::pool::Pool], specialized for Exasol.
 pub type ExaPool = sqlx_core::pool::Pool<Exasol>;
 
-/// An alias for [`PoolOptions`][crate::pool::PoolOptions], specialized for Exasol.
+/// An alias for [`PoolOptions`][sqlx_core::pool::PoolOptions], specialized for Exasol.
 pub type ExaPoolOptions = sqlx_core::pool::PoolOptions<Exasol>;
 
 /// An alias for [`Executor<'_, Database = Exasol>`][Executor].

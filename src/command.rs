@@ -14,7 +14,7 @@ use crate::{
     ExaTypeInfo,
 };
 
-/// Enum encapsulating database requests, differentiated by the `command` tag.
+/// Enum encapsulating the various requests that can be made to the database.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "command")]

@@ -442,7 +442,7 @@ impl PartialOrd for IntervalDayToSecond {
 
 impl IntervalDayToSecond {
     /// The fraction has the weird behavior of shifting the milliseconds up
-    /// value and mixing it with the seconds, minutes, hours or even the days
+    /// the value and mixing it with the seconds, minutes, hours or even the days
     /// when the value exceeds 3 (the max milliseconds digits limit).
     ///
     /// See: <`https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval`>

@@ -7,8 +7,8 @@ mod tls;
 mod traits;
 
 use std::{
-    io::Result as IoResult,
-    net::{IpAddr, SocketAddrV4},
+    io::{Error as IoError, Result as IoResult},
+    net::{IpAddr, Ipv4Addr, SocketAddrV4},
 };
 
 use arrayvec::ArrayString;
@@ -18,13 +18,12 @@ pub use import::{ExaImport, ImportBuilder, Trim};
 use non_tls::non_tls_socket_spawners;
 use sqlx_core::{error::Error as SqlxError, net::Socket};
 
-use self::traits::EtlJob;
+use self::{error::ExaEtlError, traits::EtlJob};
 use super::websocket::socket::ExaSocket;
 use crate::{
     command::ExaCommand,
-    error::ExaProtocolError,
     responses::{QueryResult, Results},
-    ExaConnection, ExaDatabaseError, ExaQueryResult,
+    ExaConnection, ExaQueryResult,
 };
 
 /// Special Exasol packet that enables tunneling.
@@ -75,7 +74,7 @@ where
     let future = Box::pin(async move {
         let query_res: QueryResult = con.ws.recv::<Results>().await?.into();
         match query_res {
-            QueryResult::ResultSet { .. } => Err(ExaProtocolError::ResultSetFromEtl)?,
+            QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),
         }
     });
@@ -146,7 +145,10 @@ where
         .for_each(|b| ip_buf.push(char::from(*b)));
 
     let port = u16::from_le_bytes([buf[4], buf[5]]);
-    let ip = ip_buf.parse().map_err(ExaDatabaseError::unknown)?;
+    let ip = ip_buf
+        .parse::<Ipv4Addr>()
+        .map_err(ExaEtlError::from)
+        .map_err(IoError::from)?;
     let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))

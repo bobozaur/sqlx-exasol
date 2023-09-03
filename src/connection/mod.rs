@@ -292,6 +292,44 @@ mod tests {
 
     use crate::{ExaConnectOptions, Exasol};
 
+    #[cfg(feature = "compression")]
+    #[ignore]
+    #[sqlx::test]
+    async fn test_compression_works(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        exa_opts.compression = true;
+
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+        let schema = "TEST_SWITCH_SCHEMA";
+
+        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
+            .await?;
+
+        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
+            .await?;
+
+        assert_eq!(schema, new_schema);
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "compression"))]
+    #[sqlx::test]
+    async fn test_compression_no_flag(
+        pool_opts: PoolOptions<Exasol>,
+        mut exa_opts: ExaConnectOptions,
+    ) {
+        exa_opts.compression = true;
+        assert!(pool_opts.connect_with(exa_opts).await.is_err());
+    }
+
     #[sqlx::test]
     async fn test_stmt_cache(
         pool_opts: PoolOptions<Exasol>,
@@ -404,6 +442,29 @@ mod tests {
             .await?;
 
         assert_eq!(orig_schema, new_schema);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_schema_close_and_empty_attr(
+        pool_opts: PoolOptions<Exasol>,
+        exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+
+        let orig_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+            .fetch_one(&mut *con)
+            .await?;
+
+        assert_eq!(
+            con.attributes().current_schema(),
+            Some(orig_schema.as_str())
+        );
+
+        con.execute("CLOSE SCHEMA").await?;
+        assert_eq!(con.attributes().current_schema(), None);
 
         Ok(())
     }

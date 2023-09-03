@@ -4,7 +4,7 @@ use super::{login::LoginRef, ExaConnectOptionsRef};
 
 /// Serialization helper for [`ExaConnectOptionsRef`].
 /// This actually represents a database request, used for finalizing the login process.
-/// However, it's structure does not allow including it into [`crate::command::Command`].
+/// However, it's structure does not allow including it into [`crate::command::ExaCommand`].
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerializableConOpts<'a> {
@@ -15,14 +15,14 @@ pub struct SerializableConOpts<'a> {
     client_os: &'static str,
     client_runtime: &'static str,
     use_compression: bool,
-    attributes: Attributes<'a>,
+    attributes: LoginAttrs<'a>,
 }
 
 /// Serialization helper, analog to [`crate::responses::Attributes`]
 /// but containing only the relevant fields for login.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Attributes<'a> {
+struct LoginAttrs<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     current_schema: Option<&'a str>,
     query_timeout: u64,
@@ -39,7 +39,7 @@ impl<'a> From<ExaConnectOptionsRef<'a>> for SerializableConOpts<'a> {
     fn from(value: ExaConnectOptionsRef<'a>) -> Self {
         let crate_version = option_env!("CARGO_PKG_VERSION").unwrap_or("UNKNOWN");
 
-        let attributes = Attributes {
+        let attributes = LoginAttrs {
             current_schema: value.schema,
             query_timeout: value.query_timeout,
             autocommit: true,

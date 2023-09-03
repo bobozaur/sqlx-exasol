@@ -135,3 +135,15 @@ impl WithSocket for WithNativeTlsSocket {
         })
     }
 }
+
+impl<T> ExaResultExt<T> for Result<T, native_tls::Error> {
+    fn to_sqlx_err(self) -> Result<T, SqlxError> {
+        self.map_err(|e| SqlxError::Tls(e.into()))
+    }
+}
+
+impl<T, S> ExaResultExt<T> for Result<T, native_tls::HandshakeError<S>> {
+    fn to_sqlx_err(self) -> Result<T, SqlxError> {
+        self.map_err(|_| SqlxError::Tls("native_tls handshake error".into()))
+    }
+}
