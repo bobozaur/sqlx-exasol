@@ -81,6 +81,9 @@ jobs:
           echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
           echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
 
+      - name: Wait for database startup
+        run: while [[ `nc -zv 127.0.0.1 8563; echo $?` -ne 0 ]]; do sleep 5; done
+
       - name: Run tests
         run: |
           # Tests not requiring a connection
