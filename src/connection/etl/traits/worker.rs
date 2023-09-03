@@ -16,14 +16,15 @@ pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
     const CR: u8 = b'\r';
     const LF: u8 = b'\n';
 
-    fn poll_read_byte(self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<u8>> {
+    fn poll_read_byte(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<u8>> {
         let mut buffer = [0; 1];
-        let n = ready!(self.poll_read(cx, &mut buffer))?;
 
-        if n != 1 {
-            Err(ExaEtlError::ByteRead)?
-        } else {
-            Poll::Ready(Ok(buffer[0]))
+        loop {
+            let n = ready!(self.as_mut().poll_read(cx, &mut buffer))?;
+
+            if n == 1 {
+                return Poll::Ready(Ok(buffer[0]));
+            }
         }
     }
 

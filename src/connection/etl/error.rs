@@ -10,8 +10,6 @@ pub enum ExaEtlError {
     InvalidChunkSizeByte(u8),
     #[error("expected {0} found {1}")]
     InvalidByte(u8, u8),
-    #[error("could not read byte from the stream")]
-    ByteRead,
     #[error("failed to write the buffered data")]
     WriteZero,
 }
@@ -21,8 +19,7 @@ impl From<ExaEtlError> for IoError {
         let kind = match &value {
             ExaEtlError::ChunkSizeOverflow
             | ExaEtlError::InvalidChunkSizeByte(_)
-            | ExaEtlError::InvalidByte(_, _)
-            | ExaEtlError::ByteRead => IoErrorKind::InvalidData,
+            | ExaEtlError::InvalidByte(_, _) => IoErrorKind::InvalidData,
             ExaEtlError::WriteZero => IoErrorKind::WriteZero,
         };
 
