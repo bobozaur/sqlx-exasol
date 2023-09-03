@@ -54,8 +54,8 @@ jobs:
         env:
           RUSTFLAGS: -D warnings
 
-  test:
-    name: Testing
+  sqlx_tests:
+    name: SQLx tests
     needs: clippy
     runs-on: ubuntu-20.04
     services:
@@ -81,34 +81,61 @@ jobs:
           echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
           echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
 
-      # - name: Tests not requiring a connection
-      #   run: cargo test
+      - name: Tests not requiring a connection
+        run: cargo test
 
-      # - name: Connection tests
-      #   run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+      - name: Connection tests
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
-      # - name: TLS connection tests
-      #   run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+      - name: TLS connection tests
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
-      # - name: Connection tests with compression
-      #   run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored
+      - name: Connection tests with compression
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored
 
-      # - name: TLS connection tests with compression
-      #   run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored
+      - name: TLS connection tests with compression
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored
 
-      # - name: ETL without TLS feature but TLS connection (should fail)
-      #   run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+  etl_tests:
+    name: ETL tests
+    needs: clippy
+    runs-on: ubuntu-20.04
+    services:
+      exasol:
+        image: exasol/docker-db:7.0.22
+        ports:
+          - 8563:8563
+        options: --privileged
+    steps:
+      - uses: actions/checkout@v3
 
-      # - name: Tests compilation failure if both ETL TLS features are enabled
-      #   run: cargo test --features etl_native_tls,etl_rustls || true
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-      # - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
-      #   run: |
-      #     DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
-      #     DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+      - uses: Swatinem/rust-cache@v2
 
-      # - name: ETL tests
-      #   run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+      - name: Create connection strings
+        run: |
+          echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+
+      - name: ETL without TLS feature but TLS connection (should fail)
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+
+      - name: Tests compilation failure if both ETL TLS features are enabled
+        run: cargo test --features etl_native_tls,etl_rustls || true
+
+      - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
+        run: |
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+
+      - name: ETL tests
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
 
       - name: TLS ETL tests
         run: |
