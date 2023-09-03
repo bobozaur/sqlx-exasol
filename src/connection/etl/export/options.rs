@@ -2,19 +2,19 @@ use std::{fmt::Debug, net::SocketAddrV4};
 
 use sqlx_core::Error as SqlxError;
 
-use super::ExaExport;
+use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{prepare, traits::EtlJob, JobFuture, SocketFuture},
+    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
     ExaConnection,
 };
 
-/// Export options
+/// A builder for an ETL EXPORT job.
 #[derive(Debug)]
 pub struct ExportBuilder<'a> {
     num_readers: usize,
     compression: Option<bool>,
-    source: QueryOrTable<'a>,
+    source: ExportSource<'a>,
     comment: Option<&'a str>,
     encoding: Option<&'a str>,
     null: &'a str,
@@ -25,7 +25,7 @@ pub struct ExportBuilder<'a> {
 }
 
 impl<'a> ExportBuilder<'a> {
-    pub fn new(source: QueryOrTable<'a>) -> Self {
+    pub fn new(source: ExportSource<'a>) -> Self {
         Self {
             num_readers: 0,
             compression: None,
@@ -44,7 +44,7 @@ impl<'a> ExportBuilder<'a> {
     ///
     /// This implies submitting the EXPORT query.
     /// The output will be a future to await the result of the job
-    /// and the workers that can be used for ETL.
+    /// and the workers that can be used for ETL IO.
     ///
     /// # Errors
     ///
@@ -56,7 +56,7 @@ impl<'a> ExportBuilder<'a> {
     where
         'c: 'a,
     {
-        prepare(self, con).await
+        build_etl(self, con).await
     }
 
     /// Sets the number of reader jobs that will be started.
@@ -143,10 +143,10 @@ impl<'a> EtlJob for ExportBuilder<'a> {
         query.push_str("EXPORT ");
 
         match self.source {
-            QueryOrTable::Table(tbl) => {
+            ExportSource::Table(tbl) => {
                 Self::push_ident(&mut query, tbl);
             }
-            QueryOrTable::Query(qr) => {
+            ExportSource::Query(qr) => {
                 query.push_str("(\n");
                 query.push_str(qr);
                 query.push_str("\n)");
@@ -173,10 +173,4 @@ impl<'a> EtlJob for ExportBuilder<'a> {
 
         query
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum QueryOrTable<'a> {
-    Query(&'a str),
-    Table(&'a str),
 }

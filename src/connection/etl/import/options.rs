@@ -3,13 +3,14 @@ use std::{fmt::Write, net::SocketAddrV4};
 use arrayvec::ArrayString;
 use sqlx_core::Error as SqlxError;
 
-use super::ExaImport;
+use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{prepare, traits::EtlJob, JobFuture, SocketFuture},
+    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
     ExaConnection,
 };
 
+/// A builder for an ETL IMPORT job.
 #[derive(Clone, Debug)]
 pub struct ImportBuilder<'a> {
     num_writers: usize,
@@ -52,7 +53,7 @@ impl<'a> ImportBuilder<'a> {
     ///
     /// This implies submitting the IMPORT query.
     /// The output will be a future to await the result of the job
-    /// and the workers that can be used for ETL.
+    /// and the workers that can be used for ETL IO.
     ///
     /// # Errors
     ///
@@ -64,7 +65,7 @@ impl<'a> ImportBuilder<'a> {
     where
         'c: 'a,
     {
-        prepare(self, con).await
+        build_etl(self, con).await
     }
 
     /// Sets the number of writer jobs that will be started.
@@ -206,23 +207,5 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         }
 
         query
-    }
-}
-
-/// Trim options for IMPORT
-#[derive(Debug, Clone, Copy)]
-pub enum Trim {
-    Left,
-    Right,
-    Both,
-}
-
-impl AsRef<str> for Trim {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::Left => "LTRIM",
-            Self::Right => "RTRIM",
-            Self::Both => "TRIM",
-        }
     }
 }

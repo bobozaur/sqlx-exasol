@@ -19,41 +19,10 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, traits::SocketSpawner, SocketFuture},
+    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
 };
 
-struct NativeTlsSocket<S>(native_tls::TlsStream<SyncSocket<S>>)
-where
-    S: Socket;
-
-impl<S> Socket for NativeTlsSocket<S>
-where
-    S: Socket,
-{
-    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
-        self.0.read(buf.init_mut())
-    }
-
-    fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.0.write(buf)
-    }
-
-    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.0.get_mut().poll_ready(cx)
-    }
-
-    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.0.get_mut().poll_ready(cx)
-    }
-
-    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.0.shutdown() {
-            Err(e) if e.kind() == IoErrorKind::WouldBlock => self.0.get_mut().poll_ready(cx),
-            ready => Poll::Ready(ready),
-        }
-    }
-}
-
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].
 pub struct NativeTlsSocketSpawner(Arc<TlsAcceptor>);
 
 impl NativeTlsSocketSpawner {
@@ -71,7 +40,7 @@ impl NativeTlsSocketSpawner {
     }
 }
 
-impl SocketSpawner for NativeTlsSocketSpawner {
+impl WithSocketMaker for NativeTlsSocketSpawner {
     type WithSocket = WithNativeTlsSocket;
 
     fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
@@ -123,6 +92,38 @@ impl WithSocket for WithNativeTlsSocket {
 
             Ok((address, future))
         })
+    }
+}
+
+struct NativeTlsSocket<S>(native_tls::TlsStream<SyncSocket<S>>)
+where
+    S: Socket;
+
+impl<S> Socket for NativeTlsSocket<S>
+where
+    S: Socket,
+{
+    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
+        self.0.read(buf.init_mut())
+    }
+
+    fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.0.write(buf)
+    }
+
+    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.0.get_mut().poll_ready(cx)
+    }
+
+    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.0.get_mut().poll_ready(cx)
+    }
+
+    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        match self.0.shutdown() {
+            Err(e) if e.kind() == IoErrorKind::WouldBlock => self.0.get_mut().poll_ready(cx),
+            ready => Poll::Ready(ready),
+        }
     }
 }
 

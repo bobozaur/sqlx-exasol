@@ -1,5 +1,6 @@
 mod compression;
 mod options;
+mod trim;
 mod writer;
 
 use std::{
@@ -12,11 +13,30 @@ use std::{
 use compression::ExaImportWriter;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
-pub use options::{ImportBuilder, Trim};
+pub use options::ImportBuilder;
 use pin_project::pin_project;
+pub use trim::Trim;
 
 use super::SocketFuture;
 
+/// An ETL IMPORT worker.
+///
+/// The type implements [`AsyncWrite`] and is [`Send`] and [`Sync`] so it can be (almost) freely
+/// used for any data pipeline.
+///
+/// The only caveat is that you *MUST* call [`futures_util::AsyncWriteExt::close`] on each worker to
+/// finalize the import. Otherwise, Exasol keeps on expecting data.
+///
+/// # IMPORTANT
+///
+/// In multi-node environments closing a writer without writing any data to it can
+/// cause issues - Exasol does not immediately start reading data from all workers but rather seems
+/// to start them in somewhat of an "on-demand" fashion.
+///
+/// If you close a worker before Exasol tries to use it a connection error will be returned by the
+/// ETL driving future.
+///
+/// It's best not to create excess writers that you don't plan on using to avoid such issues.
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaImportProj)]
 pub enum ExaImport {

@@ -5,6 +5,8 @@ use std::{
 
 use sqlx_core::net::Socket;
 
+/// Wrapper emulating a synchronous socket from an async one.
+/// Needed by the TLS backends as they need a type implementing [`Read`] and [`Write`].
 pub struct SyncSocket<S>
 where
     S: Socket,

@@ -17,6 +17,9 @@ use pin_project::pin_project;
 use super::reader::ExportReader;
 use crate::connection::websocket::socket::ExaSocket;
 
+/// Wrapper enum that handles the compression support for the [`ExportReader`].
+/// It makes use of [`ExportBufReader`] because the [`GzipDecoder`] needs a type
+/// implementing [`futures_io::AsyncBufRead`].
 #[pin_project(project = ExaExportReaderProj)]
 #[derive(Debug)]
 pub enum ExaExportReader {

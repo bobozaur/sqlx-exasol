@@ -15,14 +15,14 @@ use rsa::{
 use rustls::RustlsSocketSpawner;
 use sqlx_core::error::Error as SqlxError;
 
-use super::traits::SocketSpawner;
+use super::traits::WithSocketMaker;
 use crate::error::ExaResultExt;
 
 #[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
 compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
 
 #[allow(unreachable_code)]
-pub fn tls_socket_spawner() -> Result<impl SocketSpawner, SqlxError> {
+pub fn tls_with_socket_maker() -> Result<impl WithSocketMaker, SqlxError> {
     let cert = make_cert()?;
 
     #[cfg(feature = "etl_native_tls")]

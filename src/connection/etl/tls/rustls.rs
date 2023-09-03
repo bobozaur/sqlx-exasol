@@ -23,74 +23,7 @@ use crate::{
     etl::{get_etl_addr, traits::SocketSpawner, SocketFuture},
 };
 
-struct RustlsSocket<S>
-where
-    S: Socket,
-{
-    inner: SyncSocket<S>,
-    state: ServerConnection,
-    close_notify_sent: bool,
-}
-
-impl<S> RustlsSocket<S>
-where
-    S: Socket,
-{
-    fn poll_complete_io(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        loop {
-            match self.state.complete_io(&mut self.inner) {
-                Err(e) if e.kind() == IoErrorKind::WouldBlock => {
-                    ready!(self.inner.poll_ready(cx))?;
-                }
-                ready => return Poll::Ready(ready.map(|_| ())),
-            }
-        }
-    }
-
-    async fn complete_io(&mut self) -> IoResult<()> {
-        future::poll_fn(|cx| self.poll_complete_io(cx)).await
-    }
-}
-
-impl<S> Socket for RustlsSocket<S>
-where
-    S: Socket,
-{
-    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
-        self.state.reader().read(buf.init_mut())
-    }
-
-    fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        match self.state.writer().write(buf) {
-            // Returns a zero-length write when the buffer is full.
-            Ok(0) => Err(IoErrorKind::WouldBlock.into()),
-            other => other,
-        }
-    }
-
-    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.poll_complete_io(cx)
-    }
-
-    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.poll_complete_io(cx)
-    }
-
-    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.poll_complete_io(cx)
-    }
-
-    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        if !self.close_notify_sent {
-            self.state.send_close_notify();
-            self.close_notify_sent = true;
-        }
-
-        ready!(self.poll_complete_io(cx))?;
-        Pin::new(&mut self.inner.socket).poll_shutdown(cx)
-    }
-}
-
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
 pub struct RustlsSocketSpawner(Arc<ServerConfig>);
 
 impl RustlsSocketSpawner {
@@ -160,6 +93,74 @@ impl WithSocket for WithRustlsSocket {
 
             Ok((address, future))
         })
+    }
+}
+
+struct RustlsSocket<S>
+where
+    S: Socket,
+{
+    inner: SyncSocket<S>,
+    state: ServerConnection,
+    close_notify_sent: bool,
+}
+
+impl<S> RustlsSocket<S>
+where
+    S: Socket,
+{
+    fn poll_complete_io(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        loop {
+            match self.state.complete_io(&mut self.inner) {
+                Err(e) if e.kind() == IoErrorKind::WouldBlock => {
+                    ready!(self.inner.poll_ready(cx))?;
+                }
+                ready => return Poll::Ready(ready.map(|_| ())),
+            }
+        }
+    }
+
+    async fn complete_io(&mut self) -> IoResult<()> {
+        future::poll_fn(|cx| self.poll_complete_io(cx)).await
+    }
+}
+
+impl<S> Socket for RustlsSocket<S>
+where
+    S: Socket,
+{
+    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
+        self.state.reader().read(buf.init_mut())
+    }
+
+    fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        match self.state.writer().write(buf) {
+            // Returns a zero-length write when the buffer is full.
+            Ok(0) => Err(IoErrorKind::WouldBlock.into()),
+            other => other,
+        }
+    }
+
+    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.poll_complete_io(cx)
+    }
+
+    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.poll_complete_io(cx)
+    }
+
+    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.poll_complete_io(cx)
+    }
+
+    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        if !self.close_notify_sent {
+            self.state.send_close_notify();
+            self.close_notify_sent = true;
+        }
+
+        ready!(self.poll_complete_io(cx))?;
+        Pin::new(&mut self.inner.socket).poll_shutdown(cx)
     }
 }
 

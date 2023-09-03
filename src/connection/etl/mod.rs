@@ -2,6 +2,7 @@ mod error;
 mod export;
 mod import;
 mod non_tls;
+mod row_separator;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod tls;
 mod traits;
@@ -13,15 +14,16 @@ use std::{
 };
 
 use arrayvec::ArrayString;
-pub use export::{ExaExport, ExportBuilder, QueryOrTable};
+pub use export::{ExaExport, ExportBuilder, ExportSource};
 use futures_core::future::BoxFuture;
 pub use import::{ExaImport, ImportBuilder, Trim};
+pub use row_separator::RowSeparator;
 use sqlx_core::{error::Error as SqlxError, net::Socket};
 
 use self::{
     error::ExaEtlError,
     non_tls::NonTlsSocketSpawner,
-    traits::{EtlJob, SocketSpawner},
+    traits::{EtlJob, WithSocketMaker},
 };
 use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
@@ -48,7 +50,9 @@ const IMPLICIT_BUFFER_CAP: usize = 128;
 type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
 
-async fn prepare<'a, 'c, T>(
+/// Builds an ETL job comprising of a [`JobFuture`], that drives the execution
+/// of the ETL query, and an array of workers that perform the IO.
+async fn build_etl<'a, 'c, T>(
     job: &'a T,
     con: &'c mut ExaConnection,
 ) -> Result<(JobFuture<'c>, Vec<T::Worker>), SqlxError>
@@ -63,18 +67,23 @@ where
         .use_compression()
         .unwrap_or(con.attributes().compression_enabled);
 
+    // Get the internal Exasol node addresses and the socket spawning futures
     let (addrs, futures): (Vec<_>, Vec<_>) =
         socket_spawners(job.num_workers(), ips, port, with_tls)
             .await?
             .into_iter()
             .unzip();
 
+    // Construct and send query
     let query = job.query(addrs, with_tls, with_compression);
     let cmd = ExaCommand::new_execute(&query, &con.ws.attributes).try_into()?;
     con.ws.send(cmd).await?;
 
+    // Create the ETL workers
     let sockets = job.create_workers(futures, with_compression);
 
+    // Query execution driving future to be returned and awaited
+    // alongside the worker IO operations
     let future = Box::pin(async move {
         let query_res: QueryResult = con.ws.recv::<Results>().await?.into();
         match query_res {
@@ -86,6 +95,7 @@ where
     Ok((future, sockets))
 }
 
+/// Wrapper over [`_socket_spawners`] used to handle TLS/non-TLS reasoning.
 async fn socket_spawners(
     num: usize,
     ips: Vec<IpAddr>,
@@ -96,28 +106,28 @@ async fn socket_spawners(
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
     match with_tls {
-        true => socket_spawning_futures(tls::tls_socket_spawner()?, num_sockets, ips, port).await,
-        false => socket_spawning_futures(NonTlsSocketSpawner, num_sockets, ips, port).await,
+        true => _socket_spawners(tls::tls_with_socket_maker()?, num_sockets, ips, port).await,
+        false => _socket_spawners(NonTlsSocketSpawner, num_sockets, ips, port).await,
     }
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
         true => Err(SqlxError::Tls("No ETL TLS feature set".into())),
-        false => socket_spawning_futures(NonTlsSocketSpawner, num_sockets, ips, port).await,
+        false => _socket_spawners(NonTlsSocketSpawner, num_sockets, ips, port).await,
     }
 }
 
 /// Creates a socket making future for each IP address provided.
 /// The internal socket address of the corresponding Exasol node
 /// is provided alongside the future, to be used in query generation.
-async fn socket_spawning_futures<T>(
+async fn _socket_spawners<T>(
     socket_spawner: T,
     num_sockets: usize,
     ips: Vec<IpAddr>,
     port: u16,
 ) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError>
 where
-    T: SocketSpawner,
+    T: WithSocketMaker,
 {
     let mut output = Vec::with_capacity(num_sockets);
 
@@ -186,21 +196,4 @@ where
     let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum RowSeparator {
-    LF,
-    CR,
-    CRLF,
-}
-
-impl AsRef<str> for RowSeparator {
-    fn as_ref(&self) -> &str {
-        match self {
-            RowSeparator::LF => "LF",
-            RowSeparator::CR => "CR",
-            RowSeparator::CRLF => "CRLF",
-        }
-    }
 }

@@ -11,7 +11,7 @@ use sqlx_core::{
     pool::{PoolConnection, PoolOptions},
 };
 use sqlx_exasol::{
-    etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder, QueryOrTable},
+    etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
     ExaConnectOptions, Exasol,
 };
 
@@ -24,14 +24,14 @@ use self::macros::test_etl;
 test_etl_single_threaded!(
     "uncompressed",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_single_threaded!(
     "uncompressed_with_feature",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(false),
     ImportBuilder::new("TEST_ETL").compression(false),
     #[cfg(feature = "compression")]
 );
@@ -39,14 +39,14 @@ test_etl_single_threaded!(
 test_etl_multi_threaded!(
     "uncompressed",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
 );
 
 test_etl_multi_threaded!(
     "uncompressed_with_feature",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(false),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(false),
     ImportBuilder::new("TEST_ETL").compression(false),
     #[cfg(feature = "compression")]
 );
@@ -54,7 +54,7 @@ test_etl_multi_threaded!(
 test_etl_single_threaded!(
     "compressed",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
     ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
@@ -62,7 +62,7 @@ test_etl_single_threaded!(
 test_etl_multi_threaded!(
     "compressed",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
     ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
@@ -70,7 +70,7 @@ test_etl_multi_threaded!(
 test_etl_single_threaded!(
     "query_export",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Query("SELECT * FROM TEST_ETL")),
+    ExportBuilder::new(ExportSource::Query("SELECT * FROM TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
 );
 
@@ -78,7 +78,7 @@ test_etl_single_threaded!(
     "multiple_workers",
     3,
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
 );
 
@@ -86,7 +86,7 @@ test_etl_single_threaded!(
     "multiple_workers_compressed",
     3,
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
     ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
@@ -95,7 +95,7 @@ test_etl_multi_threaded!(
     "multiple_workers",
     3,
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
 );
 
@@ -103,7 +103,7 @@ test_etl_multi_threaded!(
     "multiple_workers_compressed",
     3,
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).compression(true),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
     ImportBuilder::new("TEST_ETL").compression(true),
     #[cfg(feature = "compression")]
 );
@@ -111,7 +111,7 @@ test_etl_multi_threaded!(
 test_etl_single_threaded!(
     "all_arguments",
     "TEST_ETL",
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")).num_readers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).num_readers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
     ImportBuilder::new("TEST_ETL").skip(1).buffer_size(20000).columns(Some(&["col"])).num_writers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").trim(sqlx_exasol::etl::Trim::Both),
     #[cfg(feature = "compression")]
 );
@@ -122,7 +122,7 @@ test_etl!(
     1,
     "TEST_ETL",
     |(r, w)| pipe_flush_writers(r, w),
-    ExportBuilder::new(QueryOrTable::Table("TEST_ETL")),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
 );
 
@@ -146,7 +146,7 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
         .execute(&mut *conn)
         .await?;
 
-    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table(";)BAD_TABLE_NAME*&"))
+    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table(";)BAD_TABLE_NAME*&"))
         .build(&mut conn)
         .await?;
 
@@ -171,7 +171,7 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
         .execute(&mut *conn)
         .await?;
 
-    let (export_fut, readers) = ExportBuilder::new(QueryOrTable::Table("TEST_ETL"))
+    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table("TEST_ETL"))
         .build(&mut conn)
         .await?;
 

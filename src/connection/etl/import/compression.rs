@@ -12,6 +12,7 @@ use pin_project::pin_project;
 use super::writer::ImportWriter;
 use crate::connection::websocket::socket::ExaSocket;
 
+/// Wrapper enum that handles the compression support for the [`ImportWriter`].
 #[pin_project(project = ExaImportWriterProj)]
 #[derive(Debug)]
 pub enum ExaImportWriter {

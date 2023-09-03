@@ -6,12 +6,13 @@ use sqlx_core::{
     net::{Socket, WithSocket},
 };
 
-use super::{get_etl_addr, traits::SocketSpawner, SocketFuture};
+use super::{get_etl_addr, traits::WithSocketMaker, SocketFuture};
 use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithNonTlsSocket`].
 pub struct NonTlsSocketSpawner;
 
-impl SocketSpawner for NonTlsSocketSpawner {
+impl WithSocketMaker for NonTlsSocketSpawner {
     type WithSocket = WithNonTlsSocket;
 
     fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {

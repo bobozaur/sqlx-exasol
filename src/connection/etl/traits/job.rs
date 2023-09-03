@@ -2,6 +2,8 @@ use std::net::SocketAddrV4;
 
 use crate::etl::SocketFuture;
 
+/// Interface for ETL jobs, containing common functionality
+/// required by both IMPORT/EXPORT operations.
 pub trait EtlJob: Send + Sync {
     const GZ_FILE_EXT: &'static str = "gz";
     const CSV_FILE_EXT: &'static str = "csv";
@@ -25,6 +27,8 @@ pub trait EtlJob: Send + Sync {
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String;
 
+    /// Generates and appends the internal files Exasol will read/write from/to
+    /// and adds them to the provided query.
     fn append_files(
         query: &mut String,
         addrs: Vec<SocketAddrV4>,
