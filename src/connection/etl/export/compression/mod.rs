@@ -39,11 +39,11 @@ impl ExaExportReader {
 
 impl AsyncRead for ExaExportReader {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
-        match self.as_mut().project() {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaExportReaderProj::Compressed(r) => r.poll_read(cx, buf),
             ExaExportReaderProj::Plain(r) => r.poll_read(cx, buf),

@@ -14,6 +14,9 @@ use sqlx_core::{
 use super::{get_etl_addr, SocketFuture};
 use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
+/// Creates a socket making future for each IP address provided.
+/// The internal socket address of the corresponding Exasol node
+/// is provided alongside the future, to be used in query generation.
 pub async fn non_tls_socket_spawners(
     num_sockets: usize,
     ips: Vec<IpAddr>,
@@ -39,6 +42,8 @@ pub async fn non_tls_socket_spawners(
     Ok(output)
 }
 
+/// Newtype implemented for uniform ETL socket spawning, even
+/// though without TLS there's no need to return a future.
 struct WithNonTlsSocket(WithExaSocket);
 
 impl WithSocket for WithNonTlsSocket {

@@ -81,6 +81,11 @@ jobs:
           echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
           echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
 
+      # Give more time to the database to start, as that
+      # seems to be the source of some intermittent errors
+      - name: Delay
+        run: sleep 30
+
       - name: Run tests
         run: |
           # Tests not requiring a connection

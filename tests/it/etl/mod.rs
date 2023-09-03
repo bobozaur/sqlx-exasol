@@ -187,36 +187,28 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
     Ok(())
 }
 
-// This fails when there are multiple nodes in the cluster, as writers get fired up somewhat
-// sequentially. However, we can't really test that in CI right now since it only uses a single node
-// (and closing the first - single - writer is fine).
-//
-// #[ignore]
-// #[sqlx::test]
-// async fn test_etl_writer_close_without_write(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-//    async fn close_writer(mut writer: ExaImport) -> Result<(), BoxDynError> {
-//        writer.close().await?;
-//        Ok(())
-//    }
-//     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
-//         .await?;
+#[ignore]
+#[sqlx::test]
+async fn test_etl_writer_close_without_write(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+        .await?;
 
-//     sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
-//         .bind(vec!["dummy"; NUM_ROWS])
-//         .execute(&mut *conn)
-//         .await?;
+    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
+        .execute(&mut *conn)
+        .await?;
 
-//     let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut conn).await?;
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut conn).await?;
 
-//     let transport_futs = writers.into_iter().map(close_writer);
+    let transport_futs = writers.into_iter().map(close_without_writing);
 
-//     try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
-//         .await
-//         .map_err(|e| anyhow::anyhow!("{e}"))
-//         .unwrap_err();
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))
+        .unwrap_err();
 
-//     Ok(())
-// }
+    Ok(())
+}
 
 #[ignore]
 #[sqlx::test]
@@ -286,6 +278,10 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // ##########################################
 // ############### Utilities ################
 // ##########################################
+async fn close_without_writing(mut writer: ExaImport) -> Result<(), BoxDynError> {
+    writer.close().await?;
+    Ok(())
+}
 
 async fn write_one_row(mut writer: ExaImport) -> Result<(), BoxDynError> {
     writer.write_all(b"blabla\r\n").await?;

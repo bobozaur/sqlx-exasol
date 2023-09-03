@@ -1,7 +1,7 @@
 use std::{
     io::Result as IoResult,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 
 #[cfg(feature = "compression")]
@@ -33,20 +33,16 @@ impl ExaImportWriter {
 }
 
 impl AsyncWrite for ExaImportWriter {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
-        match self.as_mut().project() {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaImportWriterProj::Compressed(s) => s.poll_write(cx, buf),
             ExaImportWriterProj::Plain(s) => s.poll_write(cx, buf),
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.as_mut().project() {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaImportWriterProj::Compressed(s) => s.poll_flush(cx),
             ExaImportWriterProj::Plain(s) => s.poll_flush(cx),
@@ -54,7 +50,11 @@ impl AsyncWrite for ExaImportWriter {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.as_mut().project() {
+        // Since this writer might be compressed, we need
+        // do an additional flush here to ensure data has been sent.
+        ready!(self.as_mut().poll_flush(cx))?;
+
+        match self.project() {
             #[cfg(feature = "compression")]
             ExaImportWriterProj::Compressed(s) => s.poll_close(cx),
             ExaImportWriterProj::Plain(s) => s.poll_close(cx),
