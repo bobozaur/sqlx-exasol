@@ -19,7 +19,7 @@ use sqlx_core::net::{Socket, WithSocket};
 use crate::connection::websocket::socket::ExaSocket;
 use crate::connection::websocket::socket::WithExaSocket;
 use crate::error::ExaResultExt;
-use crate::etl::get_etl_addr;
+use crate::etl::{get_etl_addr, SocketFuture};
 
 use super::sync_socket::SyncSocket;
 
@@ -28,7 +28,7 @@ pub async fn rustls_socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     cert: Certificate,
-) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
     tracing::trace!("spawning {num_sockets} TLS sockets through 'rustls'");
 
     let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
@@ -142,10 +142,7 @@ impl WithRustlsSocket {
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = BoxFuture<
-        'static,
-        Result<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>), SqlxError>,
-    >;
+    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let WithRustlsSocket { wrapper, config } = self;

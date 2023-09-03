@@ -16,51 +16,53 @@ pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
     const CR: u8 = b'\r';
     const LF: u8 = b'\n';
 
-    fn poll_read_byte(self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<u8>> {
+    fn poll_read_byte(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<IoResult<u8>> {
         let mut buffer = [0; 1];
-        let n = ready!(self.poll_read(cx, &mut buffer))?;
 
-        if n != 1 {
-            Err(ExaEtlError::ByteRead)?
-        } else {
-            Poll::Ready(Ok(buffer[0]))
+        loop {
+            let n = ready!(self.as_mut().poll_read(cx, &mut buffer))?;
+
+            if n == 1 {
+                return Poll::Ready(Ok(buffer[0]));
+            }
         }
     }
 
     /// Sends some static data, returning whether all of it was sent or not.
     fn poll_send_static(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &'static [u8],
         offset: &mut usize,
-    ) -> Poll<IoResult<bool>> {
-        if *offset >= buf.len() {
-            return Poll::Ready(Ok(true));
+    ) -> Poll<IoResult<()>> {
+        loop {
+            if *offset >= buf.len() {
+                return Poll::Ready(Ok(()));
+            }
+
+            let num_bytes = ready!(self.as_mut().poll_write(cx, &buf[*offset..]))?;
+            *offset += num_bytes;
         }
-
-        let num_bytes = ready!(self.poll_write(cx, &buf[*offset..]))?;
-        *offset += num_bytes;
-
-        Poll::Ready(Ok(false))
     }
 
     fn poll_until_double_crlf(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &mut [u8; 4],
-    ) -> Poll<IoResult<bool>> {
-        let byte = ready!(self.poll_read_byte(cx))?;
+    ) -> Poll<IoResult<()>> {
+        loop {
+            let byte = ready!(self.as_mut().poll_read_byte(cx))?;
 
-        // Shift bytes
-        buf[0] = buf[1];
-        buf[1] = buf[2];
-        buf[2] = buf[3];
-        buf[3] = byte;
+            // Shift bytes
+            buf[0] = buf[1];
+            buf[1] = buf[2];
+            buf[2] = buf[3];
+            buf[3] = byte;
 
-        // If true, all headers have been read
-        match buf == Self::DOUBLE_CR_LF {
-            true => Poll::Ready(Ok(true)),
-            false => Poll::Ready(Ok(false)),
+            // If true, all headers have been read
+            if buf == Self::DOUBLE_CR_LF {
+                return Poll::Ready(Ok(()));
+            }
         }
     }
 

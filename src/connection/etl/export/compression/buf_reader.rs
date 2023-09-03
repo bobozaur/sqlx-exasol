@@ -7,7 +7,7 @@ use std::{
 use futures_io::{AsyncBufRead, AsyncRead, IoSliceMut};
 use pin_project::pin_project;
 
-use super::reader::ExportReader;
+use crate::etl::export::reader::ExportReader;
 
 /// Custom buffered reader (needed for compressed data export)
 /// closely mimicking (as in blatantly copying) [`futures_util::io::BufReader`].

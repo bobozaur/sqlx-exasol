@@ -42,7 +42,8 @@ const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 const IMPLICIT_BUFFER_CAP: usize = 128;
 
 /// Type of the future that executes the ETL job.
-pub type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
+type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
+type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
 
 async fn prepare<'a, 'c, T>(
     job: &'a T,
@@ -87,7 +88,7 @@ async fn socket_spawners(
     ips: Vec<IpAddr>,
     port: u16,
     with_tls: bool,
-) -> Result<Vec<(SocketAddrV4, BoxFuture<'static, IoResult<ExaSocket>>)>, SqlxError> {
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
     let num_sockets = if num > 0 { num } else { ips.len() };
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]

@@ -127,19 +127,15 @@ impl AsyncWrite for ImportWriter {
             let mut this = self.as_mut().project();
             match this.state {
                 WriterState::SkipRequest(buf) => {
-                    let done = ready!(this.socket.poll_until_double_crlf(cx, buf))?;
-
-                    if done {
-                        *this.state = WriterState::WriteResponse(0);
-                    }
+                    ready!(this.socket.poll_until_double_crlf(cx, buf))?;
+                    *this.state = WriterState::WriteResponse(0);
                 }
+
                 WriterState::WriteResponse(offset) => {
-                    let done = ready!(this.socket.poll_send_static(cx, Self::RESPONSE, offset))?;
-
-                    if done {
-                        *this.state = WriterState::BufferData;
-                    }
+                    ready!(this.socket.poll_send_static(cx, Self::RESPONSE, offset))?;
+                    *this.state = WriterState::BufferData;
                 }
+
                 WriterState::BufferData => {
                     // We keep extra capacity for the chunk terminator
                     let buf_free = this.buf.capacity() - this.buf.len() - 2;
@@ -161,12 +157,12 @@ impl AsyncWrite for ImportWriter {
 
                 WriterState::End(offset) => {
                     let socket = this.socket.as_mut();
-                    let done = ready!(socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
+                    ready!(socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
 
-                    if done {
-                        ready!(this.socket.poll_flush(cx))?;
-                        return Poll::Ready(Ok(0));
-                    }
+                    // We flush to ensure that all data has reached Exasol
+                    // before we signal that the write is over.
+                    ready!(this.socket.poll_flush(cx))?;
+                    return Poll::Ready(Ok(0));
                 }
             };
         }

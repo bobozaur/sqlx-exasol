@@ -49,11 +49,8 @@ impl AsyncRead for ExportReader {
 
             match this.state {
                 ReaderState::SkipRequest(buf) => {
-                    let done = ready!(this.socket.poll_until_double_crlf(cx, buf))?;
-
-                    if done {
-                        *this.state = ReaderState::ReadSize;
-                    }
+                    ready!(this.socket.poll_until_double_crlf(cx, buf))?;
+                    *this.state = ReaderState::ReadSize;
                 }
 
                 ReaderState::ReadSize => {
@@ -123,14 +120,12 @@ impl AsyncRead for ExportReader {
                 ReaderState::WriteResponse(offset) => {
                     // EOF is reached after writing the HTTP response.
                     let socket = this.socket.as_mut();
-                    let done = ready!(socket.poll_send_static(cx, Self::RESPONSE, offset))?;
+                    ready!(socket.poll_send_static(cx, Self::RESPONSE, offset))?;
 
-                    if done {
-                        // We flush to ensure that all data has reached Exasol
-                        // and the reader can finish or even be dropped.
-                        ready!(this.socket.poll_flush(cx))?;
-                        return Poll::Ready(Ok(0));
-                    }
+                    // We flush to ensure that all data has reached Exasol
+                    // and the reader can finish or even be dropped.
+                    ready!(this.socket.poll_flush(cx))?;
+                    return Poll::Ready(Ok(0));
                 }
             };
         }
