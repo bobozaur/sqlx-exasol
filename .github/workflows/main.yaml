@@ -160,7 +160,8 @@ jobs:
       - name: ETL without TLS feature but TLS connection (should fail)
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
 
-      - name: TLS ETL tests
-        run: |
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+      - name: Native-TLS ETL tests
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
+
+      - name: Rustls ETL tests
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
