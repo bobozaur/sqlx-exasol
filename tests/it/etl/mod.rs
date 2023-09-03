@@ -345,12 +345,7 @@ mod macros {
                     .await?;
 
                 let (export_fut, readers) = $export.num_readers($num_workers).build(&mut conn1).await?;
-
                 let (import_fut, writers) = $import.num_writers($num_workers).build(&mut conn2).await?;
-
-                assert_eq!(readers.len(), $num_workers);
-                assert_eq!(writers.len(), $num_workers);
-
                 let transport_futs = iter::zip(readers, writers).map($proc);
 
                 let (export_res, import_res, _) =

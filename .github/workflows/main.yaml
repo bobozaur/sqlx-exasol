@@ -54,73 +54,76 @@ jobs:
         env:
           RUSTFLAGS: -D warnings
 
-  # test:
-  #   name: Testing
-  #   needs: clippy
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #     - name: Set up Python 3.10
-  #       uses: actions/setup-python@v3
-  #       with:
-  #         python-version: "3.10"
+  test:
+    name: Testing
+    needs: clippy
+    runs-on: ubuntu-20.04
+    services:
+      exasol:
+        image: exasol/docker-db:7.0.22
+        ports:
+          - 8563:8563
+        options: --privileged
+    steps:
+      # - name: Set up Python 3.10
+      #   uses: actions/setup-python@v3
+      #   with:
+      #     python-version: "3.10"
 
-  #     - name: Install dependencies
-  #       run: |
-  #         python -m pip install --upgrade pip
-  #         pip install pipenv
+      # - name: Install dependencies
+      #   run: |
+      #     python -m pip install --upgrade pip
+      #     pip install pipenv
 
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         repository: exasol/docker-db
-  #         ref: "7.0.22"
+      # - uses: actions/checkout@v3
+      #   with:
+      #     repository: exasol/docker-db
+      #     ref: "7.0.22"
 
-  #     - name: Set up Exasol Cluster
-  #       run: |
-  #         docker pull exasol/docker-db:7.0.22
-  #         pipenv install -r exadt_requirements.txt
-  #         pipenv run ./exadt create-cluster --root ~/sqlx/ --create-root sqlx
-  #         pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
-  #         pipenv run ./exadt start-cluster sqlx
+      # - name: Set up Exasol Cluster
+      #   run: |
+      #     docker pull exasol/docker-db:7.0.22
+      #     pipenv install -r exadt_requirements.txt
+      #     pipenv run ./exadt create-cluster --root ~/sqlx/ --create-root sqlx
+      #     pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
+      #     pipenv run ./exadt start-cluster sqlx
 
-  #     - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-  #     - name: Setup Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: stable
-  #         override: true
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-  #     - name: Create connection strings
-  #       run: |
-  #         CONTAINER_ID=`docker ps --format "table {{.ID}}\t" | head -2 | tail -1`
-  #         EXA_IP=`docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $CONTAINER_ID`
-  #         echo $EXA_IP
-  #         echo "NO_TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=disabled" >> $GITHUB_ENV
-  #         echo "TLS_URL=exa://sys:exasol@$EXA_IP:8563" >> $GITHUB_ENV
+      - name: Create connection strings
+        run: |
+          echo "NO_TLS_URL=exa://sys:exasol@exasol:8563?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=exa://sys:exasol@exasol:8563" >> $GITHUB_ENV
 
-  #     - name: Run tests
-  #       run: |
-  #         # Tests not requiring a connection
-  #         cargo test
+      - name: Run tests
+        run: |
+          # Tests not requiring a connection
+          cargo test
 
-  #         # Tests without ETL or compression
-  #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono
+          # Tests without ETL or compression
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono
 
-  #         # Tests without ETL
-  #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono,compression
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono,compression
+          # Tests without ETL
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono,compression
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono,compression
 
-  #         # ETL tests without compression
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl && exit 1
-  #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl -- --ignored --nopcature --test-threads 4
-  #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl_native_tls -- --ignored --nopcature --test-threads 4
-  #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl_rustls -- --ignored --nopcature --test-threads 4
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls -- --ignored --nopcature --test-threads 4
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls -- --ignored --nopcature --test-threads 4
+          # ETL tests without compression
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl && exit 1
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl_native_tls -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl_rustls -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls -- --ignored --nopcature --test-threads 4
 
-  #         # ETL tests with compression
-  #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl,compression -- --ignored --nopcature  --test-threads 4
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls,compression -- --ignored --nopcature  --test-threads 4
-  #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls,compression -- --ignored --nopcature --test-threads 4
+          # ETL tests with compression
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl,compression -- --ignored --nopcature  --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls,compression -- --ignored --nopcature  --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls,compression -- --ignored --nopcature --test-threads 4
