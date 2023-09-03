@@ -368,11 +368,9 @@ async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow
 // async fn it_can_drop_transaction_and_not_deadlock(
 //     pool_opts: PoolOptions<Exasol>,
 //     exa_opts: ExaConnectOptions,
-// ) -> anyhow::Result<()> {
-//     let pool_opts = pool_opts.max_connections(2);
-//     let pool = pool_opts.connect_with(exa_opts).await?;
-//     let mut conn1 = pool.acquire().await?;
-//     let mut conn2 = pool.acquire().await?;
+// ) -> anyhow::Result<()> { let pool_opts = pool_opts.max_connections(2); let pool =
+//   pool_opts.connect_with(exa_opts).await?; let mut conn1 = pool.acquire().await?; let mut conn2 =
+//   pool.acquire().await?;
 
 //     conn1
 //         .execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")

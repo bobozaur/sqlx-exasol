@@ -13,11 +13,6 @@ mod session_info;
 
 use std::fmt;
 
-use serde::{
-    de::{DeserializeSeed, SeqAccess, Visitor},
-    Deserialize, Deserializer,
-};
-
 pub use attributes::{Attributes, ExaAttributes};
 pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
@@ -26,12 +21,15 @@ pub use hosts::Hosts;
 pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;
 pub use result::{QueryResult, ResultSet, ResultSetOutput, Results};
+use serde::{
+    de::{DeserializeSeed, SeqAccess, Visitor},
+    Deserialize, Deserializer,
+};
 use serde_json::Value;
 pub use session_info::SessionInfo;
 
-use crate::ExaTypeInfo;
-
 use self::columns::ExaColumns;
+use crate::ExaTypeInfo;
 
 /// A response from the Exasol server.
 #[derive(Debug, Deserialize)]

@@ -155,7 +155,8 @@ impl Encode<'_, Exasol> for chrono::Duration {
     }
 
     fn size_hint(&self) -> usize {
-        // 1 sign + max days precision + 1 space + 2 hours + 1 column + 2 minutes + 1 column + 2 seconds + 1 dot + max milliseconds fraction
+        // 1 sign + max days precision + 1 space + 2 hours + 1 column + 2 minutes + 1 column + 2
+        // seconds + 1 dot + max milliseconds fraction
         1 + IntervalDayToSecond::MAX_PRECISION as usize
             + 10
             + IntervalDayToSecond::MAX_SUPPORTED_FRACTION as usize

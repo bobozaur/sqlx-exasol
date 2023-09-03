@@ -1,24 +1,26 @@
-use std::fmt::Write;
-use std::ops::Deref;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, SystemTime};
+use std::{
+    fmt::Write,
+    ops::Deref,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
+    time::{Duration, SystemTime},
+};
 
 use futures_core::future::BoxFuture;
+use sqlx_core::{
+    connection::Connection,
+    executor::Executor,
+    pool::{Pool, PoolOptions},
+    query::query,
+    query_scalar::query_scalar,
+    testing::*,
+    Error,
+};
 
-use sqlx_core::connection::Connection;
-
-use sqlx_core::executor::Executor;
-use sqlx_core::pool::{Pool, PoolOptions};
-use sqlx_core::query::query;
-use sqlx_core::query_scalar::query_scalar;
-use sqlx_core::testing::*;
-use sqlx_core::Error;
-
-use crate::connection::ExaConnection;
-use crate::database::Exasol;
-use crate::options::ExaConnectOptions;
+use crate::{connection::ExaConnection, database::Exasol, options::ExaConnectOptions};
 
 static MASTER_POOL: OnceLock<Pool<Exasol>> = OnceLock::new();
 // Automatically delete any databases created before the start of the test binary.
@@ -82,7 +84,8 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
             // Exasol supports 100 connections.
             // This should be more than enough for testing purposes.
             .max_connections(20)
-            // Immediately close master connections. Tokio's I/O streams don't like hopping runtimes.
+            // Immediately close master connections. Tokio's I/O streams don't like hopping
+            // runtimes.
             .after_release(|_conn, _| Box::pin(async move { Ok(false) }))
             .connect_lazy_with(master_opts.clone())
     });

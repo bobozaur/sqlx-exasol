@@ -2,38 +2,31 @@ mod extend;
 pub mod socket;
 mod tls;
 
+#[cfg(feature = "etl")]
+use std::net::IpAddr;
 use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
 
+use extend::WebSocketExt;
 use futures_util::{io::BufReader, Future};
 use lru::LruCache;
 use rsa::RsaPublicKey;
 use serde::de::{DeserializeOwned, IgnoredAny};
+use socket::ExaSocket;
 use sqlx_core::Error as SqlxError;
+pub use tls::WithMaybeTlsExaSocket;
 
+use super::stream::QueryResultStream;
+#[cfg(feature = "etl")]
+use crate::responses::Hosts;
 use crate::{
     command::{Command, ExaCommand},
     error::{ExaProtocolError, ExaResultExt},
-    options::{
-        ExaConnectOptionsRef, ProtocolVersion, {CredentialsRef, LoginRef},
-    },
+    options::{CredentialsRef, ExaConnectOptionsRef, LoginRef, ProtocolVersion},
     responses::{
         DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, PublicKey, QueryResult,
         Results, SessionInfo,
     },
 };
-
-#[cfg(feature = "etl")]
-use crate::responses::Hosts;
-#[cfg(feature = "etl")]
-use std::net::IpAddr;
-
-use socket::ExaSocket;
-
-use extend::WebSocketExt;
-
-use super::stream::QueryResultStream;
-
-pub use tls::WithMaybeTlsExaSocket;
 
 #[derive(Debug)]
 pub struct ExaWebSocket {
@@ -373,15 +366,16 @@ impl ExaWebSocket {
         self.send_and_recv(cmd).await
     }
 
-    /// Utility method for when the `response_data` field of the [`Response`] is not of any interest.
-    /// Note that attributes will still get updated.
+    /// Utility method for when the `response_data` field of the [`Response`] is not of any
+    /// interest. Note that attributes will still get updated.
     async fn send_cmd_ignore_response(&mut self, cmd: Command) -> Result<(), SqlxError> {
         self.send_and_recv::<Option<IgnoredAny>>(cmd).await?;
         Ok(())
     }
 
-    /// Sends a [`Command`] to the database and returns the `response_data` field of the [`Response`].
-    /// We will also await on the response from a previously started command, if needed.
+    /// Sends a [`Command`] to the database and returns the `response_data` field of the
+    /// [`Response`]. We will also await on the response from a previously started command, if
+    /// needed.
     async fn send_and_recv<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,

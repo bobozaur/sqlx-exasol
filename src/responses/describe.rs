@@ -1,8 +1,7 @@
 use serde::Deserialize;
 
-use crate::{ExaColumn, ExaTypeInfo};
-
 use super::{OutputColumns, Parameters};
+use crate::{ExaColumn, ExaTypeInfo};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(from = "DescribeStatementDe")]

@@ -1,23 +1,20 @@
-use std::str::FromStr;
-use std::time::Duration;
-use std::time::Instant;
+use std::{
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
 use futures_core::future::BoxFuture;
+use sqlx_core::{
+    connection::{ConnectOptions, Connection},
+    executor::Executor,
+    migrate::{AppliedMigration, Migrate, MigrateDatabase, MigrateError, Migration},
+    query::query,
+    query_as::query_as,
+    query_scalar::query_scalar,
+    Error as SqlxError,
+};
 
-use sqlx_core::connection::ConnectOptions;
-use sqlx_core::connection::Connection;
-use sqlx_core::executor::Executor;
-use sqlx_core::migrate::MigrateError;
-use sqlx_core::migrate::{AppliedMigration, Migration};
-use sqlx_core::migrate::{Migrate, MigrateDatabase};
-use sqlx_core::query::query;
-use sqlx_core::query_as::query_as;
-use sqlx_core::query_scalar::query_scalar;
-use sqlx_core::Error as SqlxError;
-
-use crate::connection::ExaConnection;
-use crate::database::Exasol;
-use crate::options::ExaConnectOptions;
+use crate::{connection::ExaConnection, database::Exasol, options::ExaConnectOptions};
 
 const LOCK_WARN: &str = "Exasol does not support database locking!";
 

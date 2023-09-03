@@ -7,6 +7,7 @@ mod websocket;
 
 use std::{iter, net::SocketAddr};
 
+use futures_util::Future;
 use lru::LruCache;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
@@ -14,9 +15,10 @@ use sqlx_core::{
     transaction::Transaction,
     Error as SqlxError,
 };
+use stream::QueryResultStream;
+use websocket::{socket::WithExaSocket, ExaWebSocket};
 
-use futures_util::Future;
-
+use self::websocket::WithMaybeTlsExaSocket;
 use crate::{
     arguments::ExaArguments,
     command::ExaCommand,
@@ -25,11 +27,6 @@ use crate::{
     options::ExaConnectOptions,
     responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
 };
-
-use stream::QueryResultStream;
-use websocket::{socket::WithExaSocket, ExaWebSocket};
-
-use self::websocket::WithMaybeTlsExaSocket;
 
 #[derive(Debug)]
 pub struct ExaConnection {

@@ -6,26 +6,26 @@ mod non_tls;
 mod tls;
 mod traits;
 
-use std::io::Result as IoResult;
-use std::net::{IpAddr, SocketAddrV4};
+use std::{
+    io::Result as IoResult,
+    net::{IpAddr, SocketAddrV4},
+};
 
-use crate::command::ExaCommand;
-use crate::error::ExaProtocolError;
-use crate::responses::{QueryResult, Results};
-use crate::{ExaConnection, ExaDatabaseError, ExaQueryResult};
 use arrayvec::ArrayString;
+pub use export::{ExaExport, ExportBuilder, QueryOrTable};
 use futures_core::future::BoxFuture;
-use sqlx_core::error::Error as SqlxError;
-use sqlx_core::net::Socket;
-
+pub use import::{ExaImport, ImportBuilder, Trim};
 use non_tls::non_tls_socket_spawners;
+use sqlx_core::{error::Error as SqlxError, net::Socket};
 
 use self::traits::EtlJob;
-
 use super::websocket::socket::ExaSocket;
-
-pub use export::{ExaExport, ExportBuilder, QueryOrTable};
-pub use import::{ExaImport, ImportBuilder, Trim};
+use crate::{
+    command::ExaCommand,
+    error::ExaProtocolError,
+    responses::{QueryResult, Results},
+    ExaConnection, ExaDatabaseError, ExaQueryResult,
+};
 
 /// Special Exasol packet that enables tunneling.
 /// Exasol responds with an internal address that can be used in query.

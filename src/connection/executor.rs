@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use either::Either;
 use futures_core::{future::BoxFuture, stream::BoxStream};
+use futures_util::TryStreamExt;
 use sqlx_core::{
     database::{Database, HasStatement},
     describe::Describe,
@@ -10,8 +11,7 @@ use sqlx_core::{
     Error as SqlxError,
 };
 
-use futures_util::TryStreamExt;
-
+use super::{macros::fetcher_closure, stream::ResultStream};
 use crate::{
     command::ExaCommand,
     database::Exasol,
@@ -19,8 +19,6 @@ use crate::{
     statement::{ExaStatement, ExaStatementMetadata},
     ExaConnection,
 };
-
-use super::{macros::fetcher_closure, stream::ResultStream};
 
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;

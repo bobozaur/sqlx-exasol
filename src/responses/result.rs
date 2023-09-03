@@ -3,9 +3,8 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{column::ExaColumn, error::ExaProtocolError};
-
 use super::{columns::ExaColumns, to_row_major};
+use crate::{column::ExaColumn, error::ExaProtocolError};
 
 /// The `results` field returned by Exasol after executing a query.
 /// We only work with one statement at a time, so we only ever expect a single

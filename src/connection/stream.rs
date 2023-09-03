@@ -13,7 +13,6 @@ use futures_util::{
     Future, Stream,
 };
 use pin_project::pin_project;
-
 use serde_json::Value;
 use sqlx_core::{logger::QueryLogger, Error as SqlxError, HashMap};
 

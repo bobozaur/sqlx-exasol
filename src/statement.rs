@@ -1,13 +1,13 @@
-use std::sync::Arc;
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use either::Either;
-use sqlx_core::column::ColumnIndex;
-use sqlx_core::database::Database;
-use sqlx_core::database::HasStatement;
-use sqlx_core::impl_statement_query;
-use sqlx_core::statement::Statement;
-use sqlx_core::Error as SqlxError;
+use sqlx_core::{
+    column::ColumnIndex,
+    database::{Database, HasStatement},
+    impl_statement_query,
+    statement::Statement,
+    Error as SqlxError,
+};
 
 use crate::{arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
 

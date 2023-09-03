@@ -5,14 +5,14 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use futures_io::{AsyncRead, AsyncWrite};
+use futures_util::io::BufReader;
+use pin_project::pin_project;
+
 use crate::{
     connection::websocket::socket::ExaSocket,
     etl::{error::ExaEtlError, traits::EtlWorker, IMPLICIT_BUFFER_CAP},
 };
-
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::io::BufReader;
-use pin_project::pin_project;
 
 #[pin_project]
 #[derive(Debug)]

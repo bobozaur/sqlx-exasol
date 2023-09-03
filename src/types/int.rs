@@ -2,15 +2,19 @@ use std::ops::Range;
 
 use serde::Deserialize;
 use serde_json::Value;
-use sqlx_core::decode::Decode;
-use sqlx_core::encode::{Encode, IsNull};
-use sqlx_core::error::BoxDynError;
-use sqlx_core::types::Type;
+use sqlx_core::{
+    decode::Decode,
+    encode::{Encode, IsNull},
+    error::BoxDynError,
+    types::Type,
+};
 
-use crate::arguments::ExaBuffer;
-use crate::database::Exasol;
-use crate::type_info::{Decimal, ExaDataType, ExaTypeInfo};
-use crate::value::ExaValueRef;
+use crate::{
+    arguments::ExaBuffer,
+    database::Exasol,
+    type_info::{Decimal, ExaDataType, ExaTypeInfo},
+    value::ExaValueRef,
+};
 
 const MIN_I64_NUMERIC: i64 = -999999999999999999;
 const MAX_I64_NUMERIC: i64 = 1000000000000000000;

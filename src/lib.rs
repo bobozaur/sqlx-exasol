@@ -18,22 +18,20 @@ mod type_info;
 mod types;
 mod value;
 
-use sqlx_core::{
-    executor::Executor, impl_acquire, impl_column_index_for_row, impl_column_index_for_statement,
-    impl_into_arguments_for_arguments,
-};
-
 pub use arguments::ExaArguments;
 pub use column::ExaColumn;
 #[cfg(feature = "etl")]
 pub use connection::etl;
 pub use connection::ExaConnection;
-
 pub use database::Exasol;
 pub use options::{ExaConnectOptions, ExaConnectOptionsBuilder, ExaSslMode, ProtocolVersion};
 pub use query_result::ExaQueryResult;
 pub use responses::ExaDatabaseError;
 pub use row::ExaRow;
+use sqlx_core::{
+    executor::Executor, impl_acquire, impl_column_index_for_row, impl_column_index_for_statement,
+    impl_into_arguments_for_arguments,
+};
 pub use statement::ExaStatement;
 pub use transaction::ExaTransactionManager;
 pub use type_info::ExaTypeInfo;

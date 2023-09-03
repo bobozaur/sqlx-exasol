@@ -1,5 +1,6 @@
-use crate::etl::SocketFuture;
 use std::net::SocketAddrV4;
+
+use crate::etl::SocketFuture;
 
 pub trait EtlJob: Send + Sync {
     const GZ_FILE_EXT: &'static str = "gz";

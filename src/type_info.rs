@@ -79,8 +79,6 @@ impl TypeInfo for ExaTypeInfo {
 /// are compatibility checks set in place.
 ///
 /// In case of incompatibility, the definition is displayed for troubleshooting.
-///
-///
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 #[serde(tag = "type")]
@@ -371,7 +369,8 @@ impl Decimal {
 ///
 /// So, our rule will be:
 /// - if a.scale > b.scale, a > b if and only if (a.precision - a.scale) >= (b.precision - b.scale)
-/// - if a.scale == b.scale, a == b if and only if (a.precision - a.scale) == (b.precision - b.scale)
+/// - if a.scale == b.scale, a == b if and only if (a.precision - a.scale) == (b.precision -
+///   b.scale)
 /// - if a.scale < b.scale, a < b if and only if (a.precision - a.scale) <= (b.precision - b.scale)
 impl PartialOrd for Decimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

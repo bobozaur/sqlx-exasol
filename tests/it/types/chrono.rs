@@ -1,6 +1,7 @@
-use super::*;
 use ::chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, Utc};
 use sqlx_exasol::Months;
+
+use super::*;
 
 const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 const DATE_FMT: &str = "%Y-%m-%d";

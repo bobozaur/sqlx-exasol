@@ -12,6 +12,7 @@ mod uint;
 #[cfg(feature = "uuid")]
 mod uuid;
 
+pub use iter::ExaIter;
+
 #[cfg(feature = "chrono")]
 pub use self::chrono::Months;
-pub use iter::ExaIter;

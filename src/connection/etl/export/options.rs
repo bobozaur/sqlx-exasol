@@ -1,15 +1,13 @@
 use std::{fmt::Debug, net::SocketAddrV4};
 
-use crate::etl::SocketFuture;
-use crate::{
-    connection::etl::RowSeparator,
-    etl::{prepare, traits::EtlJob, JobFuture},
-    ExaConnection,
-};
-
 use sqlx_core::Error as SqlxError;
 
 use super::ExaExport;
+use crate::{
+    connection::etl::RowSeparator,
+    etl::{prepare, traits::EtlJob, JobFuture, SocketFuture},
+    ExaConnection,
+};
 
 /// Export options
 #[derive(Debug)]

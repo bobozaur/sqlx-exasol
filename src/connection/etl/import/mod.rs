@@ -9,13 +9,11 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use compression::ExaImportWriter;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
-use pin_project::pin_project;
-
 pub use options::{ImportBuilder, Trim};
-
-use compression::ExaImportWriter;
+use pin_project::pin_project;
 
 use super::SocketFuture;
 

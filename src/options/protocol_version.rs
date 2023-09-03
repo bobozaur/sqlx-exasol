@@ -1,13 +1,15 @@
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Display, Formatter};
-use std::str::FromStr;
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
-use super::error::ExaConfigError;
-use super::PARAM_PROTOCOL_VERSION;
+use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 
-/// Enum listing the protocol versions that can be used when establishing a websocket connection to Exasol.
-/// Defaults to the highest defined protocol version and falls back to the highest protocol version supported by the server.
+use super::{error::ExaConfigError, PARAM_PROTOCOL_VERSION};
+
+/// Enum listing the protocol versions that can be used when establishing a websocket connection to
+/// Exasol. Defaults to the highest defined protocol version and falls back to the highest protocol
+/// version supported by the server.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[repr(u8)]
 pub enum ProtocolVersion {

@@ -3,13 +3,12 @@ use std::{fmt::Write, net::SocketAddrV4};
 use arrayvec::ArrayString;
 use sqlx_core::Error as SqlxError;
 
+use super::ExaImport;
 use crate::{
     connection::etl::RowSeparator,
     etl::{prepare, traits::EtlJob, JobFuture, SocketFuture},
     ExaConnection,
 };
-
-use super::ExaImport;
 
 #[derive(Clone, Debug)]
 pub struct ImportBuilder<'a> {

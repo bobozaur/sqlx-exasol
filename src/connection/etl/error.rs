@@ -1,4 +1,5 @@
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+
 use thiserror::Error as ThisError;
 
 /// Enum representing ETL errors.

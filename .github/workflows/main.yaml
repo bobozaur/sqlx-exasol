@@ -24,7 +24,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: -- --check
+          args: +nightly -- --check
 
   clippy:
     name: Clippy
@@ -124,4 +124,3 @@ jobs:
   #         DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl,compression -- --ignored --nopcature  --test-threads 4
   #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls,compression -- --ignored --nopcature  --test-threads 4
   #         DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls,compression -- --ignored --nopcature --test-threads 4
-
