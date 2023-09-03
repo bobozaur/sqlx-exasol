@@ -100,16 +100,11 @@ jobs:
           # Tests compilation failure if both ETL TLS features are enabled
           cargo test --features etl_native_tls,etl_rustls && exit 1
 
-          # ETL tests without compression
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_native_tls -- --ignored --nocapture --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_rustls -- --ignored --nocapture --test-threads 4
-
           # ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl_native_tls -- --ignored --nocapture --test-threads 4
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl_rustls -- --ignored --nocapture --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
 
-          # ETL tests with compression
+          # ETL tests
           DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl,compression -- --ignored --nocapture  --test-threads 4
           DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_native_tls,compression -- --ignored --nocapture  --test-threads 4
           DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_rustls,compression -- --ignored --nocapture --test-threads 4
