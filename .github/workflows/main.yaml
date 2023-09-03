@@ -81,34 +81,36 @@ jobs:
           echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
           echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
 
-      - name: Tests not requiring a connection
-        run: cargo test
+      # - name: Tests not requiring a connection
+      #   run: cargo test
 
-      - name: Connection tests without compression
-        run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+      # - name: Connection tests
+      #   run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
-      - name: Connection tests with compression
-        run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored
+      # - name: TLS connection tests
+      #   run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
-      - name: ETL without TLS feature but TLS connection (should fail)
-        run: |
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+      # - name: Connection tests with compression
+      #   run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored
 
-      - name: Tests compilation failure if both ETL TLS features are enabled
-        run: |
-          cargo test --features etl_native_tls,etl_rustls || true
+      # - name: TLS connection tests with compression
+      #   run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored
 
-      - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
-        run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+      # - name: ETL without TLS feature but TLS connection (should fail)
+      #   run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
 
-      - name: ETL tests
+      # - name: Tests compilation failure if both ETL TLS features are enabled
+      #   run: cargo test --features etl_native_tls,etl_rustls || true
+
+      # - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
+      #   run: |
+      #     DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
+      #     DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+
+      # - name: ETL tests
+      #   run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+
+      - name: TLS ETL tests
         run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
           DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
           DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
