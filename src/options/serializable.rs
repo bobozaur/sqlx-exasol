@@ -18,7 +18,7 @@ pub struct SerializableConOpts<'a> {
     attributes: Attributes<'a>,
 }
 
-/// Serialization helper, analog to [crate::responses::Attributes]
+/// Serialization helper, analog to [`crate::responses::Attributes`]
 /// but containing only the relevant fields for login.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

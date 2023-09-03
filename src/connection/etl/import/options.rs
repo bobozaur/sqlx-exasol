@@ -48,6 +48,15 @@ impl<'a> ImportBuilder<'a> {
         }
     }
 
+    /// Builds the IMPORT job.
+    ///
+    /// This implies submitting the IMPORT query.
+    /// The output will be a future to await the result of the job
+    /// and the workers that can be used for ETL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the job could not be built and submitted.
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
@@ -161,7 +170,7 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         // Push comma separated IMPORT columns
         if let Some(cols) = self.columns {
             query.push('(');
-            for col in cols.iter() {
+            for col in cols {
                 query.push_str(col);
                 query.push_str(", ");
             }

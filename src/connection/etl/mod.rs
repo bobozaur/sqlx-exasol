@@ -107,7 +107,7 @@ async fn socket_spawners(
 /// Behind the scenes Exasol will import/export to a file located on the
 /// one-shot HTTP server we will host on this socket.
 ///
-/// The "file" will be defined something like "http://10.25.0.2/0001.csv".
+/// The "file" will be defined something like <`http://10.25.0.2/0001.csv`>.
 ///
 /// While I don't know the exact implementation details, I assume Exasol
 /// does port forwarding to/from the socket we connect (the one in this function)

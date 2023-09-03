@@ -95,7 +95,7 @@ impl Parameters {
         impl<'de> Visitor<'de> for TypeInfoVisitor {
             type Value = Vec<ExaTypeInfo>;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(formatter, "An array of arrays")
             }
 
@@ -106,8 +106,9 @@ impl Parameters {
                 let mut transposed = Vec::new();
 
                 while let Some(parameter) = seq.next_element::<ExaParameterType>()? {
-                    transposed.push(parameter.data_type)
+                    transposed.push(parameter.data_type);
                 }
+
                 Ok(transposed)
             }
         }
@@ -129,7 +130,7 @@ fn to_row_major<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Vec<Va
     impl<'de, 'a> Visitor<'de> for ColumnVisitor<'a> {
         type Value = ();
 
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(formatter, "An array")
         }
 
@@ -170,7 +171,7 @@ fn to_row_major<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Vec<Va
     impl<'de> Visitor<'de> for DataVisitor {
         type Value = Vec<Vec<Value>>;
 
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(formatter, "An array of arrays")
         }
 

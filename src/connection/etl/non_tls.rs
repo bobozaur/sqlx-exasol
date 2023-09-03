@@ -50,7 +50,7 @@ impl WithSocket for WithNonTlsSocket {
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
 
-            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
                 let socket = wrapper.with_socket(socket);
                 Ok(socket)
             });

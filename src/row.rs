@@ -66,6 +66,6 @@ impl ColumnIndex<ExaRow> for &'_ str {
             .column_names
             .get(*self)
             .copied()
-            .ok_or_else(|| SqlxError::ColumnNotFound(self.to_string()))
+            .ok_or_else(|| SqlxError::ColumnNotFound((*self).to_string()))
     }
 }

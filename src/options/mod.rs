@@ -216,7 +216,7 @@ impl ConnectOptions for ExaConnectOptions {
 /// Serialization helper that borrows as much data as possible.
 /// This type cannot be [`Copy`] because of [`LoginRef`].
 #[derive(Debug, Clone, Serialize)]
-#[serde(into = "SerializableConOpts")]
+#[serde(into = "SerializableConOpts<'_>")]
 pub(crate) struct ExaConnectOptionsRef<'a> {
     pub(crate) login: LoginRef<'a>,
     pub(crate) protocol_version: ProtocolVersion,

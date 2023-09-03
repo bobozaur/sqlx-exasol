@@ -30,7 +30,7 @@ use crate::{
 pub struct ResultStream<'a, C, F1, F2>
 where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F1, SqlxError>,
-    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
     #[pin]
@@ -108,7 +108,7 @@ where
 enum ResultStreamState<'a, C, F1, F2>
 where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F1, SqlxError>,
-    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F1: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>,
     F2: Future<Output = Result<QueryResultStream<'a, C, F1>, SqlxError>>,
 {
     Initial(#[pin] F2),
@@ -121,7 +121,7 @@ where
 pub enum QueryResultStream<'a, C, F>
 where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>,
 {
     ResultSet(#[pin] ResultSetStream<'a, C, F>),
     RowCount(#[pin] Once<Ready<Result<ExaQueryResult, SqlxError>>>),
@@ -190,7 +190,7 @@ where
 pub struct ResultSetStream<'a, C, F>
 where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>,
 {
     #[pin]
     chunk_stream: ChunkStream<'a, C, F>,
@@ -216,9 +216,9 @@ where
                 let future = Some(future);
 
                 let chunk_stream = MultiChunkStream {
-                    handle,
-                    future_maker,
                     future,
+                    future_maker,
+                    handle,
                     total_rows_num,
                     total_rows_pos,
                 };
@@ -274,7 +274,7 @@ where
 enum ChunkStream<'a, C, F>
 where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>,
 {
     Multi(#[pin] MultiChunkStream<'a, C, F>),
     Single(#[pin] Once<Ready<Result<DataChunk, SqlxError>>>),
@@ -385,7 +385,7 @@ impl ChunkIter {
     fn renew(&mut self, chunk: DataChunk) {
         self.chunk_rows_pos = 0;
         self.chunk_rows_total = chunk.num_rows;
-        self.data = chunk.data.into_iter()
+        self.data = chunk.data.into_iter();
     }
 }
 

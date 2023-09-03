@@ -41,7 +41,7 @@ impl error::DatabaseError for ExaDatabaseError {
         &self.text
     }
 
-    fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+    fn code(&self) -> Option<Cow<'_, str>> {
         Some(Cow::Borrowed(&self.code))
     }
 

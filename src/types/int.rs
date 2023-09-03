@@ -16,8 +16,8 @@ use crate::{
     value::ExaValueRef,
 };
 
-const MIN_I64_NUMERIC: i64 = -999999999999999999;
-const MAX_I64_NUMERIC: i64 = 1000000000000000000;
+const MIN_I64_NUMERIC: i64 = -999_999_999_999_999_999;
+const MAX_I64_NUMERIC: i64 = 1_000_000_000_000_000_000;
 
 /// Numbers within this range must be serialized/deserialized as integers.
 /// The ones above/under these thresholds are treated as strings.

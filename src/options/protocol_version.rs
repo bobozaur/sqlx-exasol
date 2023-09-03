@@ -51,7 +51,7 @@ impl Display for ProtocolVersion {
 }
 
 impl Serialize for ProtocolVersion {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -61,7 +61,7 @@ impl Serialize for ProtocolVersion {
 }
 
 impl<'de> Deserialize<'de> for ProtocolVersion {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {

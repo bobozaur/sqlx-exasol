@@ -55,6 +55,10 @@ impl ExaConnection {
     }
 
     /// Flushes the current [`ExaAttributes`] to Exasol.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if sending the attributes fails.
     pub async fn flush_attributes(&mut self) -> Result<(), SqlxError> {
         self.ws.set_attributes().await
     }
@@ -270,7 +274,7 @@ impl Connection for ExaConnection {
     {
         Box::pin(async {
             while let Some((_, prep)) = self.statement_cache.pop_lru() {
-                self.ws.close_prepared(prep.statement_handle).await?
+                self.ws.close_prepared(prep.statement_handle).await?;
             }
 
             Ok(())

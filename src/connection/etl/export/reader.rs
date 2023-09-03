@@ -80,9 +80,9 @@ impl AsyncRead for ExportReader {
                         let num_bytes = ready!(this.socket.poll_read(cx, &mut buf[..max_read]))?;
                         *this.chunk_size -= num_bytes;
                         return Poll::Ready(Ok(num_bytes));
-                    } else {
-                        *this.state = ReaderState::ExpectDataCR;
                     }
+
+                    *this.state = ReaderState::ExpectDataCR;
                 }
 
                 ReaderState::ExpectSizeLF => {

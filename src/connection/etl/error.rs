@@ -3,7 +3,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use thiserror::Error as ThisError;
 
 /// Enum representing ETL errors.
-#[derive(Debug, ThisError)]
+#[derive(Clone, Copy, Debug, ThisError)]
 pub enum ExaEtlError {
     #[error("chunk size overflowed 64 bits")]
     ChunkSizeOverflow,

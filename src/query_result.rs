@@ -18,7 +18,7 @@ impl ExaQueryResult {
 impl Extend<ExaQueryResult> for ExaQueryResult {
     fn extend<T: IntoIterator<Item = ExaQueryResult>>(&mut self, iter: T) {
         for elem in iter {
-            self.rows_affected += elem.rows_affected
+            self.rows_affected += elem.rows_affected;
         }
     }
 }

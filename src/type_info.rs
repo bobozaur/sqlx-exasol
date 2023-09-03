@@ -79,7 +79,7 @@ impl TypeInfo for ExaTypeInfo {
 /// are compatibility checks set in place.
 ///
 /// In case of incompatibility, the definition is displayed for troubleshooting.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 #[serde(tag = "type")]
 pub enum ExaDataType {
@@ -248,7 +248,7 @@ impl From<Arguments<'_>> for DataTypeName {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StringLike {
     size: usize,
@@ -278,6 +278,7 @@ impl StringLike {
     /// a database column would imply a lot of overhead.
     ///
     /// So just let the database do its thing and throw an error.
+    #[allow(clippy::unused_self)]
     pub fn compatible(&self, ty: &ExaDataType) -> bool {
         matches!(
             ty,
@@ -317,7 +318,7 @@ impl Display for Charset {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Decimal {
     precision: u32,
@@ -380,6 +381,7 @@ impl PartialOrd for Decimal {
         let scale_cmp = self.scale.partial_cmp(&other.scale);
         let diff_cmp = self_diff.partial_cmp(&other_diff);
 
+        #[allow(clippy::match_same_arms)] // false positive
         match (scale_cmp, diff_cmp) {
             (Some(Ordering::Greater), Some(Ordering::Greater)) => Some(Ordering::Greater),
             (Some(Ordering::Greater), Some(Ordering::Equal)) => Some(Ordering::Greater),
@@ -391,7 +393,7 @@ impl PartialOrd for Decimal {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Geometry {
     srid: u16,
@@ -415,7 +417,7 @@ impl Geometry {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalDayToSecond {
     precision: u32,
@@ -429,11 +431,9 @@ impl PartialOrd for IntervalDayToSecond {
 
         match (precision_cmp, fraction_cmp) {
             (Some(Ordering::Equal), Some(Ordering::Equal)) => Some(Ordering::Equal),
-            (Some(Ordering::Equal), Some(Ordering::Less))
-            | (Some(Ordering::Less), Some(Ordering::Less))
+            (Some(Ordering::Equal | Ordering::Less), Some(Ordering::Less))
             | (Some(Ordering::Less), Some(Ordering::Equal)) => Some(Ordering::Less),
-            (Some(Ordering::Equal), Some(Ordering::Greater))
-            | (Some(Ordering::Greater), Some(Ordering::Greater))
+            (Some(Ordering::Equal | Ordering::Greater), Some(Ordering::Greater))
             | (Some(Ordering::Greater), Some(Ordering::Equal)) => Some(Ordering::Greater),
             _ => None,
         }
@@ -445,7 +445,7 @@ impl IntervalDayToSecond {
     /// value and mixing it with the seconds, minutes, hours or even the days
     /// when the value exceeds 3 (the max milliseconds digits limit).
     ///
-    /// See: https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval
+    /// See: <`https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval`>
     ///
     /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't
     /// even know how to handle values above that
@@ -476,7 +476,7 @@ impl IntervalDayToSecond {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalYearToMonth {
     precision: u32,
@@ -503,14 +503,14 @@ impl IntervalYearToMonth {
 }
 
 /// The Exasol `HASHTYPE` data type.
-/// Note that Exasol returns the size doubled, as by default the HASHTYPE_FORMAT is HEX.
+/// Note that Exasol returns the size doubled, as by default the `HASHTYPE_FORMAT` is HEX.
 /// This is handled internally and should not be a concern for any consumer
 /// of this type.
 ///
 /// Therefore, for a datatype such as [`uuid::Uuid`] which is `16` bytes long,
 /// the `size` field will be `32`, but the [`HashType::new()`] or [`HashType::size()`]
 /// will accept/return `16` to make it easier to reason with.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub struct Hashtype {
     size: u16,

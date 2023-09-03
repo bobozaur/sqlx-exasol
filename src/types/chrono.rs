@@ -248,7 +248,7 @@ impl Encode<'_, Exasol> for Months {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
         let years = self.0 / 12;
         let months = (self.0 % 12).abs();
-        buf.append(format_args!("{}-{}", years, months));
+        buf.append(format_args!("{years}-{months}"));
 
         IsNull::No
     }

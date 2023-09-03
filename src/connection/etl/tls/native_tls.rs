@@ -109,7 +109,7 @@ impl WithSocket for WithNativeTlsSocket {
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
 
-            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
                 let mut hs = match acceptor.accept(SyncSocket::new(socket)) {
                     Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
                     Err(HandshakeError::Failure(e)) => {

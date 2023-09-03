@@ -64,7 +64,7 @@ impl MigrateDatabase for Exasol {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
 
-            let query = format!("DROP SCHEMA IF EXISTS `{}`", database);
+            let query = format!("DROP SCHEMA IF EXISTS `{database}`");
             let _ = conn.execute(&*query).await?;
 
             Ok(())
@@ -179,6 +179,7 @@ impl Migrate for ExaConnection {
             tx.commit().await?;
 
             let elapsed = start.elapsed();
+            let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
 
             let query_str = r#"
                 UPDATE "_sqlx_migrations" 
@@ -187,7 +188,7 @@ impl Migrate for ExaConnection {
                 "#;
 
             let _ = query(query_str)
-                .bind(elapsed.as_nanos() as i64)
+                .bind(nanos)
                 .bind(migration.version)
                 .execute(self)
                 .await?;

@@ -152,7 +152,7 @@ impl WithSocket for WithRustlsSocket {
         Box::pin(async move {
             let (socket, address) = get_etl_addr(socket).await?;
 
-            let future: BoxFuture<IoResult<ExaSocket>> = Box::pin(async move {
+            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
                 let state = ServerConnection::new(config)
                     .map_err(|e| IoError::new(IoErrorKind::Other, e))?;
                 let mut socket = RustlsSocket {

@@ -16,7 +16,7 @@ use sqlx_core::{
     pool::{Pool, PoolOptions},
     query::query,
     query_scalar::query_scalar,
-    testing::*,
+    testing::{FixtureSnapshot, TestArgs, TestContext, TestSupport},
     Error,
 };
 
@@ -41,7 +41,7 @@ impl TestSupport for Exasol {
 
             let db_id = db_id(db_name);
 
-            let query_str = format!("DROP SCHEMA IF EXISTS {} CASCADE;", db_name);
+            let query_str = format!("DROP SCHEMA IF EXISTS {db_name} CASCADE;");
             conn.execute(&*query_str).await?;
 
             let query_str = r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_id = ?;"#;
@@ -139,11 +139,11 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
     let new_db_id: u64 = query_scalar(query_str).fetch_one(&mut *tx).await?;
     let new_db_name = db_name(new_db_id);
 
-    let query_str = format!("CREATE SCHEMA {}", new_db_name);
+    let query_str = format!("CREATE SCHEMA {new_db_name}");
     tx.execute(&*query_str).await?;
     tx.commit().await?;
 
-    eprintln!("created database {}", new_db_name);
+    eprintln!("created database {new_db_name}");
 
     let mut connect_opts = master_pool.connect_options().deref().clone();
 
@@ -170,32 +170,32 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         WHERE created_at < FROM_POSIX_TIME(?);
         "#;
 
-    let delete_db_ids: Vec<u64> = query_scalar(query_str)
+    let ids_to_delete: Vec<u64> = query_scalar(query_str)
         .bind(created_before.as_secs().to_string())
         .fetch_all(&mut *conn)
         .await?;
 
-    if delete_db_ids.is_empty() {
+    if ids_to_delete.is_empty() {
         return Ok(0);
     }
 
-    let mut deleted_db_ids = Vec::with_capacity(delete_db_ids.len());
+    let mut deleted_db_ids = Vec::with_capacity(ids_to_delete.len());
 
     let mut command = String::new();
 
-    for db_id in delete_db_ids {
+    for db_id in ids_to_delete {
         command.clear();
 
         let db_name = db_name(db_id);
 
-        writeln!(command, "DROP SCHEMA IF EXISTS {} CASCADE", db_name).ok();
+        writeln!(command, "DROP SCHEMA IF EXISTS {db_name} CASCADE").ok();
         match conn.execute(&*command).await {
             Ok(_deleted) => {
                 deleted_db_ids.push(db_id);
             }
             // Assume a database error just means the DB is still in use.
             Err(Error::Database(dbe)) => {
-                eprintln!("could not clean test database {:?}: {}", db_id, dbe)
+                eprintln!("could not clean test database {db_id:?}: {dbe}");
             }
             // Bubble up other errors
             Err(e) => return Err(e),
@@ -211,14 +211,14 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
 }
 
 fn db_name(id: u64) -> String {
-    format!(r#""_sqlx_test_database_{}""#, id)
+    format!(r#""_sqlx_test_database_{id}""#)
 }
 
 fn db_id(name: &str) -> u64 {
     name.trim_start_matches(r#""_sqlx_test_database_"#)
         .trim_end_matches('"')
         .parse()
-        .unwrap_or_else(|_1| panic!("failed to parse ID from database name {:?}", name))
+        .unwrap_or_else(|_1| panic!("failed to parse ID from database name {name:?}"))
 }
 
 #[test]

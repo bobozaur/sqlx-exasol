@@ -40,6 +40,15 @@ impl<'a> ExportBuilder<'a> {
         }
     }
 
+    /// Builds the EXPORT job.
+    ///
+    /// This implies submitting the EXPORT query.
+    /// The output will be a future to await the result of the job
+    /// and the workers that can be used for ETL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the job could not be built and submitted.
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,

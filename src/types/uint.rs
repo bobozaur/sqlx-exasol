@@ -16,7 +16,7 @@ use crate::{
 
 /// Numbers below this threshold must be serialized/deserialized as integers.
 /// The ones above must be treated as strings.
-const MAX_U64_NUMERIC: u64 = 1000000000000000000;
+const MAX_U64_NUMERIC: u64 = 1_000_000_000_000_000_000;
 
 impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
