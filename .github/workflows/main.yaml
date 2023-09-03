@@ -65,29 +65,6 @@ jobs:
           - 8563:8563
         options: --privileged
     steps:
-      # - name: Set up Python 3.10
-      #   uses: actions/setup-python@v3
-      #   with:
-      #     python-version: "3.10"
-
-      # - name: Install dependencies
-      #   run: |
-      #     python -m pip install --upgrade pip
-      #     pip install pipenv
-
-      # - uses: actions/checkout@v3
-      #   with:
-      #     repository: exasol/docker-db
-      #     ref: "7.0.22"
-
-      # - name: Set up Exasol Cluster
-      #   run: |
-      #     docker pull exasol/docker-db:7.0.22
-      #     pipenv install -r exadt_requirements.txt
-      #     pipenv run ./exadt create-cluster --root ~/sqlx/ --create-root sqlx
-      #     pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
-      #     pipenv run ./exadt start-cluster sqlx
-
       - uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
@@ -100,30 +77,34 @@ jobs:
       - name: Create connection strings
         run: |
           echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563" >> $GITHUB_ENV
+          echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
 
       - name: Run tests
         run: |
           # Tests not requiring a connection
           cargo test
 
-          # Tests without ETL or compression
+          # Connection tests without compression
           DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono
           DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono
 
-          # Tests without ETL
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono,compression
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono,compression
+          # Connection tests with compression
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored
+
+          # ETL without TLS feature but TLS connection (should fail)
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 && exit 1
 
           # ETL tests without compression
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl && exit 1
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl -- --ignored --nopcature --test-threads 4
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl_native_tls -- --ignored --nopcature --test-threads 4
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl_rustls -- --ignored --nopcature --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls -- --ignored --nopcature --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_native_tls -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_rustls -- --ignored --nopcature --test-threads 4
+
+          # ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl_native_tls -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl_rustls -- --ignored --nopcature --test-threads 4
 
           # ETL tests with compression
           DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl,compression -- --ignored --nopcature  --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls,compression -- --ignored --nopcature  --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_rustls,compression -- --ignored --nopcature --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_native_tls,compression -- --ignored --nopcature  --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_rustls,compression -- --ignored --nopcature --test-threads 4
