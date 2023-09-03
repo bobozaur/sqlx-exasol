@@ -99,8 +99,8 @@ jobs:
 
       - name: Create connection strings
         run: |
-          echo "NO_TLS_URL=exa://sys:exasol@exasol:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@exasol:8563" >> $GITHUB_ENV
+          echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563" >> $GITHUB_ENV
 
       - name: Run tests
         run: |
