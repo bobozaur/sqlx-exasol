@@ -318,9 +318,14 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
 }
 
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
-    let mut buf = String::new();
-    reader.read_to_string(&mut buf).await?;
-    writer.write_all(buf.as_bytes()).await?;
+    let mut buf = [0; 10240];
+    let mut read = 1;
+
+    while read > 0 {
+        read = reader.read(&mut buf).await?;
+        writer.write_all(&buf[..read]).await?;
+    }
+
     writer.close().await?;
     Ok(())
 }

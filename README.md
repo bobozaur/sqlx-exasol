@@ -75,15 +75,18 @@ use futures_util::{
 };
 use sqlx_exasol::{etl::*, *};
 
-/// This is highly inefficient, as we buffer all the data in memory.
-/// A much better way would be intermitted read and writes in a smaller, well defined buffer.
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
-    let mut buf = String::new();
-    // Readers return EOF when there's no more data.
-    reader.read_to_string(&mut buf).await?;
-    // Write data to Exasol
-    writer.write_all(buf.as_bytes()).await?;
-    // Writes, however, MUST be closed to signal we won't send more data to Exasol
+    let mut buf = [0; 10240];
+    let mut read = 1;
+
+    while read > 0 {
+        // Readers return EOF when there's no more data.
+        read = reader.read(&mut buf).await?;
+        // Write data to Exasol
+        writer.write_all(&buf[..read]).await?;
+    }
+
+    // Writes, unlike readers, MUST be closed to signal we won't send more data to Exasol
     writer.close().await?;
     Ok(())
 }
