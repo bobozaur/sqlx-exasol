@@ -11,7 +11,7 @@ use crate::{arguments::ExaBuffer, Exasol};
 ///
 /// Note that the iterator must implement [`Clone`] because
 /// it's used in multiple places. Therefore, prefer using iterators over
-/// references than owning variants
+/// references than owning variants.
 ///
 /// ```rust
 /// use sqlx_exasol::ExaIter;
