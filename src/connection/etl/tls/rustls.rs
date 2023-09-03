@@ -20,7 +20,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, traits::SocketSpawner, SocketFuture},
+    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
@@ -47,7 +47,7 @@ impl RustlsSocketSpawner {
     }
 }
 
-impl SocketSpawner for RustlsSocketSpawner {
+impl WithSocketMaker for RustlsSocketSpawner {
     type WithSocket = WithRustlsSocket;
 
     fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
