@@ -205,6 +205,7 @@ impl ExaAttributes {
     }
 
     pub(crate) fn update(&mut self, other: Attributes) {
+        println!("{:?}", other.current_schema);
         macro_rules! other_or_prev {
             ($field:tt) => {
                 if let Some(new) = other.$field {
@@ -213,9 +214,7 @@ impl ExaAttributes {
             };
         }
 
-        if let Some(schema) = other.current_schema {
-            self.current_schema = Some(schema);
-        }
+        self.current_schema = other.current_schema;
 
         other_or_prev!(autocommit);
         other_or_prev!(feedback_interval);
