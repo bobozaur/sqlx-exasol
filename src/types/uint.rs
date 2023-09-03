@@ -17,6 +17,7 @@ use crate::{
 /// Numbers below this threshold must be serialized/deserialized as integers.
 /// The ones above must be treated as strings.
 const MAX_U64_NUMERIC: u64 = 1_000_000_000_000_000_000;
+const MAX_U128_NUMERIC: u128 = 1_000_000_000_000_000_000;
 
 impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
@@ -152,6 +153,48 @@ impl Decode<'_, Exasol> for u64 {
             Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
             Value::String(s) => serde_json::from_str(s).map_err(From::from),
             v => Err(format!("invalid u64 value: {v}").into()),
+        }
+    }
+}
+
+impl Type<Exasol> for u128 {
+    fn type_info() -> ExaTypeInfo {
+        ExaDataType::Decimal(Decimal::new(Decimal::MAX_128BIT_PRECISION, 0)).into()
+    }
+
+    fn compatible(ty: &ExaTypeInfo) -> bool {
+        <Self as Type<Exasol>>::type_info().compatible(ty)
+    }
+}
+
+impl Encode<'_, Exasol> for u128 {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+        if self < &MAX_U128_NUMERIC {
+            buf.append(self);
+        } else {
+            // Large numbers get serialized as strings
+            buf.append(format_args!("{self}"));
+        };
+
+        IsNull::No
+    }
+
+    fn produces(&self) -> Option<ExaTypeInfo> {
+        let precision = self.checked_ilog10().unwrap_or_default() + 1;
+        Some(ExaDataType::Decimal(Decimal::new(precision, 0)).into())
+    }
+
+    fn size_hint(&self) -> usize {
+        Decimal::MAX_128BIT_PRECISION as usize
+    }
+}
+
+impl Decode<'_, Exasol> for u128 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        match value.value {
+            Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
+            Value::String(s) => serde_json::from_str(s).map_err(From::from),
+            v => Err(format!("invalid u128 value: {v}").into()),
         }
     }
 }
