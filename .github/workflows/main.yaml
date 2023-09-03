@@ -119,12 +119,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Create connection strings
-        run: |
-          echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
-
-      - name: ETL without TLS feature but TLS connection (should fail)
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+        run: echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
 
       - name: Tests compilation failure if both ETL TLS features are enabled
         run: cargo test --features etl_native_tls,etl_rustls || true
@@ -136,6 +131,34 @@ jobs:
 
       - name: ETL tests
         run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+
+  tls_etl_tests:
+    name: TLS ETL tests
+    needs: clippy
+    runs-on: ubuntu-20.04
+    services:
+      exasol:
+        image: exasol/docker-db:7.0.22
+        ports:
+          - 8563:8563
+        options: --privileged
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Create connection strings
+        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+
+      - name: ETL without TLS feature but TLS connection (should fail)
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
 
       - name: TLS ETL tests
         run: |
