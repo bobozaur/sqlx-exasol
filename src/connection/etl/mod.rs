@@ -7,19 +7,23 @@ mod tls;
 mod traits;
 
 use std::{
+    fmt::Write as _,
     io::{Error as IoError, Result as IoResult},
-    net::{IpAddr, Ipv4Addr, SocketAddrV4},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
 };
 
 use arrayvec::ArrayString;
 pub use export::{ExaExport, ExportBuilder, QueryOrTable};
 use futures_core::future::BoxFuture;
 pub use import::{ExaImport, ImportBuilder, Trim};
-use non_tls::non_tls_socket_spawners;
 use sqlx_core::{error::Error as SqlxError, net::Socket};
 
-use self::{error::ExaEtlError, traits::EtlJob};
-use super::websocket::socket::ExaSocket;
+use self::{
+    error::ExaEtlError,
+    non_tls::NonTlsSocketSpawner,
+    traits::{EtlJob, SocketSpawner},
+};
+use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
     command::ExaCommand,
     responses::{QueryResult, Results},
@@ -92,15 +96,45 @@ async fn socket_spawners(
 
     #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
     match with_tls {
-        true => tls::tls_socket_spawners(num_sockets, ips, port).await,
-        false => non_tls_socket_spawners(num_sockets, ips, port).await,
+        true => socket_spawning_futures(tls::tls_socket_spawner()?, num_sockets, ips, port).await,
+        false => socket_spawning_futures(NonTlsSocketSpawner, num_sockets, ips, port).await,
     }
 
     #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
     match with_tls {
         true => Err(SqlxError::Tls("No ETL TLS feature set".into())),
-        false => non_tls_socket_spawners(num_sockets, ips, port).await,
+        false => socket_spawning_futures(NonTlsSocketSpawner, num_sockets, ips, port).await,
     }
+}
+
+/// Creates a socket making future for each IP address provided.
+/// The internal socket address of the corresponding Exasol node
+/// is provided alongside the future, to be used in query generation.
+async fn socket_spawning_futures<T>(
+    socket_spawner: T,
+    num_sockets: usize,
+    ips: Vec<IpAddr>,
+    port: u16,
+) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError>
+where
+    T: SocketSpawner,
+{
+    let mut output = Vec::with_capacity(num_sockets);
+
+    for ip in ips.into_iter().take(num_sockets) {
+        let mut ip_buf = ArrayString::<50>::new_const();
+        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
+
+        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
+        let with_socket = socket_spawner.make_with_socket(wrapper);
+        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
+            .await?
+            .await?;
+
+        output.push((addr, future));
+    }
+
+    Ok(output)
 }
 
 /// Behind the scenes Exasol will import/export to a file located on the

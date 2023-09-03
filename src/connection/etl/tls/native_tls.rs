@@ -1,13 +1,11 @@
 use std::{
-    fmt::Write as _,
     future,
     io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
-    net::{IpAddr, SocketAddr, SocketAddrV4},
+    net::SocketAddrV4,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
 use native_tls::{HandshakeError, Identity, TlsAcceptor};
 use rcgen::Certificate;
@@ -21,41 +19,8 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, SocketFuture},
+    etl::{get_etl_addr, traits::SocketSpawner, SocketFuture},
 };
-
-pub async fn native_tls_socket_spawners(
-    num_sockets: usize,
-    ips: Vec<IpAddr>,
-    port: u16,
-    cert: Certificate,
-) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
-    tracing::trace!("spawning {num_sockets} TLS sockets through 'native-tls'");
-
-    let tls_cert = cert.serialize_pem().to_sqlx_err()?;
-    let key = cert.serialize_private_key_pem();
-
-    let ident = Identity::from_pkcs8(tls_cert.as_bytes(), key.as_bytes()).to_sqlx_err()?;
-    let acceptor = TlsAcceptor::new(ident).to_sqlx_err()?;
-    let acceptor = Arc::new(acceptor);
-
-    let mut output = Vec::with_capacity(ips.len());
-
-    for ip in ips.into_iter().take(num_sockets) {
-        let mut ip_buf = ArrayString::<50>::new_const();
-        write!(&mut ip_buf, "{ip}").expect("IP address should fit in 50 characters");
-
-        let wrapper = WithExaSocket(SocketAddr::new(ip, port));
-        let with_socket = WithNativeTlsSocket::new(wrapper, acceptor.clone());
-        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
-
-        output.push((addr, future));
-    }
-
-    Ok(output)
-}
 
 struct NativeTlsSocket<S>(native_tls::TlsStream<SyncSocket<S>>)
 where
@@ -89,7 +54,32 @@ where
     }
 }
 
-struct WithNativeTlsSocket {
+pub struct NativeTlsSocketSpawner(Arc<TlsAcceptor>);
+
+impl NativeTlsSocketSpawner {
+    pub fn new(cert: &Certificate) -> Result<Self, SqlxError> {
+        tracing::trace!("creating 'native-tls' socket spawner");
+
+        let tls_cert = cert.serialize_pem().to_sqlx_err()?;
+        let key = cert.serialize_private_key_pem();
+
+        let ident = Identity::from_pkcs8(tls_cert.as_bytes(), key.as_bytes()).to_sqlx_err()?;
+        let acceptor = TlsAcceptor::new(ident).to_sqlx_err()?;
+        let acceptor = Arc::new(acceptor);
+
+        Ok(Self(acceptor))
+    }
+}
+
+impl SocketSpawner for NativeTlsSocketSpawner {
+    type WithSocket = WithNativeTlsSocket;
+
+    fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
+        WithNativeTlsSocket::new(wrapper, self.0.clone())
+    }
+}
+
+pub struct WithNativeTlsSocket {
     wrapper: WithExaSocket,
     acceptor: Arc<TlsAcceptor>,
 }

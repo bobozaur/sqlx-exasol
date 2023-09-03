@@ -2,36 +2,33 @@
 mod native_tls;
 #[cfg(feature = "etl_rustls")]
 mod rustls;
-#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod sync_socket;
 
-use std::net::{IpAddr, SocketAddrV4};
-
+#[cfg(feature = "etl_native_tls")]
+use native_tls::NativeTlsSocketSpawner;
 use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
 use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
     RsaPrivateKey,
 };
+#[cfg(feature = "etl_rustls")]
+use rustls::RustlsSocketSpawner;
 use sqlx_core::error::Error as SqlxError;
 
-use super::SocketFuture;
+use super::traits::SocketSpawner;
 use crate::error::ExaResultExt;
 
 #[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
 compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
 
 #[allow(unreachable_code)]
-pub async fn tls_socket_spawners(
-    num_sockets: usize,
-    ips: Vec<IpAddr>,
-    port: u16,
-) -> Result<Vec<(SocketAddrV4, SocketFuture)>, SqlxError> {
+pub fn tls_socket_spawner() -> Result<impl SocketSpawner, SqlxError> {
     let cert = make_cert()?;
 
     #[cfg(feature = "etl_native_tls")]
-    return native_tls::native_tls_socket_spawners(num_sockets, ips, port, cert).await;
+    return NativeTlsSocketSpawner::new(&cert);
     #[cfg(feature = "etl_rustls")]
-    return rustls::rustls_socket_spawners(num_sockets, ips, port, cert).await;
+    return RustlsSocketSpawner::new(&cert);
 }
 
 fn make_cert() -> Result<Certificate, SqlxError> {

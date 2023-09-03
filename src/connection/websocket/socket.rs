@@ -13,6 +13,7 @@ use sqlx_core::{
     net::{Socket, WithSocket},
 };
 
+#[derive(Debug, Clone, Copy)]
 pub struct WithExaSocket(pub SocketAddr);
 
 impl WithSocket for WithExaSocket {
