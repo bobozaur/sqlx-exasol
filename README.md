@@ -6,7 +6,8 @@ Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (no
 
 **NOTE:** The driver is currently in its `alpha` stage. This will change when it's seen enough usage to be declared **stable**.
 
-Please find the documentation [here](https://docs.rs/sqlx-exasol/latest/sqlx_exasol/).
+Please find the documentation [here](https://docs.rs/sqlx-exasol/latest/sqlx_exasol/).  
+**MSRV**: `1.70`
 
 ## Crate Features flags
 * `etl` - enables the usage ETL jobs without TLS encryption.
