@@ -77,9 +77,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Create connection strings
-        run: |
-          echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+        run: echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
 
       - name: Tests not requiring a connection
         run: cargo test
@@ -87,14 +85,39 @@ jobs:
       - name: Connection tests
         run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
+      - name: Connection tests with compression
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
+
+  tls_sqlx_tests:
+    name: TLS SQLx tests
+    needs: clippy
+    runs-on: ubuntu-20.04
+    services:
+      exasol:
+        image: exasol/docker-db:7.0.22
+        ports:
+          - 8563:8563
+        options: --privileged
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Create connection strings
+        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+
       - name: TLS connection tests
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
-      - name: Connection tests with compression
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored
-
       - name: TLS connection tests with compression
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
 
   etl_tests:
     name: ETL tests
