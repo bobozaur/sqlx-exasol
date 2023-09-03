@@ -1,7 +1,7 @@
 [![Crates.io](https://img.shields.io/crates/v/sqlx-exasol.svg)](https://crates.io/crates/sqlx-exasol)
 
 # sqlx-exasol
-A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework, based on the Exasol [Websocket API](https://github.com/exasol/websocket-api).
+A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework, based on the Exasol [Websocket API](https://github.com/exasol/websocket-api).  
 Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (now archived) [rust-exasol](https://github.com/bobozaur/rust-exasol) sync driver.
 
 **NOTE:** The driver is currently in its `alpha` stage. This will change when it's seen enough usage to be declared **stable**.
@@ -66,7 +66,7 @@ sqlx::query("INSERT INTO MY_TABLE VALUES (?, ?)")
     .await?;
 ```
 An EXPORT - IMPORT ETL data pipe. The data is always in `CSV` format and some configuration can
-be done through the [`etl::ImportBuilder`] and [`etl::ExportBuilder`] structs:
+be done through the `ImportBuilder` and `ExportBuilder` structs:
 ```rust
 use std::env;
 use futures_util::{
