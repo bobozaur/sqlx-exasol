@@ -1,3 +1,4 @@
+#[cfg(feature = "compression")]
 mod buf_reader;
 
 use std::{
