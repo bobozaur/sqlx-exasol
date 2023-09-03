@@ -9,25 +9,27 @@ use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
 use extend::WebSocketExt;
 use futures_util::{io::BufReader, Future};
 use lru::LruCache;
-use rsa::RsaPublicKey;
 use serde::de::{DeserializeOwned, IgnoredAny};
 use socket::ExaSocket;
 use sqlx_core::Error as SqlxError;
 pub use tls::WithMaybeTlsExaSocket;
 
+use self::extend::PlainWebSocket;
 use super::stream::QueryResultStream;
 #[cfg(feature = "etl")]
 use crate::responses::Hosts;
 use crate::{
     command::{Command, ExaCommand},
     error::{ExaProtocolError, ExaResultExt},
-    options::{CredentialsRef, ExaConnectOptionsRef, LoginRef, ProtocolVersion},
+    options::ExaConnectOptionsRef,
     responses::{
-        DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, PublicKey, QueryResult,
-        Results, SessionInfo,
+        DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, QueryResult, Results,
+        SessionInfo,
     },
 };
 
+/// A websocket connected to the Exasol, providing lower level
+/// interaction with the database.
 #[derive(Debug)]
 pub struct ExaWebSocket {
     pub ws: WebSocketExt,
@@ -57,41 +59,28 @@ impl ExaWebSocket {
             .await
             .to_sqlx_err()?;
 
-        let ws = WebSocketExt::new(ws);
+        let attributes = ExaAttributes {
+            compression_enabled: options.compression,
+            fetch_size: options.fetch_size,
+            encryption_enabled: with_tls,
+            statement_cache_capacity: options.statement_cache_capacity,
+            ..Default::default()
+        };
+
+        // Login is always uncompressed
+        let mut plain_ws = PlainWebSocket(ws);
+        let session_info = plain_ws.login(options).await?;
+        let ws = WebSocketExt::new(plain_ws.0, attributes.compression_enabled);
 
         let mut this = Self {
             ws,
-            attributes: ExaAttributes::default(),
+            attributes,
             pending_rollback: false,
         };
 
-        this.attributes.encryption_enabled = with_tls;
-        this.attributes.fetch_size = options.fetch_size;
-        this.attributes.statement_cache_capacity = options.statement_cache_capacity;
-        let should_compress = options.compression;
-
-        // Login is always uncompressed
-        let session_info = this.login(options).await?;
-
-        // So we set compression afterwards, if needed.
-        this.attributes.compression_enabled = should_compress;
-        this.ws = this.ws.adjust_compression(should_compress);
         this.get_attributes().await?;
 
         Ok((this, session_info))
-    }
-
-    pub(crate) async fn login(
-        &mut self,
-        mut opts: ExaConnectOptionsRef<'_>,
-    ) -> Result<SessionInfo, SqlxError> {
-        match &mut opts.login {
-            LoginRef::Credentials(creds) => self.login_creds(creds, opts.protocol_version).await?,
-            _ => self.login_token(opts.protocol_version).await?,
-        }
-
-        let cmd = (&opts).try_into()?;
-        self.get_session_info(cmd).await
     }
 
     /// Executes a [`Command`] and returns a [`QueryResultStream`].
@@ -105,6 +94,7 @@ impl ExaWebSocket {
         C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
+        // Close the previously opened result set, if any.
         if let Some(handle) = rs_handle.take() {
             self.close_result_set(handle).await?;
         }
@@ -215,6 +205,9 @@ impl ExaWebSocket {
         self.ws.close().await
     }
 
+    /// Returns the metadata related to a [`PreparedStatement`].
+    /// If the metadata is not yet cached, a request will be first
+    /// made to the database to prepare the statement and cache its metadata.
     pub async fn get_or_prepare<'a>(
         &mut self,
         cache: &'a mut LruCache<String, PreparedStatement>,
@@ -335,33 +328,6 @@ impl ExaWebSocket {
 
     pub fn socket_addr(&self) -> SocketAddr {
         self.ws.socket_addr()
-    }
-
-    async fn login_creds(
-        &mut self,
-        credentials: &mut CredentialsRef<'_>,
-        protocol_version: ProtocolVersion,
-    ) -> Result<(), SqlxError> {
-        let key = self.get_public_key(protocol_version).await?;
-        credentials.encrypt_password(&key)?;
-        Ok(())
-    }
-
-    async fn login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), SqlxError> {
-        let cmd = ExaCommand::new_login_token(protocol_version).try_into()?;
-        self.send_cmd_ignore_response(cmd).await
-    }
-
-    async fn get_public_key(
-        &mut self,
-        protocol_version: ProtocolVersion,
-    ) -> Result<RsaPublicKey, SqlxError> {
-        let cmd = ExaCommand::new_login(protocol_version).try_into()?;
-        self.send_and_recv::<PublicKey>(cmd).await.map(From::from)
-    }
-
-    async fn get_session_info(&mut self, cmd: Command) -> Result<SessionInfo, SqlxError> {
-        self.send_and_recv(cmd).await
     }
 
     /// Utility method for when the `response_data` field of the [`Response`] is not of any

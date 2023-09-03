@@ -28,6 +28,7 @@ use crate::{
     responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
 };
 
+/// A connection to the Exasol database.
 #[derive(Debug)]
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
@@ -38,10 +39,12 @@ pub struct ExaConnection {
 }
 
 impl ExaConnection {
+    /// Returns the socket address that we're connected to.
     pub fn socket_addr(&self) -> SocketAddr {
         self.ws.socket_addr()
     }
 
+    /// Returns a reference of the [`ExaAttributes`] used in this connection.
     pub fn attributes(&self) -> &ExaAttributes {
         &self.ws.attributes
     }
@@ -63,6 +66,7 @@ impl ExaConnection {
         self.ws.set_attributes().await
     }
 
+    /// Returns a reference to the [`SessionInfo`] related to this connection.
     pub fn session_info(&self) -> &SessionInfo {
         &self.session_info
     }
