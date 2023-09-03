@@ -4,7 +4,7 @@ use serde::Deserialize;
 use sqlx_core::error::{self, ErrorKind};
 
 /// An error directly issued by the Exasol database.
-/// Represents the [`super::Response::Error`] variant.
+// Represents the [`super::Response::Error`] variant.
 #[derive(Debug, Deserialize)]
 pub struct ExaDatabaseError {
     text: String,

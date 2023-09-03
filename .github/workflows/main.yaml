@@ -109,6 +109,6 @@ jobs:
 
       - name: ETL tests
         run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features etl,compression -- --ignored --nocapture  --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_native_tls,compression -- --ignored --nocapture  --test-threads 4
-          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl_rustls,compression -- --ignored --nocapture --test-threads 4
+          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
+          DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
