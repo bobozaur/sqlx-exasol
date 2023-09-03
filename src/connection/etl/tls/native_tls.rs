@@ -142,7 +142,7 @@ impl<T> ExaResultExt<T> for Result<T, native_tls::Error> {
     }
 }
 
-impl<T, S> ExaResultExt<T> for Result<T, native_tls::HandshakeError<S>> {
+impl<T, S> ExaResultExt<T> for Result<T, HandshakeError<S>> {
     fn to_sqlx_err(self) -> Result<T, SqlxError> {
         self.map_err(|_| SqlxError::Tls("native_tls handshake error".into()))
     }
