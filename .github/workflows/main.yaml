@@ -63,10 +63,7 @@ jobs:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: |
-          --privileged
-          --memory=2g
-          --memory-swap=4g
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -100,10 +97,7 @@ jobs:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: |
-          --privileged
-          --memory=2g
-          --memory-swap=4g
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -134,10 +128,7 @@ jobs:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: |
-          --privileged
-          --memory=2g
-          --memory-swap=4g
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -174,10 +165,7 @@ jobs:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: |
-          --privileged
-          --memory=2g
-          --memory-swap=4g
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
