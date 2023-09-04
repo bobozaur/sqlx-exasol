@@ -11,7 +11,7 @@ exclude = ["tests/*"]
 categories = ["database"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["etl"]
 
 [features]
 # ############################################

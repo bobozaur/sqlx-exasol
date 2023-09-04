@@ -179,7 +179,6 @@ impl Migrate for ExaConnection {
             tx.commit().await?;
 
             let elapsed = start.elapsed();
-            let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
 
             let query_str = r#"
                 UPDATE "_sqlx_migrations" 
@@ -188,7 +187,7 @@ impl Migrate for ExaConnection {
                 "#;
 
             let _ = query(query_str)
-                .bind(nanos)
+                .bind(elapsed.as_nanos())
                 .bind(migration.version)
                 .execute(self)
                 .await?;

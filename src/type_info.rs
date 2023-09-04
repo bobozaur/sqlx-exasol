@@ -328,6 +328,9 @@ impl Decimal {
     pub const MAX_16BIT_PRECISION: u32 = 5;
     pub const MAX_32BIT_PRECISION: u32 = 10;
     pub const MAX_64BIT_PRECISION: u32 = 20;
+    /// It's fine for this precision to "overflow".
+    /// The database will simply reject values too large.
+    pub const MAX_128BIT_PRECISION: u32 = 39;
     pub const MAX_PRECISION: u32 = 36;
     pub const MAX_SCALE: u32 = 35;
 
