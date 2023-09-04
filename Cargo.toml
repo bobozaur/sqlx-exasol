@@ -1,6 +1,6 @@
 [package]
 name = "sqlx-exasol"
-version = "0.7.1-alpha-1"
+version = "0.7.1-alpha-2"
 edition = "2021"
 authors = ["bobozaur"]
 description = "Exasol driver for the SQLx framework."
