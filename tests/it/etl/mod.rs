@@ -318,7 +318,7 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
 }
 
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
-    let mut buf = [0; 10240];
+    let mut buf = vec![0; 65536].into_boxed_slice();
     let mut read = 1;
 
     while read > 0 {
