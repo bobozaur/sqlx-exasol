@@ -7,7 +7,17 @@ Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (no
 
 **MSRV**: `1.70`
 
-**NOTE:** The driver is currently in its `alpha` stage. This will change when it's seen enough usage to be declared **stable**.
+## Note
+>The driver is currently in its `alpha` stage. This will change when it's seen some usage and seems mature enough to be declared **stable**.  
+>
+> For simplicity, the crate's version resembles the `sqlx` version it is based on so that managing dependencies is simpler.   
+>
+> With that in mind, please favor using a fixed version of `sqlx` and `sqlx-exasol` in `Cargo.toml` to avoid issues, such as:
+> ```toml
+> sqlx = "=0.7.1"
+> sqlx-exasol = "=0.7.1-alpha-2"
+> ```
+
 
 ## Crate Features flags
 * `etl` - enables the usage ETL jobs without TLS encryption.
