@@ -11,7 +11,7 @@ exclude = ["tests/*"]
 categories = ["database"]
 
 [package.metadata.docs.rs]
-features = ["etl"]
+features = ["etl", "chrono", "rust_decimal", "uuid"]
 
 [features]
 # ############################################

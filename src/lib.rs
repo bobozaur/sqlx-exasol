@@ -1,4 +1,5 @@
 //! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.  
+//!
 //! **MSRV**: `1.70`
 //!
 //! ## Crate Features flags
@@ -28,6 +29,66 @@
 //!     - array-like parameter binding in queries, thanks to the columnar nature of the Exasol
 //!       database
 //!     - performant & parallelizable ETL IMPORT/EXPORT jobs in CSV format through HTTP Transport
+//!
+//! ## Connection string
+//! The connection string is expected to be an URL with the `exa://` scheme, e.g:
+//! `exa://sys:exasol@localhost:8563`.
+//!
+//! Connection options:
+//! - `access-token`: Use an access token for login instead of credentials
+//! - `refresh-token`: Use a refresh token for login instead of credentials
+//! - `protocol-version`: Select a specific protocol version to use
+//! - `ssl-mode`: Select a specifc SSL behavior. See: [`ExaSslMode`]
+//! - `ssl-ca`: Use a certain certificate authority
+//! - `ssl-cert`: Use a certain certificate
+//! - `ssl-key`: Use a specific SSL key
+//! - `statement-cache-capacity`: Set the capacity of the LRU prepared statements cache
+//! - `fetch-size`: Sets the size of data chunks when retrieving result sets
+//! - `query-timeout`: The query timeout amount, in seconds. 0 means no timeout
+//! - `compression`: Boolean representing whether use compression
+//! - `feedback-interval`: Interval at which Exasol sends keep-alive Pong frames
+//!  
+//! [`ExaConnectOptions`] can also be constructed in code through its builder method,
+//! which returns a [`ExaConnectOptionsBuilder`].
+//!
+//! ## Supported Rust datatypes
+//! - [`bool`]
+//! - [`u8`], [`u16`], [`u32`], [`u64`], [`u128`]
+//! - [`i8`], [`i16`], [`i32`], [`i64`], [`i128`]
+//! - [`f32`], [`f64`]
+//! - [`str`], [`String`], [`std::borrow::Cow<str>`]
+//! - `chrono` feature: [`chrono::DateTime<Utc>`], [`chrono::DateTime<Utc>`],
+//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`], [`Months`] (analog of
+//!   [`chrono::Months`])
+//! - `uuid` feature: [`uuid::Uuid`]
+//! - `rust_decimal` feature: [`rust_decimal::Decimal`]
+//!
+//! ## Supported Exasol datatypes:
+//! All Exasol datatypes are supported in some way, also depdending on the additional types used
+//! through feature flags.
+//!
+//! The [GEOMETRY](https://docs.exasol.com/db/latest/sql_references/geospatialdata/geospatialdata_overview.htm) type does not have
+//! a correspondent Rust datatype. One could be introduced in future versions of the driver, but for
+//! now they can be encoded/decoded to [`String`].
+//!
+//! ## HTTP Transport
+//! Functionality that allows performant data import/export by creation of one-shot HTTP servers
+//! to which Exasol connects to (at most one per node), thus balancing the load.
+//!
+//! The data is always in `CSV` format and job configuration can be done through the
+//! [`etl::ImportBuilder`] and [`etl::ExportBuilder`] structs. The workers implement
+//! [`futures_io::AsyncWrite`] and [`futures_io::AsyncRead`] respectively, providing great
+//! flexibility in terms of how the data is processed.
+//!
+//! The general flow of an ETL job is:
+//! - build the job through [`etl::ImportBuilder`] or [`etl::ExportBuilder`]
+//! - concurrently wait on the query execution future (typically from the main thread) and on worker
+//!   operations (async tasks can be spawned in multi-threaded runtimes to further parallelize the
+//!   workload).
+//! - when all the workers are done (readers reach EOF, while writers require an explicit `close()`)
+//!   the job ends and the query execution future returns.
+//! - an error/timeout issue results in the query execution future or a worker throwing an error,
+//!   therefore consider joining the tasks and aborting them if an error is thrown somewhere.
 //!
 //! ## Examples
 //! Using the driver for regular database interactions:
@@ -77,8 +138,7 @@
 //! # };
 //! ```
 //!
-//! An EXPORT - IMPORT ETL data pipe. The data is always in `CSV` format and some configuration can
-//! be done through the [`etl::ImportBuilder`] and [`etl::ExportBuilder`] structs:
+//! An EXPORT - IMPORT ETL data pipe.
 //! ```rust,no_run
 //! # #[cfg(feature = "etl")] {
 //! use std::env;
