@@ -11,8 +11,8 @@ Please find the documentation [here](https://docs.rs/sqlx-exasol/latest/sqlx_exa
 
 ## Crate Features flags
 * `etl` - enables the usage ETL jobs without TLS encryption.
-* `etl_native_tls` - enables the `etl` feature and adds TLS encryption through `native-tls`
-* `etl_rustls` - enables the `etl` feature and adds TLS encryption through `rustls`
+* `etl_native_tls` - enables the `etl` feature and adds TLS encryption through `native-tls`<sup>[1](#etl_tls)</sup>
+* `etl_rustls` - enables the `etl` feature and adds TLS encryption through `rustls`<sup>[1](#etl_tls)</sup>
 * `compression` - enables compression support (for both connections and ETL jobs)
 * `uuid` - enables support for the `uuid` crate
 * `chrono` - enables support for the `chrono` crate types
@@ -23,11 +23,11 @@ Please find the documentation [here](https://docs.rs/sqlx-exasol/latest/sqlx_exa
 Since the driver is used through `sqlx` and it implements the interfaces there, it can do all the drivers
 shipped with `sqlx` do, with some caveats:
 - Limitations
-    - no compile-time query check support<sup>[1](#sqlx_limitations)</sup>
-    - no `sqlx-cli` support<sup>[1](#sqlx_limitations)</sup>
-    - no locking migrations support<sup>[2](#no_locks)</sup>
-    - no column nullability checks<sup>[3](#nullable)</sup>
-    - apart from migrations, only a single query per statement is allowed (including in fixtures)<sup>[4](#single_query)</sup>
+    - no compile-time query check support<sup>[2](#sqlx_limitations)</sup>
+    - no `sqlx-cli` support<sup>[2](#sqlx_limitations)</sup>
+    - no locking migrations support<sup>[3](#no_locks)</sup>
+    - no column nullability checks<sup>[4](#nullable)</sup>
+    - apart from migrations, only a single query per statement is allowed (including in fixtures)<sup>[5](#single_query)</sup>
 
 - Additions
     - array-like parameter binding in queries, thanks to the columnar nature of the Exasol database
@@ -76,7 +76,7 @@ use futures_util::{
 use sqlx_exasol::{etl::*, *};
 
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
-    let mut buf = vec![0; 65536].into_boxed_slice();
+    let mut buf = vec![0; 5120].into_boxed_slice();
     let mut read = 1;
 
     while read > 0 {
@@ -130,10 +130,14 @@ Contributions to this repository, unless explicitly stated otherwise, will be co
 Bugs/issues encountered can be opened [here](https://github.com/bobozaur/sqlx-exasol/issues)
 
 ## Footnotes
-<a name="sqlx_limitations">1</a>: The `sqlx` API powering the compile-time query checks and the `sqlx-cli` tool is not public. Even if it were, the drivers that are incorporated into `sqlx` are hardcoded in the part of the code that handles the compile-time driver decision logic. <br>The main problem from what I can gather is that there's no easy way of defining a plugin system in Rust at the moment, hence the hardcoding.  
+<a name= etl_tls>1</a>: There is unfortunately no way to automagically choose a crate's feature flags based on its dependencies feature flags, so the TLS backend has
+to be manually selected. While nothing prevents you from using, say `native-tls` with `sqlx` and `rustls` with Exasol ETL jobs, it might be best to avoid compiling
+two different TLS backends. Therefore, consider choosing the `sqlx` and `sqlx-exasol` feature flags in a consistent manner.
 
-<a name="no_locks">2</a>: Exasol has no advisory or database locks and simple, unnested, transactions are unfortunately not enough to define a mechanism so that concurrent migrations do not collide. This does **not** pose a problem when migrations are run sequentially or do not act on the same database objects.  
+<a name="sqlx_limitations">2</a>: The `sqlx` API powering the compile-time query checks and the `sqlx-cli` tool is not public. Even if it were, the drivers that are incorporated into `sqlx` are hardcoded in the part of the code that handles the compile-time driver decision logic. <br>The main problem from what I can gather is that there's no easy way of defining a plugin system in Rust at the moment, hence the hardcoding.  
 
-<a name="nullable">3</a>: Exasol does not provide the information of whether a column is nullable or not, so the driver cannot implicitly decide whether a `NULL` value can go into a certain database column or not until it actually tries.   
+<a name="no_locks">3</a>: Exasol has no advisory or database locks and simple, unnested, transactions are unfortunately not enough to define a mechanism so that concurrent migrations do not collide. This does **not** pose a problem when migrations are run sequentially or do not act on the same database objects.  
 
-<a name="single_query">4</a>: I didn't even know this (as I never even thought of doing it), but `sqlx` allows running multiple queries in a single statement. Due to limitations with the websocket API this driver is based on, `sqlx-exasol` can only run one query at a time. <br>This is only circumvented in migrations through a somewhat limited, convoluted and possibly costly workaround that tries to split queries by `;`, which does not make it applicable for runtime queries at all.<br> 
+<a name="nullable">4</a>: Exasol does not provide the information of whether a column is nullable or not, so the driver cannot implicitly decide whether a `NULL` value can go into a certain database column or not until it actually tries.   
+
+<a name="single_query">5</a>: I didn't even know this (as I never even thought of doing it), but `sqlx` allows running multiple queries in a single statement. Due to limitations with the websocket API this driver is based on, `sqlx-exasol` can only run one query at a time. <br>This is only circumvented in migrations through a somewhat limited, convoluted and possibly costly workaround that tries to split queries by `;`, which does not make it applicable for runtime queries at all.<br>
