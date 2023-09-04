@@ -1,18 +1,30 @@
-[![Crates.io](https://img.shields.io/crates/v/sqlx-exasol.svg)](https://crates.io/crates/sqlx-exasol)
+[![Crates.io](https://img.shields.io/crates/v/sqlx-exasol)](https://crates.io/crates/sqlx-exasol)
+[![Docs.rs](https://img.shields.io/docsrs/sqlx-exasol)](https://docs.rs/sqlx-exasol/latest/sqlx_exasol/)
 
 # sqlx-exasol
 A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework, based on the Exasol [Websocket API](https://github.com/exasol/websocket-api).  
 Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (now archived) [rust-exasol](https://github.com/bobozaur/rust-exasol) sync driver.
 
-**NOTE:** The driver is currently in its `alpha` stage. This will change when it's seen enough usage to be declared **stable**.
-
-Please find the documentation [here](https://docs.rs/sqlx-exasol/latest/sqlx_exasol/).  
 **MSRV**: `1.70`
+
+## Note
+>The driver is currently in its `alpha` stage. This will change when it's seen some usage and seems mature enough to be declared **stable**.  
+>
+> For simplicity, the crate's version resembles the `sqlx` version it is based on so that managing dependencies is simpler.   
+>
+> With that in mind, please favor using a fixed version of `sqlx` and `sqlx-exasol` in `Cargo.toml` to avoid issues, such as:
+> ```toml
+> sqlx = "=0.7.1"
+> sqlx-exasol = "=0.7.1-alpha-2"
+> ```
+
 
 ## Crate Features flags
 * `etl` - enables the usage ETL jobs without TLS encryption.
-* `etl_native_tls` - enables the `etl` feature and adds TLS encryption through `native-tls`<sup>[1](#etl_tls)</sup>
-* `etl_rustls` - enables the `etl` feature and adds TLS encryption through `rustls`<sup>[1](#etl_tls)</sup>
+* `etl_native_tls` - enables the `etl` feature and adds TLS encryption through
+  `native-tls`<sup>[1](#etl_tls)</sup>
+* `etl_rustls` - enables the `etl` feature and adds TLS encryption through
+  `rustls`<sup>[1](#etl_tls)</sup>
 * `compression` - enables compression support (for both connections and ETL jobs)
 * `uuid` - enables support for the `uuid` crate
 * `chrono` - enables support for the `chrono` crate types
@@ -20,18 +32,24 @@ Please find the documentation [here](https://docs.rs/sqlx-exasol/latest/sqlx_exa
 * `migrate` - enables the use of migrations and testing (just like in other `sqlx` drivers).
 
 ## Comparison to native sqlx drivers
-Since the driver is used through `sqlx` and it implements the interfaces there, it can do all the drivers
-shipped with `sqlx` do, with some caveats:
+Since the driver is used through `sqlx` and it implements the interfaces there, it can do all
+the drivers shipped with `sqlx` do, with some caveats:
 - Limitations
-    - no compile-time query check support<sup>[2](#sqlx_limitations)</sup>
-    - no `sqlx-cli` support<sup>[2](#sqlx_limitations)</sup>
-    - no locking migrations support<sup>[3](#no_locks)</sup>
-    - no column nullability checks<sup>[4](#nullable)</sup>
-    - apart from migrations, only a single query per statement is allowed (including in fixtures)<sup>[5](#single_query)</sup>
+    - no compile-time query check support<sup>[1](#sqlx_limitations)</sup>
+    - no `sqlx-cli` support<sup>[1](#sqlx_limitations)</sup>
+    - no locking migrations support<sup>[2](#no_locks)</sup>
+    - no column nullability checks<sup>[3](#nullable)</sup>
+    - apart from migrations, only a single query per statement is allowed (including in
+      fixtures)<sup>[4](#single_query)</sup>
 
 - Additions
-    - array-like parameter binding in queries, thanks to the columnar nature of the Exasol database
+    - array-like parameter binding in queries, thanks to the columnar nature of the Exasol
+      database
     - performant & parallelizable ETL IMPORT/EXPORT jobs in CSV format through HTTP Transport
+
+## Connection string
+The connection string is expected to be an URL with the `exa://` scheme, e.g:
+`exa://sys:exasol@localhost:8563`.
 
 ## Examples
 Using the driver for regular database interactions:
@@ -46,6 +64,7 @@ sqlx::query("CREATE SCHEMA RUST_DOC_TEST")
     .execute(&mut *con)
     .await?;
 ```
+
 Array-like parameter binding, also featuring the [`ExaIter`] adapter.
 An important thing to note is that the parameter sets must be of equal length,
 otherwise an error is thrown:
@@ -65,8 +84,8 @@ sqlx::query("INSERT INTO MY_TABLE VALUES (?, ?)")
     .execute(&mut *con)
     .await?;
 ```
-An EXPORT - IMPORT ETL data pipe. The data is always in `CSV` format and some configuration can
-be done through the `ImportBuilder` and `ExportBuilder` structs:
+
+An EXPORT - IMPORT ETL data pipe.
 ```rust
 use std::env;
 use futures_util::{

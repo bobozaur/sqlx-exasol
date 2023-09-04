@@ -63,7 +63,7 @@ jobs:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: --privileged
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -97,7 +97,7 @@ jobs:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: --privileged
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -121,14 +121,14 @@ jobs:
 
   etl_tests:
     name: ETL tests
-    needs: clippy
+    needs: sqlx_tests
     runs-on: ubuntu-20.04
     services:
       exasol:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: --privileged
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -156,16 +156,16 @@ jobs:
         timeout-minutes: 15
         run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
 
-  tls_etl_tests:
-    name: TLS ETL tests
-    needs: clippy
+  etl_test_tls_connection:
+    name: Test non-TLS ETL with TLS connection (should fail)
+    needs: tls_sqlx_tests
     runs-on: ubuntu-20.04
     services:
       exasol:
         image: exasol/docker-db:7.0.22
         ports:
           - 8563:8563
-        options: --privileged
+        options: --privileged --memory=2g --memory-swap=4g
     steps:
       - uses: actions/checkout@v3
 
@@ -184,9 +184,59 @@ jobs:
       - name: ETL without TLS feature but TLS connection (should fail)
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
 
+  etl_test_native_tls:
+    name: Test TLS ETL with native-tls
+    needs: etl_test_tls_connection
+    runs-on: ubuntu-20.04
+    services:
+      exasol:
+        image: exasol/docker-db:7.0.22
+        ports:
+          - 8563:8563
+        options: --privileged --memory=2g --memory-swap=4g
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Create connection strings
+        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+
       - name: Native-TLS ETL tests
         timeout-minutes: 15
         run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
+
+  etl_test_rustls:
+    name: Test TLS ETL with rustls
+    needs: etl_test_tls_connection
+    runs-on: ubuntu-20.04
+    services:
+      exasol:
+        image: exasol/docker-db:7.0.22
+        ports:
+          - 8563:8563
+        options: --privileged --memory=2g --memory-swap=4g
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Create connection strings
+        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
 
       - name: Rustls ETL tests
         timeout-minutes: 15
