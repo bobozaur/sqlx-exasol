@@ -27,9 +27,20 @@ jobs:
           repository: Exasol/docker-db
           ref: "7.0.22"
 
+      - name: Restore Exasol Image Cache if it exists
+        id: cache-docker-exasol
+        uses: actions/cache@v3
+        with:
+          path: ci/cache/docker/exasol
+          key: cache-docker-exasol-7.0.22
+
+      - name: Update Exasol Image Cache if cache miss
+        if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
+        run: docker pull exasol/docker-db:7.0.22 && mkdir -p ci/cache/docker/exasol && docker image save exasol/docker-db:7.0.22 --output ./ci/cache/docker/exasol/exasol-7.0.22.tar
+
       - name: Set up Exasol Cluster
         run: |
-          docker pull exasol/docker-db:7.0.22
+          docker image load --input ./ci/cache/docker/exasol/exasol-7.0.22.tar
           pipenv install -r exadt_requirements.txt
           pipenv run ./exadt create-cluster --root ~/sqlx/ --create-root sqlx
           pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
@@ -42,7 +53,20 @@ jobs:
           echo "NO_TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=disabled" >> $GITHUB_ENV
           echo "TLS_URL=exa://sys:exasol@$EXA_IP:8563" >> $GITHUB_ENV
 
+      - name: Restore Rust Image Cache if it exists
+        id: cache-docker-rust
+        uses: actions/cache@v3
+        with:
+          path: ci/cache/docker/rust
+          key: cache-docker-rust-1.72.0
+
+      - name: Update Rust Image Cache if cache miss
+        if: steps.cache-docker-rust.outputs.cache-hit != 'true'
+        run: docker pull rust:1.72.0 && mkdir -p ci/cache/docker/rust && docker image save rust:1.72.0 --output ./ci/cache/docker/rust/rust-1.72.0.tar
+
       - uses: actions/checkout@v3
 
       - name: Run tests
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
+        run: |
+          docker image load --input ./ci/cache/docker/rust/rust-1.72.0.tar
+          docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
