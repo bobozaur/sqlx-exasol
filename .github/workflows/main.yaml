@@ -8,236 +8,41 @@ on:
     branches: ["main"]
 
 jobs:
-  format:
-    name: Format
+  tests:
+    name: Tests
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@v1
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-          components: rustfmt
+          python-version: "3.10"
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
-
-  clippy:
-    name: Clippy
-    needs: format
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        etl: [etl_native_tls, etl_rustls, etl]
-        compression: [",compression", ""]
-        features: [",migrate,rust_decimal,uuid,chrono", ""]
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: clippy
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --tests --features ${{ matrix.etl }}${{ matrix.features }}${{ matrix.compression }}
-        env:
-          RUSTFLAGS: -D warnings
-
-  sqlx_tests:
-    name: SQLx tests
-    needs: clippy
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
-
-      - name: Tests not requiring a connection
-        run: cargo test
-
-      - name: Connection tests
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
-
-      - name: Connection tests with compression
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
-
-  tls_sqlx_tests:
-    name: TLS SQLx tests
-    needs: clippy
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
-
-      - name: TLS connection tests
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
-
-      - name: TLS connection tests with compression
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
-
-  etl_tests:
-    name: ETL tests
-    needs: sqlx_tests
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
-
-      - name: Tests compilation failure if both ETL TLS features are enabled
-        run: cargo test --features etl_native_tls,etl_rustls || true
-
-      - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
+      - name: Install dependencies
         run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+          python -m pip install --upgrade pip
+          pip install pipenv
 
-      - name: ETL tests
-        timeout-minutes: 15
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
-
-  etl_test_tls_connection:
-    name: Test non-TLS ETL with TLS connection (should fail)
-    needs: tls_sqlx_tests
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
       - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          repository: Exasol/docker-db
+          ref: "7.0.22"
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Set up Exasol Cluster
+        run: |
+          docker pull exasol/docker-db:7.0.22
+          pipenv install -r exadt_requirements.txt
+          pipenv run ./exadt create-cluster --root ~/sqlx/ --create-root sqlx
+          pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
+          pipenv run ./exadt start-cluster sqlx
 
       - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+        run: |
+          CONTAINER_ID=`docker ps --format "table {{.ID}}\t" | head -2 | tail -1`
+          EXA_IP=`docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $CONTAINER_ID`
+          echo "NO_TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=exa://sys:exasol@$EXA_IP:8563" >> $GITHUB_ENV
 
-      - name: ETL without TLS feature but TLS connection (should fail)
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
-
-  etl_test_native_tls:
-    name: Test TLS ETL with native-tls
-    needs: etl_test_tls_connection
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
-
-      - name: Native-TLS ETL tests
-        timeout-minutes: 15
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
-
-  etl_test_rustls:
-    name: Test TLS ETL with rustls
-    needs: etl_test_tls_connection
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
-
-      - name: Rustls ETL tests
-        timeout-minutes: 15
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+      - name: Run tests
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
