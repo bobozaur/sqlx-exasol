@@ -8,19 +8,75 @@ on:
     branches: ["main"]
 
 jobs:
-  tests:
-    name: Tests
+  format:
+    name: Format
     runs-on: ubuntu-20.04
     steps:
-      - name: Diskspace before freeing
-        run: df . -h
+      - uses: actions/checkout@v3
 
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rustfmt
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  clippy:
+    name: Clippy
+    needs: format
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        etl: [etl_native_tls, etl_rustls, etl]
+        compression: [",compression", ""]
+        features: [",migrate,rust_decimal,uuid,chrono", ""]
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --tests --features ${{ matrix.etl }}${{ matrix.features }}${{ matrix.compression }}
+        env:
+          RUSTFLAGS: -D warnings
+
+  tests:
+    name: Tests
+    needs: clippy
+    runs-on: ubuntu-20.04
+
+    steps:
       - name: Free disk space
         run: |
+          echo "Getting initial free space"
+          df . -h
+
           sudo rm -rf \
             /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup \
-            /usr/lib/jvm || true
+            /usr/lib/jvm /opt/hostedtoolcache/CodeQL || true
+
+          echo "Removed language runtimes"
+          df . -h
+
+          sudo docker image prune --all --force
+
+          echo "Removed docker images"
+          df . -h
 
           # sudo apt install aptitude -y >/dev/null 2>&1
           # sudo aptitude purge aria2 ansible azure-cli shellcheck rpm xorriso zsync \
@@ -43,8 +99,36 @@ jobs:
           # sudo apt-get autoremove -y >/dev/null 2>&1
           # sudo apt-get autoclean -y >/dev/null 2>&1
 
-      - name: Diskspace after freeing
-        run: df . -h
+          # echo "Removed software packages"
+          # df . -h
+
+      - name: Restore Exasol image
+        id: cache-docker-exasol
+        uses: actions/cache@v3
+        with:
+          path: ~/ci/cache/docker
+          key: cache-docker-exasol-7.0.22
+
+      - name: Store Exasol image if cache miss
+        if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
+        run: docker pull exasol/docker-db:7.0.22 && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:7.0.22 --output ~/ci/cache/docker/exasol-7.0.22.tar
+
+      - name: Load Exasol image
+        run: docker image load --input ~/ci/cache/docker/exasol-7.0.22.tar
+
+      - name: Restore Rust Image
+        id: cache-docker-rust
+        uses: actions/cache@v3
+        with:
+          path: ~/ci/cache/docker
+          key: cache-docker-rust-1.72.0
+
+      - name: Store Rust image if cache miss
+        if: steps.cache-docker-rust.outputs.cache-hit != 'true'
+        run: docker pull rust:1.72.0 && mkdir -p ~/ci/cache/docker && docker image save rust:1.72.0 --output ~/ci/cache/docker/rust-1.72.0.tar
+
+      - name: Load Rust image
+        run: docker image load --input ~/ci/cache/docker/rust-1.72.0.tar
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v3
@@ -61,22 +145,10 @@ jobs:
           repository: Exasol/docker-db
           ref: "7.0.22"
 
-      - name: Restore Exasol Image Cache if it exists
-        id: cache-docker-exasol
-        uses: actions/cache@v3
-        with:
-          path: ~/ci/cache/docker
-          key: cache-docker-exasol-7.0.22
-
-      - name: Update Exasol Image Cache if cache miss
-        if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
-        run: docker pull exasol/docker-db:7.0.22 && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:7.0.22 --output ~/ci/cache/docker/exasol-7.0.22.tar
-
       - name: Set up Exasol Cluster
         run: |
-          docker image load --input ~/ci/cache/docker/exasol-7.0.22.tar
           pipenv install -r exadt_requirements.txt
-          pipenv run ./exadt create-cluster --root ~/sqlx/ --create-root sqlx
+          pipenv run ./exadt create-cluster --root ~/sqlx --create-root sqlx
           pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
           pipenv run ./exadt start-cluster sqlx
 
@@ -85,22 +157,42 @@ jobs:
           CONTAINER_ID=`docker ps --format "table {{.ID}}\t" | head -2 | tail -1`
           EXA_IP=`docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $CONTAINER_ID`
           echo "NO_TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@$EXA_IP:8563" >> $GITHUB_ENV
-
-      - name: Restore Rust Image Cache if it exists
-        id: cache-docker-rust
-        uses: actions/cache@v3
-        with:
-          path: ~/ci/cache/docker
-          key: cache-docker-rust-1.72.0
-
-      - name: Update Rust Image Cache if cache miss
-        if: steps.cache-docker-rust.outputs.cache-hit != 'true'
-        run: docker pull rust:1.72.0 && mkdir -p ~/ci/cache/docker && docker image save rust:1.72.0 --output ~/ci/cache/docker/rust-1.72.0.tar
+          echo "TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=required" >> $GITHUB_ENV
 
       - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Run tests
+      - name: Connection tests
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+
+      - name: Connection tests with compression
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression -- --ignored --nocapture
+
+      - name: TLS connection tests
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+
+      - name: TLS connection tests with compression
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression -- --ignored --nocapture
+
+      - name: Tests compilation failure if both ETL TLS features are enabled
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features etl_native_tls,etl_rustls || true
+
+      - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
         run: |
-          docker image load --input ~/ci/cache/docker/rust/rust-1.72.0.tar
-          docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
+          docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
+          docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+
+      - name: ETL tests
+        timeout-minutes: 15
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+
+      - name: ETL without TLS feature but TLS connection (should fail)
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+
+      - name: Native-TLS ETL tests
+        timeout-minutes: 15
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
+
+      - name: Rustls ETL tests
+        timeout-minutes: 15
+        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
