@@ -32,9 +32,10 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        etl: [etl_native_tls, etl_rustls, etl]
-        compression: [",compression", ""]
-        features: [",migrate,rust_decimal,uuid,chrono", ""]
+        etl: ["--features etl_native_tls", "--features etl_rustls", "--features etl", ""]
+        compression: ["--features compression", ""]
+        migrate: ["--features migrate", ""]
+        extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
     steps:
       - uses: actions/checkout@v3
 
@@ -50,7 +51,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --tests --features ${{ matrix.etl }}${{ matrix.features }}${{ matrix.compression }}
+          args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
         env:
           RUSTFLAGS: -D warnings
 
@@ -116,20 +117,6 @@ jobs:
       - name: Load Exasol image
         run: docker image load --input ~/ci/cache/docker/exasol-7.0.22.tar
 
-      - name: Restore Rust Image
-        id: cache-docker-rust
-        uses: actions/cache@v3
-        with:
-          path: ~/ci/cache/docker
-          key: cache-docker-rust-1.72.0
-
-      - name: Store Rust image if cache miss
-        if: steps.cache-docker-rust.outputs.cache-hit != 'true'
-        run: docker pull rust:1.72.0 && mkdir -p ~/ci/cache/docker && docker image save rust:1.72.0 --output ~/ci/cache/docker/rust-1.72.0.tar
-
-      - name: Load Rust image
-        run: docker image load --input ~/ci/cache/docker/rust-1.72.0.tar
-
       - name: Set up Python 3.10
         uses: actions/setup-python@v3
         with:
@@ -154,45 +141,46 @@ jobs:
 
       - name: Create connection strings
         run: |
-          CONTAINER_ID=`docker ps --format "table {{.ID}}\t" | head -2 | tail -1`
-          EXA_IP=`docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $CONTAINER_ID`
-          echo "NO_TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@$EXA_IP:8563?ssl-mode=required" >> $GITHUB_ENV
+          echo "NO_TLS_URL=exa://sys:exasol@10.10.10.11..13:8563?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=exa://sys:exasol@10.10.10.11..13:8563?ssl-mode=required" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v3
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.70.0
+          override: true
+
       - uses: Swatinem/rust-cache@v2
 
+      - uses: actions/checkout@v3
+
       - name: Connection tests
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
       - name: Connection tests with compression
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression -- --ignored --nocapture
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
 
       - name: TLS connection tests
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
 
       - name: TLS connection tests with compression
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression -- --ignored --nocapture
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
 
       - name: Tests compilation failure if both ETL TLS features are enabled
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features etl_native_tls,etl_rustls || true
-
-      - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
-        run: |
-          docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
-          docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls,etl_rustls || true
 
       - name: ETL tests
         timeout-minutes: 15
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
 
       - name: ETL without TLS feature but TLS connection (should fail)
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.NO_TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
 
       - name: Native-TLS ETL tests
         timeout-minutes: 15
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
 
       - name: Rustls ETL tests
         timeout-minutes: 15
-        run: docker run --rm --network=sqlx_priv -e DATABASE_URL=${{ env.TLS_URL }} -v "$PWD":/usr/src/sqlx-exasol -w /usr/src/sqlx-exasol rust:1.72.0 cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
