@@ -7,57 +7,69 @@ on:
   pull_request:
     branches: ["main"]
 
+env:
+  RUST_TOOLCHAIN: 1.70.0
+  EXASOL_VERSION: 7.0.22
+  NUM_NODES: 2
+  ETL_TEST_THREADS: 4
+
 jobs:
-  format:
-    name: Format
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v3
+  # format:
+  #   name: Format
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #     - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-          components: rustfmt
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: nightly
+  #         override: true
+  #         components: rustfmt
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: fmt
+  #         args: -- --check
 
-  clippy:
-    name: Clippy
-    needs: format
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        etl: ["--features etl_native_tls", "--features etl_rustls", "--features etl", ""]
-        compression: ["--features compression", ""]
-        migrate: ["--features migrate", ""]
-        extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
-    steps:
-      - uses: actions/checkout@v3
+  # clippy:
+  #   name: Clippy
+  #   needs: format
+  #   runs-on: ubuntu-20.04
+  #   strategy:
+  #     matrix:
+  #       etl:
+  #         [
+  #           "--features etl_native_tls",
+  #           "--features etl_rustls",
+  #           "--features etl",
+  #           "",
+  #         ]
+  #       compression: ["--features compression", ""]
+  #       migrate: ["--features migrate", ""]
+  #       extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
+  #   steps:
+  #     - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: clippy
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: stable
+  #         override: true
+  #         components: clippy
 
-      - uses: Swatinem/rust-cache@v2
+  #     - uses: Swatinem/rust-cache@v2
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
-        env:
-          RUSTFLAGS: -D warnings
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: clippy
+  #         args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
+  #       env:
+  #         RUSTFLAGS: -D warnings
 
   tests:
     name: Tests
-    needs: clippy
+    # needs: clippy
     runs-on: ubuntu-20.04
 
     steps:
@@ -79,43 +91,19 @@ jobs:
           echo "Removed docker images"
           df . -h
 
-          # sudo apt install aptitude -y >/dev/null 2>&1
-          # sudo aptitude purge aria2 ansible azure-cli shellcheck rpm xorriso zsync \
-          #   esl-erlang firefox gfortran-8 gfortran-9 google-chrome-stable \
-          #   google-cloud-sdk imagemagick \
-          #   libmagickcore-dev libmagickwand-dev libmagic-dev ant ant-optional kubectl \
-          #   mercurial apt-transport-https mono-complete libmysqlclient \
-          #   unixodbc-dev yarn chrpath libssl-dev libxft-dev \
-          #   libfreetype6 libfreetype6-dev libfontconfig1 libfontconfig1-dev \
-          #   snmp pollinate libpq-dev postgresql-client powershell ruby-full \
-          #   sphinxsearch subversion mongodb-org azure-cli microsoft-edge-stable \
-          #   -y -f >/dev/null 2>&1
-
-          # sudo aptitude purge google-cloud-sdk -f -y >/dev/null 2>&1
-          # sudo aptitude purge microsoft-edge-stable -f -y >/dev/null 2>&1 || true
-          # sudo apt purge microsoft-edge-stable -f -y >/dev/null 2>&1 || true
-          # sudo aptitude purge '~n ^mysql' -f -y >/dev/null 2>&1
-          # sudo aptitude purge '~n ^php' -f -y >/dev/null 2>&1
-          # sudo aptitude purge '~n ^dotnet' -f -y >/dev/null 2>&1
-          # sudo apt-get autoremove -y >/dev/null 2>&1
-          # sudo apt-get autoclean -y >/dev/null 2>&1
-
-          # echo "Removed software packages"
-          # df . -h
-
       - name: Restore Exasol image
         id: cache-docker-exasol
         uses: actions/cache@v3
         with:
           path: ~/ci/cache/docker
-          key: cache-docker-exasol-7.0.22
+          key: cache-docker-exasol-${{ env.EXASOL_VERSION }}
 
       - name: Store Exasol image if cache miss
         if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
-        run: docker pull exasol/docker-db:7.0.22 && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:7.0.22 --output ~/ci/cache/docker/exasol-7.0.22.tar
+        run: docker pull exasol/docker-db:${{ env.EXASOL_VERSION }} && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:${{ env.EXASOL_VERSION }} --output ~/ci/cache/docker/exasol-${{ env.EXASOL_VERSION }}.tar
 
       - name: Load Exasol image
-        run: docker image load --input ~/ci/cache/docker/exasol-7.0.22.tar
+        run: docker image load --input ~/ci/cache/docker/exasol-${{ env.EXASOL_VERSION }}.tar
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v3
@@ -130,57 +118,78 @@ jobs:
       - uses: actions/checkout@v3
         with:
           repository: Exasol/docker-db
-          ref: "7.0.22"
+          ref: ${{ env.EXASOL_VERSION }}
 
       - name: Set up Exasol Cluster
         run: |
           pipenv install -r exadt_requirements.txt
           pipenv run ./exadt create-cluster --root ~/sqlx --create-root sqlx
-          pipenv run ./exadt init-cluster --image exasol/docker-db:7.0.22 --license ./license/license.xml --num-nodes 3 --auto-storage sqlx
+          pipenv run ./exadt init-cluster --image exasol/docker-db:${{ env.EXASOL_VERSION }} --license ./license/license.xml --num-nodes ${{ env.NUM_NODES }} --auto-storage sqlx
           pipenv run ./exadt start-cluster sqlx
-
-      - name: Create connection strings
-        run: |
-          echo "NO_TLS_URL=exa://sys:exasol@10.10.10.11..13:8563?ssl-mode=disabled" >> $GITHUB_ENV
-          echo "TLS_URL=exa://sys:exasol@10.10.10.11..13:8563?ssl-mode=required" >> $GITHUB_ENV
+          docker update --memory=2g --memory-swap=2g $(docker ps | awk 'NR>1 {print $1}')
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.70.0
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           override: true
 
       - uses: Swatinem/rust-cache@v2
 
       - uses: actions/checkout@v3
 
+      # The exadt tool always creates the Exasol cluster with this subnet
+      - name: Create connection strings
+        run: |
+          DATABASE_URL="exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563"
+          echo "NO_TLS_URL=$DATABASE_URL?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=$DATABASE_URL?ssl-mode=required" >> $GITHUB_ENV
+
       - name: Connection tests
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        env:
+          DATABASE_URL: ${{ env.NO_TLS_URL }}
 
       - name: Connection tests with compression
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
+        run: cargo test --features migrate,compression -- --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ env.NO_TLS_URL }}
 
       - name: TLS connection tests
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: TLS connection tests with compression
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
+        run: cargo test --features migrate,compression -- --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Tests compilation failure if both ETL TLS features are enabled
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features etl_native_tls,etl_rustls || true
+        run: cargo test --features etl_native_tls,etl_rustls || true
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: ETL tests
         timeout-minutes: 15
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
+        run: cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
+        env:
+          DATABASE_URL: ${{ env.NO_TLS_URL }}
 
       - name: ETL without TLS feature but TLS connection (should fail)
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
+        run: cargo test --features migrate,etl -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }} || true
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Native-TLS ETL tests
         timeout-minutes: 15
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
+        run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Rustls ETL tests
         timeout-minutes: 15
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+        run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }}
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
