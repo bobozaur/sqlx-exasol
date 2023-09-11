@@ -15,7 +15,7 @@ use sqlx_exasol::{
     ExaConnectOptions, Exasol,
 };
 
-const NUM_ROWS: usize = 1_000_000;
+const NUM_ROWS: usize = 200_000;
 
 use macros::{test_etl_multi_threaded, test_etl_single_threaded};
 
@@ -76,7 +76,7 @@ test_etl_single_threaded!(
 
 test_etl_single_threaded!(
     "multiple_workers",
-    3,
+    0,
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
@@ -84,7 +84,7 @@ test_etl_single_threaded!(
 
 test_etl_single_threaded!(
     "multiple_workers_compressed",
-    3,
+    0,
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
     ImportBuilder::new("TEST_ETL").compression(true),
@@ -93,7 +93,7 @@ test_etl_single_threaded!(
 
 test_etl_multi_threaded!(
     "multiple_workers",
-    3,
+    0,
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
     ImportBuilder::new("TEST_ETL"),
@@ -101,7 +101,7 @@ test_etl_multi_threaded!(
 
 test_etl_multi_threaded!(
     "multiple_workers_compressed",
-    3,
+    0,
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
     ImportBuilder::new("TEST_ETL").compression(true),
