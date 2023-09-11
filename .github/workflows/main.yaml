@@ -12,7 +12,7 @@ env:
   EXASOL_VERSION: 7.0.22
   NUM_NODES: 2
   ETL_TEST_THREADS: 4
-  ETL_JOB_TIMEOUT: 10
+  ETL_JOB_TIMEOUT: ${{ 10 }}
 
 jobs:
   # format:
