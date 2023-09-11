@@ -12,6 +12,7 @@ env:
   EXASOL_VERSION: 7.0.22
   NUM_NODES: 2
   ETL_TEST_THREADS: 4
+  ETL_JOB_TIMEOUT: 10
 
 jobs:
   # format:
@@ -172,7 +173,7 @@ jobs:
           DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: ETL tests
-        timeout-minutes: 15
+        timeout-minutes: ${{ env.ETL_JOB_TIMEOUT }}
         run: cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
         env:
           DATABASE_URL: ${{ env.NO_TLS_URL }}
@@ -183,13 +184,13 @@ jobs:
           DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Native-TLS ETL tests
-        timeout-minutes: 15
+        timeout-minutes: ${{ env.ETL_JOB_TIMEOUT }}
         run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
         env:
           DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Rustls ETL tests
-        timeout-minutes: 15
+        timeout-minutes: ${{ env.ETL_JOB_TIMEOUT }}
         run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }}
         env:
           DATABASE_URL: ${{ env.TLS_URL }}
