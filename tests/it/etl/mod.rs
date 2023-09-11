@@ -15,7 +15,7 @@ use sqlx_exasol::{
     ExaConnectOptions, Exasol,
 };
 
-const NUM_ROWS: usize = 200_000;
+const NUM_ROWS: usize = 1_000_000;
 
 use macros::{test_etl_multi_threaded, test_etl_single_threaded};
 

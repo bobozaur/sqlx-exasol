@@ -1,11 +1,11 @@
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io::{Read, Result as IoResult},
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
-use futures_io::{AsyncRead, AsyncWrite};
+use futures_io::{AsyncBufRead, AsyncRead, AsyncWrite, IoSliceMut};
 use futures_util::io::BufReader;
 use pin_project::pin_project;
 
@@ -45,6 +45,28 @@ impl AsyncRead for ExportReader {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
+        let mut rem = ready!(self.as_mut().poll_fill_buf(cx))?;
+        let nread = rem.read(buf)?;
+        self.consume(nread);
+
+        Poll::Ready(Ok(nread))
+    }
+
+    fn poll_read_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> Poll<IoResult<usize>> {
+        let mut rem = ready!(self.as_mut().poll_fill_buf(cx))?;
+        let nread = rem.read_vectored(bufs)?;
+        self.consume(nread);
+
+        Poll::Ready(Ok(nread))
+    }
+}
+
+impl AsyncBufRead for ExportReader {
+    fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
         loop {
             let mut this = self.as_mut().project();
 
@@ -77,10 +99,10 @@ impl AsyncRead for ExportReader {
 
                 ReaderState::ReadData => {
                     if *this.chunk_size > 0 {
-                        let max_read = buf.len().min(*this.chunk_size);
-                        let num_bytes = ready!(this.socket.poll_read(cx, &mut buf[..max_read]))?;
-                        *this.chunk_size -= num_bytes;
-                        return Poll::Ready(Ok(num_bytes));
+                        let this = self.get_mut();
+                        let buf = ready!(Pin::new(&mut this.socket).poll_fill_buf(cx))?;
+                        let max_read = buf.len().min(this.chunk_size);
+                        return Poll::Ready(Ok(&buf[..max_read]));
                     }
 
                     *this.state = ReaderState::ExpectDataCR;
@@ -122,14 +144,23 @@ impl AsyncRead for ExportReader {
                     // EOF is reached after writing the HTTP response.
                     let socket = this.socket.as_mut();
                     ready!(socket.poll_send_static(cx, Self::RESPONSE, offset))?;
+                    *this.state = ReaderState::End;
+                }
 
+                ReaderState::End => {
                     // We flush to ensure that all data has reached Exasol
                     // and the reader can finish or even be dropped.
                     ready!(this.socket.poll_flush(cx))?;
-                    return Poll::Ready(Ok(0));
+                    return Poll::Ready(Ok(&[]));
                 }
             };
         }
+    }
+
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        let this = self.project();
+        this.socket.consume(amt);
+        *this.chunk_size -= amt;
     }
 }
 
@@ -144,4 +175,5 @@ enum ReaderState {
     ExpectEndCR,
     ExpectEndLF,
     WriteResponse(usize),
+    End,
 }

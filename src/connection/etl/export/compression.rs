@@ -1,6 +1,3 @@
-#[cfg(feature = "compression")]
-mod buf_reader;
-
 use std::{
     io::Result as IoResult,
     pin::Pin,
@@ -9,8 +6,6 @@ use std::{
 
 #[cfg(feature = "compression")]
 use async_compression::futures::bufread::GzipDecoder;
-#[cfg(feature = "compression")]
-use buf_reader::ExportBufReader;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
 
@@ -25,7 +20,7 @@ use crate::connection::websocket::socket::ExaSocket;
 pub enum ExaExportReader {
     Plain(#[pin] ExportReader),
     #[cfg(feature = "compression")]
-    Compressed(#[pin] GzipDecoder<ExportBufReader>),
+    Compressed(#[pin] GzipDecoder<ExportReader>),
 }
 
 impl ExaExportReader {
@@ -34,7 +29,11 @@ impl ExaExportReader {
 
         match with_compression {
             #[cfg(feature = "compression")]
-            true => Self::Compressed(GzipDecoder::new(ExportBufReader::new(reader))),
+            true => {
+                let mut reader = GzipDecoder::new(reader);
+                reader.multiple_members(true);
+                Self::Compressed(reader)
+            }
             _ => Self::Plain(reader),
         }
     }
@@ -48,7 +47,7 @@ impl AsyncRead for ExaExportReader {
     ) -> Poll<IoResult<usize>> {
         match self.project() {
             #[cfg(feature = "compression")]
-            ExaExportReaderProj::Compressed(r) => r.poll_read(cx, buf),
+            ExaExportReaderProj::Compressed(mut r) => r.as_mut().poll_read(cx, buf),
             ExaExportReaderProj::Plain(r) => r.poll_read(cx, buf),
         }
     }
