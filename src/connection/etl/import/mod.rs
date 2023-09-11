@@ -40,7 +40,7 @@ use super::SocketFuture;
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaImportProj)]
 pub enum ExaImport {
-    Setup(#[pin] SocketFuture, usize, bool),
+    Setup(SocketFuture, usize, bool),
     Writing(#[pin] ExaImportWriter),
 }
 
@@ -62,7 +62,7 @@ impl AsyncWrite for ExaImport {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaImportProj::Writing(s) => return s.poll_write(cx, buf),
-                ExaImportProj::Setup(mut f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -74,7 +74,7 @@ impl AsyncWrite for ExaImport {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaImportProj::Writing(s) => return s.poll_flush(cx),
-                ExaImportProj::Setup(mut f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -86,7 +86,7 @@ impl AsyncWrite for ExaImport {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaImportProj::Writing(s) => return s.poll_close(cx),
-                ExaImportProj::Setup(mut f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
