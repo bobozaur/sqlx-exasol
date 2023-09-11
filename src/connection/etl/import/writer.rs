@@ -127,7 +127,7 @@ impl AsyncWrite for ImportWriter {
         buf: &[u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let mut this = self.as_mut().project();
+            let this = self.as_mut().project();
             match this.state {
                 WriterState::SkipRequest(buf) => {
                     ready!(this.socket.poll_until_double_crlf(cx, buf))?;
@@ -136,10 +136,10 @@ impl AsyncWrite for ImportWriter {
 
                 WriterState::WriteResponse(offset) => {
                     ready!(this.socket.poll_send_static(cx, Self::RESPONSE, offset))?;
-                    *this.state = WriterState::BufferData;
+                    *this.state = WriterState::Buffer;
                 }
 
-                WriterState::BufferData => {
+                WriterState::Buffer => {
                     // We keep extra capacity for the chunk terminator
                     let buf_free = this.buf.capacity() - this.buf.len() - 2;
 
@@ -155,16 +155,22 @@ impl AsyncWrite for ImportWriter {
 
                 WriterState::Send => {
                     ready!(self.as_mut().poll_flush_buffer(cx))?;
-                    self.state = WriterState::BufferData;
+                    self.state = WriterState::Buffer;
                 }
 
-                WriterState::End(offset) => {
-                    let socket = this.socket.as_mut();
-                    ready!(socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
+                WriterState::EmptyChunk(offset) => {
+                    ready!(this.socket.poll_send_static(cx, Self::EMPTY_CHUNK, offset))?;
+                    *this.state = WriterState::Ending;
+                }
 
+                WriterState::Ending => {
                     // We flush to ensure that all data has reached Exasol
                     // before we signal that the write is over.
                     ready!(this.socket.poll_flush(cx))?;
+                    *this.state = WriterState::Ended;
+                }
+
+                WriterState::Ended => {
                     return Poll::Ready(Ok(0));
                 }
             };
@@ -177,18 +183,21 @@ impl AsyncWrite for ImportWriter {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        ready!(self.as_mut().poll_flush(cx))?;
-
-        // Ensure all preliminary steps and buffered data sending are done.
-        // Upon reaching the buffering data state, this becomes a no-op.
-        if !matches!(self.state, WriterState::End(_)) {
-            ready!(self.as_mut().poll_write(cx, &[]))?;
-            self.state = WriterState::End(0);
+        // Ensure the state machine was driven through its states correctly.
+        loop {
+            match self.state {
+                // There's buffered data, so we must send it.
+                WriterState::Buffer if !self.is_empty() => self.state = WriterState::Send,
+                // No data is buffered, so we can end the HTTP response with the empty chunk.
+                WriterState::Buffer if self.is_empty() => self.state = WriterState::EmptyChunk(0),
+                // Empty chunk sent and flushed.
+                WriterState::Ended => break,
+                // We're in some other state, so do a dummy write to drive the state machine.
+                _ => ready!(self.as_mut().poll_write(cx, &[])).map(|_| ())?,
+            };
         }
 
-        // We write another empty buffer to artifically trigger the WriterState::End flow.
-        ready!(self.as_mut().poll_write(cx, &[]))?;
-
+        // Close socket.
         self.project().socket.poll_close(cx)
     }
 }
@@ -197,7 +206,9 @@ impl AsyncWrite for ImportWriter {
 enum WriterState {
     SkipRequest([u8; 4]),
     WriteResponse(usize),
-    BufferData,
+    Buffer,
     Send,
-    End(usize),
+    EmptyChunk(usize),
+    Ending,
+    Ended,
 }
