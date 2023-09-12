@@ -9,11 +9,11 @@ use futures_util::io::BufReader;
 
 use crate::{connection::websocket::socket::ExaSocket, etl::error::ExaEtlError};
 
-impl EtlWorker for BufReader<ExaSocket> {}
+impl EtlBufReader for BufReader<ExaSocket> {}
 
-/// Trait implemented for ETL IO workers, providing common methods
-/// useful for both IMPORT and EXPORT operations.
-pub trait EtlWorker: AsyncBufRead + AsyncRead + AsyncWrite {
+/// Trait to extend the [`BufReader`] type, providing common methods useful
+/// for both IMPORT and EXPORT operations.
+pub trait EtlBufReader: AsyncBufRead + AsyncRead + AsyncWrite {
     const DOUBLE_CR_LF: &'static [u8; 4] = b"\r\n\r\n";
     const CR: u8 = b'\r';
     const LF: u8 = b'\n';

@@ -11,7 +11,7 @@ use pin_project::pin_project;
 
 use crate::{
     connection::websocket::socket::ExaSocket,
-    etl::{error::ExaEtlError, traits::EtlWorker},
+    etl::{error::ExaEtlError, traits::EtlBufReader},
 };
 
 /// Low-level async reader used to read chunked HTTP data from Exasol.
