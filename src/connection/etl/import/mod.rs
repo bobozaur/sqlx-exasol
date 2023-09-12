@@ -29,18 +29,22 @@ use super::SocketFuture;
 ///
 /// # IMPORTANT
 ///
-/// In multi-node environments closing a writer without writing any data to it can
-/// cause issues - Exasol does not immediately start reading data from all workers but rather seems
-/// to start them in somewhat of an "on-demand" fashion.
+/// In multi-node environments closing a writer without writing any data to it can, and most likely
+/// will, cause issues; Exasol does not immediately start reading data from all workers but rather
+/// seems to connect to them sequentially after each of them provides some data.
 ///
-/// If you close a worker before Exasol tries to use it a connection error will be returned by the
-/// ETL driving future.
+/// From what I could gather from the logs, providing no data (although the request is
+/// responded to gracefully) makes Exasol retry the connection. With these workers being
+/// implemented as one-shot HTTP servers, there's nothing to connect to anymore. Even if it
+/// were, it's possible the connection would just be re-attempted over and over since we'd still
+/// be sending no data (I did not test this, though).
 ///
-/// It's best not to create excess writers that you don't plan on using to avoid such issues.
+/// Since not using one or more import workers seems to be treated as an error on Exasol's side,
+/// it's best not to create excess writers that you don't plan on using to avoid such issues.
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaImportProj)]
 pub enum ExaImport {
-    Setup(#[pin] SocketFuture, usize, bool),
+    Setup(SocketFuture, usize, bool),
     Writing(#[pin] ExaImportWriter),
 }
 
@@ -62,7 +66,7 @@ impl AsyncWrite for ExaImport {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaImportProj::Writing(s) => return s.poll_write(cx, buf),
-                ExaImportProj::Setup(mut f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -74,7 +78,7 @@ impl AsyncWrite for ExaImport {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaImportProj::Writing(s) => return s.poll_flush(cx),
-                ExaImportProj::Setup(mut f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -86,7 +90,7 @@ impl AsyncWrite for ExaImport {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaImportProj::Writing(s) => return s.poll_close(cx),
-                ExaImportProj::Setup(mut f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);

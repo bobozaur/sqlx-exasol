@@ -36,16 +36,6 @@ use crate::{
 /// Exasol responds with an internal address that can be used in query.
 const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 
-/// We do some implicit buffering as we have to parse
-/// the incoming HTTP request and ignore the headers, read chunk sizes, etc.
-///
-/// We do that by reading one byte at a time and keeping track
-/// of what we read to walk through states.
-///
-/// It would be higly inefficient to read a single byte from the
-/// TCP stream every time, so we instead use a small [`futures_util::io::BufReader`].
-const IMPLICIT_BUFFER_CAP: usize = 128;
-
 /// Type of the future that executes the ETL job.
 type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;

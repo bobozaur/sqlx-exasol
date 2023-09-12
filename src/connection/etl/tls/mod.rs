@@ -4,17 +4,17 @@ mod native_tls;
 mod rustls;
 mod sync_socket;
 
-#[cfg(feature = "etl_native_tls")]
-use native_tls::NativeTlsSocketSpawner;
 use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
 use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
     RsaPrivateKey,
 };
-#[cfg(feature = "etl_rustls")]
-use rustls::RustlsSocketSpawner;
 use sqlx_core::error::Error as SqlxError;
 
+#[cfg(feature = "etl_native_tls")]
+use self::native_tls::NativeTlsSocketSpawner;
+#[cfg(feature = "etl_rustls")]
+use self::rustls::RustlsSocketSpawner;
 use super::traits::WithSocketMaker;
 use crate::error::ExaResultExt;
 

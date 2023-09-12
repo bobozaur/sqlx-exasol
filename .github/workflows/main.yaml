@@ -7,6 +7,13 @@ on:
   pull_request:
     branches: ["main"]
 
+env:
+  RUST_TOOLCHAIN: 1.70.0
+  EXASOL_VERSION: 7.0.22
+  NUM_NODES: 2
+  ETL_TEST_THREADS: 4
+  ETL_JOB_TIMEOUT: 10
+
 jobs:
   format:
     name: Format
@@ -32,9 +39,16 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        etl: [etl_native_tls, etl_rustls, etl]
-        compression: [",compression", ""]
-        features: [",migrate,rust_decimal,uuid,chrono", ""]
+        etl:
+          [
+            "--features etl_native_tls",
+            "--features etl_rustls",
+            "--features etl",
+            "",
+          ]
+        compression: ["--features compression", ""]
+        migrate: ["--features migrate", ""]
+        extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
     steps:
       - uses: actions/checkout@v3
 
@@ -50,194 +64,133 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --tests --features ${{ matrix.etl }}${{ matrix.features }}${{ matrix.compression }}
+          args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
         env:
           RUSTFLAGS: -D warnings
 
-  sqlx_tests:
-    name: SQLx tests
+  tests:
+    name: Tests
     needs: clippy
     runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
+
     steps:
+      - name: Free disk space
+        run: |
+          echo "Getting initial free space"
+          df . -h
+
+          sudo rm -rf \
+            /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup \
+            /usr/lib/jvm /opt/hostedtoolcache/CodeQL || true
+
+          echo "Removed language runtimes"
+          df . -h
+
+          sudo docker image prune --all --force
+
+          echo "Removed docker images"
+          df . -h
+
+      - name: Restore Exasol image
+        id: cache-docker-exasol
+        uses: actions/cache@v3
+        with:
+          path: ~/ci/cache/docker
+          key: cache-docker-exasol-${{ env.EXASOL_VERSION }}
+
+      - name: Store Exasol image if cache miss
+        if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
+        run: docker pull exasol/docker-db:${{ env.EXASOL_VERSION }} && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:${{ env.EXASOL_VERSION }} --output ~/ci/cache/docker/exasol-${{ env.EXASOL_VERSION }}.tar
+
+      - name: Load Exasol image
+        run: docker image load --input ~/ci/cache/docker/exasol-${{ env.EXASOL_VERSION }}.tar
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+
       - uses: actions/checkout@v3
+        with:
+          repository: Exasol/docker-db
+          ref: ${{ env.EXASOL_VERSION }}
+
+      - name: Set up Exasol Cluster
+        run: |
+          pipenv install -r exadt_requirements.txt
+          pipenv run ./exadt create-cluster --root ~/sqlx --create-root sqlx
+          pipenv run ./exadt init-cluster --image exasol/docker-db:${{ env.EXASOL_VERSION }} --license ./license/license.xml --num-nodes ${{ env.NUM_NODES }} --auto-storage sqlx
+          pipenv run ./exadt start-cluster sqlx
+          # docker update --memory=2g --memory-swap=2g $(docker ps | awk 'NR>1 {print $1}')
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           override: true
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Create connection strings
-        run: echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
+      - uses: actions/checkout@v3
 
-      - name: Tests not requiring a connection
-        run: cargo test
+      # The exadt tool always creates the Exasol cluster with this subnet
+      - name: Create connection strings
+        run: |
+          DATABASE_URL="exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563"
+          echo "NO_TLS_URL=$DATABASE_URL?ssl-mode=disabled" >> $GITHUB_ENV
+          echo "TLS_URL=$DATABASE_URL?ssl-mode=required" >> $GITHUB_ENV
 
       - name: Connection tests
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        env:
+          DATABASE_URL: ${{ env.NO_TLS_URL }}
 
       - name: Connection tests with compression
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
-
-  tls_sqlx_tests:
-    name: TLS SQLx tests
-    needs: clippy
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+        run: cargo test --features migrate,compression -- --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ env.NO_TLS_URL }}
 
       - name: TLS connection tests
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: TLS connection tests with compression
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression -- --ignored --nocapture
-
-  etl_tests:
-    name: ETL tests
-    needs: sqlx_tests
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "NO_TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=disabled" >> $GITHUB_ENV
+        run: cargo test --features migrate,compression -- --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Tests compilation failure if both ETL TLS features are enabled
         run: cargo test --features etl_native_tls,etl_rustls || true
-
-      - name: ETL non-TLS tests when TLS feature is provided (resorts to non-TLS)
-        run: |
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads 4
-          DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: ETL tests
-        timeout-minutes: 15
-        run: DATABASE_URL=${{ env.NO_TLS_URL }} cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads 4
-
-  etl_test_tls_connection:
-    name: Test non-TLS ETL with TLS connection (should fail)
-    needs: tls_sqlx_tests
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
+        run: cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
+        env:
+          DATABASE_URL: ${{ env.NO_TLS_URL }}
 
       - name: ETL without TLS feature but TLS connection (should fail)
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,etl -- --ignored --nocapture --test-threads 4 || true
-
-  etl_test_native_tls:
-    name: Test TLS ETL with native-tls
-    needs: etl_test_tls_connection
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+        run: cargo test --features migrate,etl -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }} || true
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Native-TLS ETL tests
-        timeout-minutes: 15
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads 4
-
-  etl_test_rustls:
-    name: Test TLS ETL with rustls
-    needs: etl_test_tls_connection
-    runs-on: ubuntu-20.04
-    services:
-      exasol:
-        image: exasol/docker-db:7.0.22
-        ports:
-          - 8563:8563
-        options: --privileged --memory=2g --memory-swap=4g
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create connection strings
-        run: echo "TLS_URL=exa://sys:exasol@127.0.0.1:8563?ssl-mode=required" >> $GITHUB_ENV
+        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
+        run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}
 
       - name: Rustls ETL tests
-        timeout-minutes: 15
-        run: DATABASE_URL=${{ env.TLS_URL }} cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads 4
+        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
+        run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }}
+        env:
+          DATABASE_URL: ${{ env.TLS_URL }}

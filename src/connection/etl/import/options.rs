@@ -29,8 +29,6 @@ pub struct ImportBuilder<'a> {
 }
 
 impl<'a> ImportBuilder<'a> {
-    const DEFAULT_BUF_SIZE: usize = 65536;
-
     pub fn new(dest_table: &'a str) -> Self {
         Self {
             num_writers: 0,

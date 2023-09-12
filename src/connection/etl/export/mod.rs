@@ -26,7 +26,7 @@ use super::SocketFuture;
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaExportProj)]
 pub enum ExaExport {
-    Setup(#[pin] SocketFuture, bool),
+    Setup(SocketFuture, usize, bool),
     Reading(#[pin] ExaExportReader),
 }
 
@@ -46,12 +46,12 @@ impl AsyncRead for ExaExport {
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let (socket, with_compression) = match self.as_mut().project() {
+            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
                 ExaExportProj::Reading(r) => return r.poll_read(cx, buf),
-                ExaExportProj::Setup(mut f, c) => (ready!(f.poll_unpin(cx))?, *c),
+                ExaExportProj::Setup(f, b, c) => (ready!(f.poll_unpin(cx))?, *b, *c),
             };
 
-            let reader = ExaExportReader::new(socket, with_compression);
+            let reader = ExaExportReader::new(socket, buffer_size, with_compression);
             self.set(Self::Reading(reader));
         }
     }
