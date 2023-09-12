@@ -23,6 +23,12 @@ use super::SocketFuture;
 ///
 /// The type implements [`AsyncRead`] and is [`Send`] and [`Sync`] so it can be freely used
 /// in any data pipeline.
+///
+/// # IMPORTANT
+///
+/// Dropping a reader before it returned EOF will result in the `EXPORT` query returning an error.
+/// While not necessarily a problem if you're not interested in the whole export, there's no way to
+/// circumvent that other than handling the error in code.
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaExportProj)]
 pub enum ExaExport {

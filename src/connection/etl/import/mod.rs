@@ -27,6 +27,36 @@ use super::SocketFuture;
 /// The only caveat is that you *MUST* call [`futures_util::AsyncWriteExt::close`] on each worker to
 /// finalize the import. Otherwise, Exasol keeps on expecting data.
 ///
+/// # Atomicity
+///
+/// `IMPORT` jobs are not atomic by themselves. If an error occurs during the data ingestion,
+/// some of the data might be already sent and written in the database. However, since
+/// `IMPORT` is fundamentally just a query, it *can* be transactional. Therefore,
+/// beginning a transaction and passing that to the [`ImportBuilder::build`] method will result in
+/// the import job needing to be explicitly committed:
+///
+/// ```rust,no_run
+/// use std::env;
+///
+/// use sqlx_exasol::{etl::*, *};
+///
+/// # async {
+/// #
+/// let pool = ExaPool::connect(&env::var("DATABASE_URL").unwrap()).await?;
+/// let mut con = pool.acquire().await?;
+/// let mut tx = con.begin().await?;
+///
+/// let (query_fut, writers) = ImportBuilder::new("SOME_TABLE").build(&mut *tx).await?;
+///
+/// // concurrently use the writers and await the query future
+///
+/// tx.commit().await?;
+/// #
+/// # let res: anyhow::Result<()> = Ok(());
+/// # res
+/// # };
+/// ```
+///
 /// # IMPORTANT
 ///
 /// In multi-node environments closing a writer without writing any data to it can, and most likely

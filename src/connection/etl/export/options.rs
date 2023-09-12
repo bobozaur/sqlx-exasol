@@ -10,6 +10,8 @@ use crate::{
 };
 
 /// A builder for an ETL EXPORT job.
+/// Calling [`build().await`] will ouput a future that drives the EXPORT query execution and a
+/// [`Vec<ExaReader>`] which must be concurrently used to read data from Exasol.
 #[derive(Debug)]
 pub struct ExportBuilder<'a> {
     num_readers: usize,
