@@ -103,87 +103,110 @@ impl ExaConnectOptionsBuilder {
         Ok(opts)
     }
 
-    pub fn host(&mut self, host: String) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn host(mut self, host: String) -> Self {
         self.host = Some(host);
         self
     }
 
-    pub fn port(&mut self, port: u16) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self
     }
 
-    pub fn ssl_mode(&mut self, ssl_mode: ExaSslMode) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn ssl_mode(mut self, ssl_mode: ExaSslMode) -> Self {
         self.ssl_mode = ssl_mode;
         self
     }
 
-    pub fn ssl_ca(&mut self, ssl_ca: CertificateInput) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn ssl_ca(mut self, ssl_ca: CertificateInput) -> Self {
         self.ssl_ca = Some(ssl_ca);
         self
     }
 
-    pub fn ssl_client_cert(&mut self, ssl_client_cert: CertificateInput) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn ssl_client_cert(mut self, ssl_client_cert: CertificateInput) -> Self {
         self.ssl_client_cert = Some(ssl_client_cert);
         self
     }
 
-    pub fn ssl_client_key(&mut self, ssl_client_key: CertificateInput) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn ssl_client_key(mut self, ssl_client_key: CertificateInput) -> Self {
         self.ssl_client_key = Some(ssl_client_key);
         self
     }
 
-    pub fn statement_cache_capacity(&mut self, capacity: NonZeroUsize) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn statement_cache_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.statement_cache_capacity = capacity;
         self
     }
 
-    pub fn username(&mut self, username: String) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn username(mut self, username: String) -> Self {
         self.username = Some(username);
         self
     }
 
-    pub fn password(&mut self, password: String) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn password(mut self, password: String) -> Self {
         self.password = Some(password);
         self
     }
 
-    pub fn access_token(&mut self, access_token: String) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn access_token(mut self, access_token: String) -> Self {
         self.access_token = Some(access_token);
         self
     }
 
-    pub fn refresh_token(&mut self, refresh_token: String) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn refresh_token(mut self, refresh_token: String) -> Self {
         self.refresh_token = Some(refresh_token);
         self
     }
 
-    pub fn schema(&mut self, schema: String) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn schema(mut self, schema: String) -> Self {
         self.schema = Some(schema);
         self
     }
 
-    pub fn protocol_version(&mut self, protocol_version: ProtocolVersion) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn protocol_version(mut self, protocol_version: ProtocolVersion) -> Self {
         self.protocol_version = protocol_version;
         self
     }
 
-    pub fn fetch_size(&mut self, fetch_size: usize) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn fetch_size(mut self, fetch_size: usize) -> Self {
         self.fetch_size = fetch_size;
         self
     }
 
-    pub fn query_timeout(&mut self, query_timeout: u64) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn query_timeout(mut self, query_timeout: u64) -> Self {
         self.query_timeout = query_timeout;
         self
     }
 
-    pub fn compression(&mut self, compression: bool) -> &mut Self {
-        self.compression = compression;
+    #[must_use = "call build() to get connection options"]
+    pub fn compression(mut self, compression: bool) -> Self {
+        let feature_flag = cfg!(feature = "compression");
+
+        if feature_flag && !compression {
+            tracing::warn!("compression cannot be enabled without the 'compression' feature");
+        }
+
+        self.compression = compression && feature_flag;
         self
     }
 
-    pub fn feedback_interval(&mut self, feedback_interval: u8) -> &mut Self {
+    #[must_use = "call build() to get connection options"]
+    pub fn feedback_interval(mut self, feedback_interval: u8) -> Self {
         self.feedback_interval = feedback_interval;
         self
     }

@@ -96,92 +96,92 @@ impl ConnectOptions for ExaConnectOptions {
         let mut builder = Self::builder();
 
         if let Some(host) = url.host_str() {
-            builder.host(host.to_owned());
+            builder = builder.host(host.to_owned());
         }
 
         let username = url.username();
         if !username.is_empty() {
-            builder.username(username.to_owned());
+            builder = builder.username(username.to_owned());
         }
 
         if let Some(password) = url.password() {
-            builder.password(password.to_owned());
+            builder = builder.password(password.to_owned());
         }
 
         if let Some(port) = url.port() {
-            builder.port(port);
+            builder = builder.port(port);
         }
 
         let opt_schema = url.path_segments().into_iter().flatten().next();
 
         if let Some(schema) = opt_schema {
-            builder.schema(schema.to_owned());
+            builder = builder.schema(schema.to_owned());
         }
 
         for (name, value) in url.query_pairs() {
             match name.as_ref() {
-                PARAM_ACCESS_TOKEN => builder.access_token(value.to_string()),
+                PARAM_ACCESS_TOKEN => builder = builder.access_token(value.to_string()),
 
-                PARAM_REFRESH_TOKEN => builder.refresh_token(value.to_string()),
+                PARAM_REFRESH_TOKEN => builder = builder.refresh_token(value.to_string()),
 
                 PARAM_PROTOCOL_VERSION => {
                     let protocol_version = value.parse::<ProtocolVersion>()?;
-                    builder.protocol_version(protocol_version)
+                    builder = builder.protocol_version(protocol_version);
                 }
 
                 PARAM_SSL_MODE => {
                     let ssl_mode = value.parse::<ExaSslMode>()?;
-                    builder.ssl_mode(ssl_mode)
+                    builder = builder.ssl_mode(ssl_mode);
                 }
 
                 PARAM_SSL_CA => {
                     let ssl_ca = CertificateInput::File(PathBuf::from(value.to_string()));
-                    builder.ssl_ca(ssl_ca)
+                    builder = builder.ssl_ca(ssl_ca);
                 }
 
                 PARAM_SSL_CERT => {
                     let ssl_cert = CertificateInput::File(PathBuf::from(value.to_string()));
-                    builder.ssl_client_cert(ssl_cert)
+                    builder = builder.ssl_client_cert(ssl_cert);
                 }
 
                 PARAM_SSL_KEY => {
                     let ssl_key = CertificateInput::File(PathBuf::from(value.to_string()));
-                    builder.ssl_client_key(ssl_key)
+                    builder = builder.ssl_client_key(ssl_key);
                 }
 
                 PARAM_CACHE_CAP => {
                     let capacity = value
                         .parse::<NonZeroUsize>()
                         .map_err(|_| ExaConfigError::InvalidParameter(PARAM_CACHE_CAP))?;
-                    builder.statement_cache_capacity(capacity)
+                    builder = builder.statement_cache_capacity(capacity);
                 }
 
                 PARAM_FETCH_SIZE => {
                     let fetch_size = value
                         .parse::<usize>()
                         .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FETCH_SIZE))?;
-                    builder.fetch_size(fetch_size)
+                    builder = builder.fetch_size(fetch_size);
                 }
 
                 PARAM_QUERY_TIMEOUT => {
                     let query_timeout = value
                         .parse::<u64>()
                         .map_err(|_| ExaConfigError::InvalidParameter(PARAM_QUERY_TIMEOUT))?;
-                    builder.query_timeout(query_timeout)
+                    builder = builder.query_timeout(query_timeout);
                 }
 
                 PARAM_COMPRESSION => {
                     let compression = value
                         .parse::<bool>()
                         .map_err(|_| ExaConfigError::InvalidParameter(PARAM_COMPRESSION))?;
-                    builder.compression(compression)
+                    builder = builder.compression(compression);
                 }
 
                 PARAM_FEEDBACK_INTERVAL => {
                     let feedback_interval = value
                         .parse::<u8>()
                         .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FEEDBACK_INTERVAL))?;
-                    builder.feedback_interval(feedback_interval)
+                    builder = builder.feedback_interval(feedback_interval);
                 }
 
                 _ => {
