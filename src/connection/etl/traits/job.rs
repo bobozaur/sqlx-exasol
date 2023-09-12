@@ -5,6 +5,8 @@ use crate::etl::SocketFuture;
 /// Interface for ETL jobs, containing common functionality
 /// required by both IMPORT/EXPORT operations.
 pub trait EtlJob: Send + Sync {
+    const DEFAULT_BUF_SIZE: usize = 65536;
+
     const GZ_FILE_EXT: &'static str = "gz";
     const CSV_FILE_EXT: &'static str = "csv";
 

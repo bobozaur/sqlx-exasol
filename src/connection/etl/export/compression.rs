@@ -24,8 +24,8 @@ pub enum ExaExportReader {
 }
 
 impl ExaExportReader {
-    pub fn new(socket: ExaSocket, with_compression: bool) -> Self {
-        let reader = ExportReader::new(socket);
+    pub fn new(socket: ExaSocket, buffer_size: usize, with_compression: bool) -> Self {
+        let reader = ExportReader::new(socket, buffer_size);
 
         match with_compression {
             #[cfg(feature = "compression")]

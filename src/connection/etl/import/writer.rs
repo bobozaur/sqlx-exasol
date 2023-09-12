@@ -12,7 +12,7 @@ use pin_project::pin_project;
 
 use crate::{
     connection::websocket::socket::ExaSocket,
-    etl::{error::ExaEtlError, traits::EtlWorker, IMPLICIT_BUFFER_CAP},
+    etl::{error::ExaEtlError, traits::EtlWorker},
 };
 
 /// Low-level async writer used to send chunked HTTP data to Exasol.
@@ -30,6 +30,15 @@ pub struct ImportWriter {
 }
 
 impl ImportWriter {
+    /// We do some implicit buffering as we have to parse
+    /// the incoming HTTP request and ignore the headers, etc.
+    ///
+    /// We do that by reading one byte at a time and keeping track
+    /// of what we read to walk through states.
+    ///
+    /// It would be higly inefficient to read a single byte from the
+    /// TCP stream every time, so we instead use a small [`futures_util::io::BufReader`].
+    const IMPLICIT_BUFFER_CAP: usize = 128;
     // Consider maximum chunk size to be u64::MAX.
     // In HEX, that's 8 bytes -> 16 digits.
     // We also reserve two additional bytes for CRLF.
@@ -52,7 +61,7 @@ impl ImportWriter {
         buf[Self::CHUNK_SIZE_RESERVED - 1] = b'\n';
 
         Self {
-            socket: BufReader::with_capacity(IMPLICIT_BUFFER_CAP, socket),
+            socket: BufReader::with_capacity(Self::IMPLICIT_BUFFER_CAP, socket),
             buf,
             buf_start: None,
             buf_patched: false,

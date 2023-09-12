@@ -11,7 +11,7 @@ use pin_project::pin_project;
 
 use crate::{
     connection::websocket::socket::ExaSocket,
-    etl::{error::ExaEtlError, traits::EtlWorker, IMPLICIT_BUFFER_CAP},
+    etl::{error::ExaEtlError, traits::EtlWorker},
 };
 
 /// Low-level async reader used to read chunked HTTP data from Exasol.
@@ -30,9 +30,9 @@ impl ExportReader {
                                   Connection: close\r\n\
                                   \r\n";
 
-    pub fn new(socket: ExaSocket) -> Self {
+    pub fn new(socket: ExaSocket, buffer_size: usize) -> Self {
         Self {
-            socket: BufReader::with_capacity(IMPLICIT_BUFFER_CAP, socket),
+            socket: BufReader::with_capacity(buffer_size, socket),
             state: ReaderState::SkipRequest([0; 4]),
             chunk_size: 0,
         }
