@@ -195,7 +195,13 @@ impl ExaConnectOptionsBuilder {
 
     #[must_use = "call build() to get connection options"]
     pub fn compression(mut self, compression: bool) -> Self {
-        self.compression = compression;
+        let feature_flag = cfg!(feature = "compression");
+
+        if feature_flag && !compression {
+            tracing::warn!("compression cannot be enabled without the 'compression' feature");
+        }
+
+        self.compression = compression && feature_flag;
         self
     }
 
