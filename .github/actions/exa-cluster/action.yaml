@@ -1,0 +1,70 @@
+name: "Exasol Cluster"
+description: "Instantiates an Exasol database cluster"
+inputs:
+  exasol-version:
+    description: "Version of the Exasol database"
+    required: true
+  num-nodes:
+    description: "Number of nodes to spawn in the cluster"
+    required: true
+outputs:
+  no-tls-url:
+    description: "Connection string for the database with TLS disabled"
+    value: ${{ steps.connection-strings.outputs.no-tls-url }}
+  tls-url:
+    description: "Connection string for the database with TLS enabled"
+    value: ${{ steps.connection-strings.outputs.tls-url }}
+runs:
+  using: "composite"
+  steps:
+    - name: Restore Exasol image
+      id: cache-docker-exasol
+      uses: actions/cache@v3
+      with:
+        path: ~/ci/cache/docker
+        key: cache-docker-exasol-${{ inputs.exasol-version }}
+
+    - name: Store Exasol image if cache miss
+      if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
+      run: docker pull exasol/docker-db:${{ inputs.exasol-version }} && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:${{ inputs.exasol-version }} --output ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
+      shell: bash
+
+    - name: Load Exasol image
+      run: docker image load --input ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
+      shell: bash
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pipenv
+      shell: bash
+
+    - uses: actions/checkout@v3
+      with:
+        repository: Exasol/docker-db
+        ref: ${{ inputs.exasol-version }}
+
+    - name: Set up Exasol Cluster
+      run: |
+        pipenv install -r exadt_requirements.txt
+        pipenv run ./exadt create-cluster --root ~/sqlx --create-root sqlx
+        pipenv run ./exadt init-cluster --image exasol/docker-db:${{ inputs.exasol-version }} --license ./license/license.xml --num-nodes ${{ inputs.num-nodes }} --auto-storage sqlx
+        pipenv run ./exadt start-cluster sqlx
+      shell: bash
+
+    # The exadt tool always creates the Exasol cluster with this subnet
+    - name: Create connection strings
+      id: connection-strings
+      run: |
+        DATABASE_URL="exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563"
+        echo "no-tls-url=$DATABASE_URL?ssl-mode=disabled" >> $GITHUB_OUTPUT
+        echo "tls-url=$DATABASE_URL?ssl-mode=required" >> $GITHUB_OUTPUT
+      shell: bash
+
+    # Checkout the main repository again
+    - uses: actions/checkout@v3
