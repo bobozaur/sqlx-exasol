@@ -15,62 +15,62 @@ env:
   ETL_JOB_TIMEOUT: 10
 
 jobs:
-  # format:
-  #   name: Format
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #     - uses: actions/checkout@v3
+  format:
+    name: Format
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
 
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: nightly
-  #         override: true
-  #         components: rustfmt
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rustfmt
 
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: fmt
-  #         args: -- --check
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
 
-  # clippy:
-  #   name: Clippy
-  #   needs: format
-  #   runs-on: ubuntu-20.04
-  #   strategy:
-  #     matrix:
-  #       etl:
-  #         [
-  #           "--features etl_native_tls",
-  #           "--features etl_rustls",
-  #           "--features etl",
-  #           "",
-  #         ]
-  #       compression: ["--features compression", ""]
-  #       migrate: ["--features migrate", ""]
-  #       extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
-  #   steps:
-  #     - uses: actions/checkout@v3
+  clippy:
+    name: Clippy
+    needs: format
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        etl:
+          [
+            "--features etl_native_tls",
+            "--features etl_rustls",
+            "--features etl",
+            "",
+          ]
+        compression: ["--features compression", ""]
+        migrate: ["--features migrate", ""]
+        extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
+    steps:
+      - uses: actions/checkout@v3
 
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: stable
-  #         override: true
-  #         components: clippy
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
 
-  #     - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
 
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: clippy
-  #         args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
-  #       env:
-  #         RUSTFLAGS: -D warnings
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
+        env:
+          RUSTFLAGS: -D warnings
 
   tests:
     name: Tests
-    # needs: clippy
+    needs: clippy
     runs-on: ubuntu-20.04
 
     steps:
