@@ -11,6 +11,8 @@ use crate::{
 };
 
 /// A builder for an ETL IMPORT job.
+/// Calling [`build().await`] will ouput a future that drives the IMPORT query execution and a
+/// [`Vec<ExaWriter>`] which must be concurrently used to ingest data into Exasol.
 #[derive(Clone, Debug)]
 pub struct ImportBuilder<'a> {
     num_writers: usize,

@@ -29,6 +29,7 @@
 //!     - array-like parameter binding in queries, thanks to the columnar nature of the Exasol
 //!       database
 //!     - performant & parallelizable ETL IMPORT/EXPORT jobs in CSV format through HTTP Transport
+//!       (see the [etl] module for more details)
 //!
 //! ## Connection string
 //! The connection string is expected to be an URL with the `exa://` scheme, e.g:

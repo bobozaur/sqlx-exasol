@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
   
+- [#16](https://github.com/bobozaur/sqlx-exasol/pull/16): Added the `CHANGELOG.md` file and `etl` module level docs
 - [#10](https://github.com/bobozaur/sqlx-exasol/issues/10): Improved ExaConnectOptionsBuilder ergonomics by having its methods take `self`
 - renamed `EtlWorker` trait to `EtlBufReader`.
 - refactored `ExportReader` to implement and rely on `AsyncBufRead`.
