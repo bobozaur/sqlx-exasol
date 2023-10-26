@@ -3,6 +3,17 @@ All notable changes to this project will be documented in this file.
  
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
+
+## [0.7.1-alpha-4] - 2023-10-26
+
+### Added
+ 
+- [#18](https://github.com/bobozaur/sqlx-exasol/pull/18): `cargo check` CI jobs for Windows and MacOS.
+
+### Fixed
+
+- [#17](https://github.com/bobozaur/sqlx-exasol/issues/17) Fixed building the library after 
+[CVE-2023-43669](https://nvd.nist.gov/vuln/detail/CVE-2023-43669) update of `tungstenite` to version `0.20.1`.
  
 ## [0.7.1-alpha-3] - 2023-09-13
  

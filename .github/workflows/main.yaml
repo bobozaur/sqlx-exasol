@@ -70,6 +70,74 @@ jobs:
         env:
           RUSTFLAGS: -D warnings
 
+  check_windows:
+    name: Check Windows builds
+    needs: clippy
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        etl:
+          [
+            "--features etl_native_tls",
+            "--features etl_rustls",
+            "--features etl",
+            "",
+          ]
+        compression: ["--features compression", ""]
+        migrate: ["--features migrate", ""]
+        extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
+
+  check_mac_os:
+    name: Check MacOS builds
+    needs: clippy
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        etl:
+          [
+            "--features etl_native_tls",
+            "--features etl_rustls",
+            "--features etl",
+            "",
+          ]
+        compression: ["--features compression", ""]
+        migrate: ["--features migrate", ""]
+        extra_datatypes: ["--features rust_decimal,uuid,chrono", ""]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --tests ${{ matrix.etl }} ${{ matrix.migrate }} ${{ matrix.compression }} ${{ matrix.extra_datatypes }}
+
   connection_tests:
     name: Connection tests
     needs: clippy

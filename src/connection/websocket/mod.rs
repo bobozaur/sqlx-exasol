@@ -255,7 +255,7 @@ impl ExaWebSocket {
 
         // Run batch SQL command
         match self.send_cmd_ignore_response(cmd).await {
-            Ok(_) => return Ok(()),
+            Ok(()) => return Ok(()),
             Err(e) => tracing::warn!(
                 "failed to execute batch SQL: {e}; will attempt sequential execution"
             ),
