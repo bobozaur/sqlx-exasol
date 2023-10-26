@@ -51,6 +51,7 @@ impl<T> ExaResultExt<T> for Result<T, WsError> {
             Ok(v) => return Ok(v),
             Err(e) => e,
         };
+
         let e = match e {
             WsError::ConnectionClosed => SqlxError::Protocol(WsError::ConnectionClosed.to_string()),
             WsError::AlreadyClosed => SqlxError::Protocol(WsError::AlreadyClosed.to_string()),
@@ -63,6 +64,7 @@ impl<T> ExaResultExt<T> for Result<T, WsError> {
             WsError::Url(e) => SqlxError::Configuration(e.into()),
             WsError::Http(r) => SqlxError::Protocol(format!("HTTP error: {}", r.status())),
             WsError::HttpFormat(e) => SqlxError::Protocol(e.to_string()),
+            WsError::AttackAttempt => SqlxError::Tls(WsError::AttackAttempt.into()),
         };
 
         Err(e)

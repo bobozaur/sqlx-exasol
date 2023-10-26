@@ -50,6 +50,7 @@ sqlx-macros-core = "=0.7.1"
 tracing = { version = "0.1.37", features = ["log"] }
 arrayvec = "0.7.4"
 rcgen = { version = "0.11.1", optional = true }
+tungstenite = "0.20.1"
 
 # Feature flagged optional dependencies
 uuid = { version = "1.4.1", features = ["serde"], optional = true }
