@@ -35,12 +35,12 @@ Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (no
 Since the driver is used through `sqlx` and it implements the interfaces there, it can do all
 the drivers shipped with `sqlx` do, with some caveats:
 - Limitations
-    - no compile-time query check support<sup>[1](#sqlx_limitations)</sup>
-    - no `sqlx-cli` support<sup>[1](#sqlx_limitations)</sup>
-    - no locking migrations support<sup>[2](#no_locks)</sup>
-    - no column nullability checks<sup>[3](#nullable)</sup>
+    - no compile-time query check support<sup>[2](#sqlx_limitations)</sup>
+    - no `sqlx-cli` support<sup>[2](#sqlx_limitations)</sup>
+    - no locking migrations support<sup>[3](#no_locks)</sup>
+    - no column nullability checks<sup>[4](#nullable)</sup>
     - apart from migrations, only a single query per statement is allowed (including in
-      fixtures)<sup>[4](#single_query)</sup>
+      fixtures)<sup>[5](#single_query)</sup>
 
 - Additions
     - array-like parameter binding in queries, thanks to the columnar nature of the Exasol
