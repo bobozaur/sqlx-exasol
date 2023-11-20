@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.2] - 2023-11-20
+
+### Added
+ 
+- [#19](https://github.com/bobozaur/sqlx-exasol/pull/19): Update to sqlx `0.7.2`.
+
+### Fixed
+
+- [#19](https://github.com/bobozaur/sqlx-exasol/pull/19): README fixes.
+
 ## [0.7.1-alpha-4] - 2023-10-26
 
 ### Added
