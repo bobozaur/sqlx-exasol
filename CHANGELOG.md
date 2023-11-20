@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+- [#14](https://github.com/bobozaur/sqlx-exasol/issues/14): Simplify `ExaSocket` `AsyncWrite::poll_flush()` impl.
 - [#19](https://github.com/bobozaur/sqlx-exasol/pull/19): README fixes.
 
 ## [0.7.1-alpha-4] - 2023-10-26

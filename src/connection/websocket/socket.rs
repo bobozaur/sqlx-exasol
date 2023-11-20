@@ -79,9 +79,7 @@ impl AsyncWrite for ExaSocket {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        // The `as_mut()` call is VERY important as currently
-        // Box<dyn Stream> does not override the `poll_flush()` method.
-        self.inner.as_mut().poll_flush(cx)
+        self.inner.poll_flush(cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
