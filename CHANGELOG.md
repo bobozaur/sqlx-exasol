@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.2] - 2023-11-20
+
+### Added
+ 
+- [#21](https://github.com/bobozaur/sqlx-exasol/pull/21): Update to sqlx `0.7.2`; Simplified Windows and MacOS `cargo check`jobs.
+
+### Fixed
+
+- [#14](https://github.com/bobozaur/sqlx-exasol/issues/14): Simplify `ExaSocket` `AsyncWrite::poll_flush()` impl.
+- [#19](https://github.com/bobozaur/sqlx-exasol/pull/19): README fixes.
+
 ## [0.7.1-alpha-4] - 2023-10-26
 
 ### Added

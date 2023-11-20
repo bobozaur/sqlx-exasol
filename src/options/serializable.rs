@@ -31,8 +31,8 @@ struct LoginAttrs<'a> {
 }
 
 impl<'a> SerializableConOpts<'a> {
-    const CLIENT_RUNTIME: &str = "Rust";
-    const CLIENT_NAME: &str = "Rust Exasol";
+    const CLIENT_RUNTIME: &'static str = "Rust";
+    const CLIENT_NAME: &'static str = "Rust Exasol";
 }
 
 impl<'a> From<ExaConnectOptionsRef<'a>> for SerializableConOpts<'a> {

@@ -1,6 +1,6 @@
 [package]
 name = "sqlx-exasol"
-version = "0.7.1-alpha-4"
+version = "0.7.2"
 edition = "2021"
 authors = ["bobozaur"]
 description = "Exasol driver for the SQLx framework."
@@ -44,9 +44,9 @@ futures-core = "0.3.28"
 serde_json = { version = "1.0.100", features = ["raw_value"] }
 serde = { version = "1.0.169", features = ["derive"] }
 pin-project = "1.1.2"
-lru = "0.11.0"
-sqlx-core = "=0.7.1"
-sqlx-macros-core = "=0.7.1"
+lru = "0.12.0"
+sqlx-core = "0.7.2"
+sqlx-macros-core = "0.7.2"
 tracing = { version = "0.1.37", features = ["log"] }
 arrayvec = "0.7.4"
 rcgen = { version = "0.11.1", optional = true }
@@ -70,7 +70,7 @@ rustls = { version = "0.21", default-features = false, features = [
 native-tls = { version = "0.2.10", optional = true }
 
 [dev-dependencies]
-sqlx = { version = "=0.7.1", features = [
+sqlx = { version = "0.7.2", features = [
     "runtime-tokio",
     "tls-native-tls",
     "migrate",
