@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
  
-- [#19](https://github.com/bobozaur/sqlx-exasol/pull/19): Update to sqlx `0.7.2`.
+- [#21](https://github.com/bobozaur/sqlx-exasol/pull/21): Update to sqlx `0.7.2`.
 
 ### Fixed
 
