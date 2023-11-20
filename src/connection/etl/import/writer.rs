@@ -43,10 +43,10 @@ impl ImportWriter {
     // In HEX, that's 8 bytes -> 16 digits.
     // We also reserve two additional bytes for CRLF.
     const CHUNK_SIZE_RESERVED: usize = 18;
-    const EMPTY_CHUNK: &[u8; 5] = b"0\r\n\r\n";
+    const EMPTY_CHUNK: &'static [u8; 5] = b"0\r\n\r\n";
 
     /// HTTP Response for the IMPORT request Exasol sends.
-    const RESPONSE: &[u8; 66] = b"HTTP/1.1 200 OK\r\n\
+    const RESPONSE: &'static [u8; 66] = b"HTTP/1.1 200 OK\r\n\
                                   Connection: close\r\n\
                                   Transfer-Encoding: chunked\r\n\
                                   \r\n";

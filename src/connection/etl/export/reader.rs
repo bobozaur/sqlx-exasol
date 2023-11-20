@@ -26,7 +26,7 @@ pub struct ExportReader {
 
 impl ExportReader {
     /// HTTP Response for the EXPORT request Exasol sends.
-    const RESPONSE: &[u8; 38] = b"HTTP/1.1 200 OK\r\n\
+    const RESPONSE: &'static [u8; 38] = b"HTTP/1.1 200 OK\r\n\
                                   Connection: close\r\n\
                                   \r\n";
 
