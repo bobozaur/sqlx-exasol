@@ -100,19 +100,19 @@ pub enum ExaDataType {
 }
 
 impl ExaDataType {
-    const NULL: &str = "NULL";
-    const BOOLEAN: &str = "BOOLEAN";
-    const CHAR: &str = "CHAR";
-    const DATE: &str = "DATE";
-    const DECIMAL: &str = "DECIMAL";
-    const DOUBLE: &str = "DOUBLE PRECISION";
-    const GEOMETRY: &str = "GEOMETRY";
-    const INTERVAL_DAY_TO_SECOND: &str = "INTERVAL DAY TO SECOND";
-    const INTERVAL_YEAR_TO_MONTH: &str = "INTERVAL YEAR TO MONTH";
-    const TIMESTAMP: &str = "TIMESTAMP";
-    const TIMESTAMP_WITH_LOCAL_TIME_ZONE: &str = "TIMESTAMP WITH LOCAL TIME ZONE";
-    const VARCHAR: &str = "VARCHAR";
-    const HASHTYPE: &str = "HASHTYPE";
+    const NULL: &'static str = "NULL";
+    const BOOLEAN: &'static str = "BOOLEAN";
+    const CHAR: &'static str = "CHAR";
+    const DATE: &'static str = "DATE";
+    const DECIMAL: &'static str = "DECIMAL";
+    const DOUBLE: &'static str = "DOUBLE PRECISION";
+    const GEOMETRY: &'static str = "GEOMETRY";
+    const INTERVAL_DAY_TO_SECOND: &'static str = "INTERVAL DAY TO SECOND";
+    const INTERVAL_YEAR_TO_MONTH: &'static str = "INTERVAL YEAR TO MONTH";
+    const TIMESTAMP: &'static str = "TIMESTAMP";
+    const TIMESTAMP_WITH_LOCAL_TIME_ZONE: &'static str = "TIMESTAMP WITH LOCAL TIME ZONE";
+    const VARCHAR: &'static str = "VARCHAR";
+    const HASHTYPE: &'static str = "HASHTYPE";
 
     /// Returns `true` if this instance is compatible with the other one provided.
     ///

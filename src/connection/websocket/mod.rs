@@ -38,8 +38,8 @@ pub struct ExaWebSocket {
 }
 
 impl ExaWebSocket {
-    const WS_SCHEME: &str = "ws";
-    const WSS_SCHEME: &str = "wss";
+    const WS_SCHEME: &'static str = "ws";
+    const WSS_SCHEME: &'static str = "wss";
 
     pub(crate) async fn new(
         host: &str,
