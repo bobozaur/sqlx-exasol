@@ -425,10 +425,11 @@ impl Iterator for ChunkIter {
     fn next(&mut self) -> Option<Self::Item> {
         debug_assert!(self.chunk_rows_pos <= self.chunk_rows_total);
 
-        let Some(data) = self.data.next() else {
-            return None;
-        };
-        let row = ExaRow::new(data, self.columns.clone(), self.column_names.clone());
+        let row = ExaRow::new(
+            self.data.next()?,
+            self.columns.clone(),
+            self.column_names.clone(),
+        );
 
         self.chunk_rows_pos += 1;
         Some(row)
