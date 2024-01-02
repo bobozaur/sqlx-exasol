@@ -17,6 +17,7 @@ pub use attributes::{Attributes, ExaAttributes};
 pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
 pub use fetch::DataChunk;
+#[cfg(feature = "etl")]
 pub use hosts::Hosts;
 pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;

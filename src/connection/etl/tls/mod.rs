@@ -50,7 +50,7 @@ fn make_cert() -> Result<Certificate, SqlxError> {
     Certificate::from_params(params).to_sqlx_err()
 }
 
-impl<T> ExaResultExt<T> for Result<T, rcgen::RcgenError> {
+impl<T> ExaResultExt<T> for Result<T, rcgen::Error> {
     fn to_sqlx_err(self) -> Result<T, SqlxError> {
         self.map_err(|e| SqlxError::Tls(e.into()))
     }

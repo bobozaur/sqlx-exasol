@@ -254,6 +254,7 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
 
 /// Helper containing TLS related options.
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_field_names)]
 pub struct ExaTlsOptionsRef<'a> {
     pub(crate) ssl_mode: ExaSslMode,
     pub(crate) ssl_ca: Option<&'a CertificateInput>,
