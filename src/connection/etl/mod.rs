@@ -82,11 +82,15 @@ use std::{
     fmt::Write as _,
     io::{Error as IoError, Result as IoResult},
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
+    pin::Pin,
+    task::{ready, Context, Poll},
 };
 
 use arrayvec::ArrayString;
 pub use export::{ExaExport, ExportBuilder, ExportSource};
 use futures_core::future::BoxFuture;
+use futures_io::{AsyncRead, AsyncWrite};
+use hyper::rt;
 pub use import::{ExaImport, ImportBuilder, Trim};
 pub use row_separator::RowSeparator;
 use sqlx_core::{error::Error as SqlxError, net::Socket};
@@ -257,4 +261,36 @@ where
     let address = SocketAddrV4::new(ip, port);
 
     Ok((socket, address))
+}
+
+impl rt::Read for ExaSocket {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        mut buf: rt::ReadBufCursor<'_>,
+    ) -> Poll<IoResult<()>> {
+        let n = unsafe {
+            let tbuf = std::mem::transmute(buf.as_mut());
+            ready!(AsyncRead::poll_read(self, cx, tbuf))?
+        };
+
+        unsafe {
+            buf.advance(n);
+        }
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl rt::Write for ExaSocket {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+        AsyncWrite::poll_write(self, cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        AsyncWrite::poll_flush(self, cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        AsyncWrite::poll_close(self, cx)
+    }
 }

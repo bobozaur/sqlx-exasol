@@ -2,6 +2,7 @@ mod compression;
 mod options;
 mod trim;
 mod writer;
+mod writer2;
 
 use std::{
     fmt::Debug,

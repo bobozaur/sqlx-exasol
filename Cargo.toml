@@ -23,7 +23,13 @@ uuid = ["dep:uuid"]
 chrono = ["dep:chrono"]
 rust_decimal = ["dep:rust_decimal"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
-etl = []
+etl = [
+    "dep:hyper-util",
+    "dep:http-body-util",
+    "dep:hyper",
+    "dep:bytes",
+    "dep:futures-channel",
+]
 etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
 etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
 
@@ -68,6 +74,11 @@ rustls = { version = "0.21", default-features = false, features = [
     "tls12",
 ], optional = true }
 native-tls = { version = "0.2.10", optional = true }
+hyper-util = { version = "0.1", features = ["full"], optional = true }
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1.1", features = ["server", "http1"], optional = true }
+bytes = { version = "1.5", optional = true }
+futures-channel = { version = "0.3.30", optional = true }
 
 [dev-dependencies]
 sqlx = { version = "0.7.3", features = [

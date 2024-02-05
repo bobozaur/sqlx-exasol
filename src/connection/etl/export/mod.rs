@@ -2,6 +2,7 @@ mod compression;
 mod export_source;
 mod options;
 mod reader;
+mod reader2;
 
 use std::{
     fmt::Debug,
