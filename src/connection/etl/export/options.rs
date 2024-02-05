@@ -4,8 +4,8 @@ use sqlx_core::Error as SqlxError;
 
 use super::{ExaExport, ExportSource};
 use crate::{
-    connection::etl::RowSeparator,
-    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
+    connection::{etl::RowSeparator, websocket::socket::ExaSocket},
+    etl::{build_etl, traits::EtlJob, JobFuture},
     ExaConnection,
 };
 
@@ -15,7 +15,6 @@ use crate::{
 #[derive(Debug)]
 pub struct ExportBuilder<'a> {
     num_readers: usize,
-    buffer_size: usize,
     compression: Option<bool>,
     source: ExportSource<'a>,
     comment: Option<&'a str>,
@@ -31,7 +30,6 @@ impl<'a> ExportBuilder<'a> {
     pub fn new(source: ExportSource<'a>) -> Self {
         Self {
             num_readers: 0,
-            buffer_size: Self::DEFAULT_BUF_SIZE,
             compression: None,
             source,
             comment: None,
@@ -68,11 +66,6 @@ impl<'a> ExportBuilder<'a> {
     /// Providing a number bigger than the number of nodes is the same as providing `0`.
     pub fn num_readers(&mut self, num_readers: usize) -> &mut Self {
         self.num_readers = num_readers;
-        self
-    }
-
-    pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
-        self.buffer_size = buffer_size;
         self
     }
 
@@ -131,14 +124,10 @@ impl<'a> EtlJob for ExportBuilder<'a> {
         self.num_readers
     }
 
-    fn create_workers(
-        &self,
-        socket_futures: Vec<SocketFuture>,
-        with_compression: bool,
-    ) -> Vec<Self::Worker> {
-        socket_futures
+    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker> {
+        sockets
             .into_iter()
-            .map(|f| ExaExport::Setup(f, self.buffer_size, with_compression))
+            .map(|s| ExaExport::new(s, with_compression))
             .collect()
     }
 

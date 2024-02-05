@@ -1,24 +1,25 @@
-mod compression;
 mod export_source;
 mod options;
 mod reader;
-mod reader2;
 
 use std::{
     fmt::Debug,
     io::Result as IoResult,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 
-use compression::ExaExportReader;
 pub use export_source::ExportSource;
 use futures_io::AsyncRead;
-use futures_util::FutureExt;
 pub use options::ExportBuilder;
+
+#[cfg(feature = "compression")]
+use async_compression::futures::bufread::GzipDecoder;
 use pin_project::pin_project;
 
-use super::SocketFuture;
+use crate::connection::websocket::socket::ExaSocket;
+
+use reader::ExaReader as ExportReader;
 
 /// An ETL EXPORT worker.
 ///
@@ -30,36 +31,44 @@ use super::SocketFuture;
 /// Dropping a reader before it returned EOF will result in the `EXPORT` query returning an error.
 /// While not necessarily a problem if you're not interested in the whole export, there's no way to
 /// circumvent that other than handling the error in code.
-#[allow(clippy::large_enum_variant)]
-#[pin_project(project = ExaExportProj)]
+
+/// Wrapper enum that handles the compression support for the [`ExportReader`].
+/// It makes use of [`ExportBufReader`] because the [`GzipDecoder`] needs a type
+/// implementing [`futures_io::AsyncBufRead`].
+#[pin_project(project = ExaExportReaderProj)]
+#[derive(Debug)]
 pub enum ExaExport {
-    Setup(SocketFuture, usize, bool),
-    Reading(#[pin] ExaExportReader),
+    Plain(#[pin] ExportReader),
+    #[cfg(feature = "compression")]
+    Compressed(#[pin] GzipDecoder<ExportReader>),
 }
 
-impl Debug for ExaExport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
-            Self::Reading(arg0) => f.debug_tuple("Reading").field(arg0).finish(),
+impl ExaExport {
+    pub fn new(socket: ExaSocket, with_compression: bool) -> Self {
+        let reader = ExportReader::new(socket);
+
+        match with_compression {
+            #[cfg(feature = "compression")]
+            true => {
+                let mut reader = GzipDecoder::new(reader);
+                reader.multiple_members(true);
+                Self::Compressed(reader)
+            }
+            _ => Self::Plain(reader),
         }
     }
 }
 
 impl AsyncRead for ExaExport {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
-        loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaExportProj::Reading(r) => return r.poll_read(cx, buf),
-                ExaExportProj::Setup(f, b, c) => (ready!(f.poll_unpin(cx))?, *b, *c),
-            };
-
-            let reader = ExaExportReader::new(socket, buffer_size, with_compression);
-            self.set(Self::Reading(reader));
+        match self.project() {
+            #[cfg(feature = "compression")]
+            ExaExportReaderProj::Compressed(mut r) => r.as_mut().poll_read(cx, buf),
+            ExaExportReaderProj::Plain(r) => r.poll_read(cx, buf),
         }
     }
 }

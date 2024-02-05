@@ -1,6 +1,6 @@
 use std::net::SocketAddrV4;
 
-use crate::etl::SocketFuture;
+use crate::connection::websocket::socket::ExaSocket;
 
 /// Interface for ETL jobs, containing common functionality
 /// required by both IMPORT/EXPORT operations.
@@ -21,11 +21,7 @@ pub trait EtlJob: Send + Sync {
 
     fn num_workers(&self) -> usize;
 
-    fn create_workers(
-        &self,
-        socket_futures: Vec<SocketFuture>,
-        with_compression: bool,
-    ) -> Vec<Self::Worker>;
+    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker>;
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String;
 

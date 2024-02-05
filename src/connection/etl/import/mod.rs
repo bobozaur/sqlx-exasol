@@ -1,24 +1,24 @@
-mod compression;
 mod options;
 mod trim;
 mod writer;
-mod writer2;
 
 use std::{
     fmt::Debug,
     io::Result as IoResult,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 
-use compression::ExaImportWriter;
+#[cfg(feature = "compression")]
+use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
-use futures_util::FutureExt;
 pub use options::ImportBuilder;
 use pin_project::pin_project;
 pub use trim::Trim;
 
-use super::SocketFuture;
+use crate::connection::websocket::socket::ExaSocket;
+
+use writer::ExaWriter as ImportWriter;
 
 /// An ETL IMPORT worker.
 ///
@@ -72,60 +72,50 @@ use super::SocketFuture;
 ///
 /// Since not using one or more import workers seems to be treated as an error on Exasol's side,
 /// it's best not to create excess writers that you don't plan on using to avoid such issues.
-#[allow(clippy::large_enum_variant)]
-#[pin_project(project = ExaImportProj)]
+
+/// Wrapper enum that handles the compression support for the [`ImportWriter`].
+#[pin_project(project = ExaImportWriterProj)]
+#[derive(Debug)]
 pub enum ExaImport {
-    Setup(SocketFuture, usize, bool),
-    Writing(#[pin] ExaImportWriter),
+    Plain(#[pin] ImportWriter),
+    #[cfg(feature = "compression")]
+    Compressed(#[pin] GzipEncoder<ImportWriter>),
 }
 
-impl Debug for ExaImport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
-            Self::Writing(arg0) => f.debug_tuple("Writing").field(arg0).finish(),
+impl ExaImport {
+    pub fn new(socket: ExaSocket, buffer_size: usize, with_compression: bool) -> Self {
+        let writer = ImportWriter::new(socket, buffer_size);
+
+        match with_compression {
+            #[cfg(feature = "compression")]
+            true => Self::Compressed(GzipEncoder::new(writer)),
+            _ => Self::Plain(writer),
         }
     }
 }
 
 impl AsyncWrite for ExaImport {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
-        loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_write(cx, buf),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
-            };
-
-            let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer));
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+        match self.project() {
+            #[cfg(feature = "compression")]
+            ExaImportWriterProj::Compressed(s) => s.poll_write(cx, buf),
+            ExaImportWriterProj::Plain(s) => s.poll_write(cx, buf),
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_flush(cx),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
-            };
-
-            let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer));
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        match self.project() {
+            #[cfg(feature = "compression")]
+            ExaImportWriterProj::Compressed(s) => s.poll_flush(cx),
+            ExaImportWriterProj::Plain(s) => s.poll_flush(cx),
         }
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_close(cx),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
-            };
-
-            let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer));
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        match self.project() {
+            #[cfg(feature = "compression")]
+            ExaImportWriterProj::Compressed(s) => s.poll_close(cx),
+            ExaImportWriterProj::Plain(s) => s.poll_close(cx),
         }
     }
 }
