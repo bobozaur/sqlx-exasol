@@ -15,10 +15,9 @@ use futures_io::AsyncWrite;
 pub use options::ImportBuilder;
 use pin_project::pin_project;
 pub use trim::Trim;
+use writer::ExaWriter as ImportWriter;
 
 use crate::connection::websocket::socket::ExaSocket;
-
-use writer::ExaWriter as ImportWriter;
 
 /// An ETL IMPORT worker.
 ///
@@ -67,7 +66,8 @@ use writer::ExaWriter as ImportWriter;
 /// From what I could gather from the logs, providing no data (although the request is
 /// responded to gracefully) makes Exasol retry the connection. With these workers being
 /// implemented as one-shot HTTP servers, there's nothing to connect to anymore. Even if it
-/// were, the connection would just be re-attempted over and over since we'd still be sending no data.
+/// were, the connection would just be re-attempted over and over since we'd still be sending no
+/// data.
 ///
 /// Since not using one or more import workers seems to be treated as an error on Exasol's side,
 /// it's best not to create excess writers that you don't plan on using to avoid such issues.

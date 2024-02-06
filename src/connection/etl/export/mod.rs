@@ -9,17 +9,15 @@ use std::{
     task::{Context, Poll},
 };
 
+#[cfg(feature = "compression")]
+use async_compression::futures::bufread::GzipDecoder;
 pub use export_source::ExportSource;
 use futures_io::AsyncRead;
 pub use options::ExportBuilder;
-
-#[cfg(feature = "compression")]
-use async_compression::futures::bufread::GzipDecoder;
 use pin_project::pin_project;
+use reader::ExaReader as ExportReader;
 
 use crate::connection::websocket::socket::ExaSocket;
-
-use reader::ExaReader as ExportReader;
 
 /// An ETL EXPORT worker.
 ///
