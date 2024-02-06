@@ -107,7 +107,7 @@ impl ExaWriter {
         Self {
             conn,
             buffer: BytesMut::with_capacity(max_buf_size),
-            max_buf_size: max_buf_size,
+            max_buf_size,
             sink: data_tx,
         }
     }

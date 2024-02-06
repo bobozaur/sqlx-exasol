@@ -274,14 +274,15 @@ where
 }
 
 impl rt::Read for ExaSocket {
+    #[allow(clippy::transmute_ptr_to_ptr)]
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: rt::ReadBufCursor<'_>,
     ) -> Poll<IoResult<()>> {
         unsafe {
-            let tbuf = std::mem::transmute(buf.as_mut());
-            let n = ready!(AsyncRead::poll_read(self, cx, tbuf))?;
+            let buffer = std::mem::transmute(buf.as_mut());
+            let n = ready!(AsyncRead::poll_read(self, cx, buffer))?;
             buf.advance(n);
         }
 

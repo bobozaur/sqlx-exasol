@@ -25,6 +25,7 @@ impl WithSocketMaker for NonTlsSocketSpawner {
 pub struct WithNonTlsSocket(WithExaSocket);
 
 impl WithNonTlsSocket {
+    #[allow(clippy::unused_async)]
     async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
         let socket = self.0.with_socket(socket);
         Ok(socket)

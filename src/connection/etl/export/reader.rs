@@ -169,7 +169,7 @@ impl ExaReader {
         match res {
             Ok(0) => {
                 self.state = ExaReaderState::Responding;
-                self.poll_conn(cx).map_ok(|_| 0)
+                self.poll_conn(cx).map_ok(|()| 0)
             }
             Ok(n) => Poll::Ready(Ok(n)),
             Err(e) => {
@@ -193,7 +193,7 @@ impl ExaReader {
         match res {
             Ok(0) => {
                 self.state = ExaReaderState::Responding;
-                self.poll_conn(cx).map_ok(|_| 0)
+                self.poll_conn(cx).map_ok(|()| 0)
             }
             Ok(n) => Poll::Ready(Ok(n)),
             Err(e) => {
@@ -245,7 +245,7 @@ impl AsyncRead for ExaReader {
     ) -> Poll<IoResult<usize>> {
         match self.state {
             ExaReaderState::Reading => self.poll_read_internal(cx, buf),
-            ExaReaderState::Responding => self.poll_conn(cx).map_ok(|_| 0),
+            ExaReaderState::Responding => self.poll_conn(cx).map_ok(|()| 0),
             ExaReaderState::Done => Poll::Ready(Ok(0)),
         }
     }
@@ -257,7 +257,7 @@ impl AsyncRead for ExaReader {
     ) -> Poll<IoResult<usize>> {
         match self.state {
             ExaReaderState::Reading => self.poll_read_vectored_internal(cx, bufs),
-            ExaReaderState::Responding => self.poll_conn(cx).map_ok(|_| 0),
+            ExaReaderState::Responding => self.poll_conn(cx).map_ok(|()| 0),
             ExaReaderState::Done => Poll::Ready(Ok(0)),
         }
     }
@@ -267,13 +267,13 @@ impl AsyncBufRead for ExaReader {
     fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
         match self.state {
             ExaReaderState::Reading => self.poll_fill_buf_internal(cx),
-            ExaReaderState::Responding => self.poll_conn(cx).map_ok(|_| [].as_slice()),
+            ExaReaderState::Responding => self.poll_conn(cx).map_ok(|()| [].as_slice()),
             ExaReaderState::Done => Poll::Ready(Ok(&[])),
         }
     }
 
     fn consume(self: Pin<&mut Self>, amt: usize) {
-        self.project().reader.consume(amt)
+        self.project().reader.consume(amt);
     }
 }
 
