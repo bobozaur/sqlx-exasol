@@ -329,14 +329,14 @@ mod macros {
                 try_join3(export_fut.map_err(From::from), import_fut.map_err(From::from), try_join_all(transport_futs)).await.map_err(|e| anyhow::anyhow! {e})?;
 
 
-                assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
-                assert_eq!(NUM_ROWS as u64, import_res.rows_affected());
+                assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
+                assert_eq!(NUM_ROWS as u64, import_res.rows_affected(), "imported rows");
 
                 let num_rows: u64 = sqlx::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
                     .fetch_one(&mut *conn1)
                     .await?;
 
-                assert_eq!(num_rows, 2 * NUM_ROWS as u64);
+                assert_eq!(num_rows, 2 * NUM_ROWS as u64, "export + import rows");
 
                 Ok(())
             }

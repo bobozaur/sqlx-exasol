@@ -8,7 +8,7 @@ use std::{
 
 use bytes::BytesMut;
 use futures_channel::mpsc::{Receiver, SendError, Sender};
-use futures_io::AsyncWrite;
+use futures_io::{AsyncWrite, IoSlice};
 use futures_util::{future::Fuse, FutureExt, SinkExt, Stream, StreamExt};
 use http_body_util::{combinators::Collect, BodyExt, StreamBody};
 use hyper::{
@@ -119,11 +119,11 @@ impl ExaWriter {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<IoResult<usize>> {
-        let avail = self.max_buf_size - self.buffer.len();
-        if avail == 0 {
+        if self.max_buf_size == self.buffer.len() {
             ready!(self.as_mut().poll_flush(cx))?;
         }
 
+        let avail = self.max_buf_size - self.buffer.len();
         let len = buf.len().min(avail);
         self.buffer.extend_from_slice(&buf[..len]);
         Poll::Ready(Ok(len))
@@ -132,13 +132,13 @@ impl ExaWriter {
     fn poll_write_vectored_internal(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        let avail = self.max_buf_size - self.buffer.len();
-        if avail == 0 {
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<IoResult<usize>> {
+        if self.max_buf_size == self.buffer.len() {
             ready!(self.as_mut().poll_flush(cx))?;
         }
 
+        let avail = self.max_buf_size - self.buffer.len();
         let mut rem = avail;
         for buf in bufs {
             if rem == 0 {
@@ -167,7 +167,7 @@ impl AsyncWrite for ExaWriter {
     fn poll_write_vectored(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
+        bufs: &[IoSlice<'_>],
     ) -> Poll<IoResult<usize>> {
         let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
         self.poll_write_vectored_internal(cx, bufs)
@@ -176,14 +176,17 @@ impl AsyncWrite for ExaWriter {
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
         ready!(self.sink.poll_ready_unpin(cx)).map_err(map_send_error)?;
-        let buffer = std::mem::take(&mut self.buffer);
+        let new_buffer = BytesMut::with_capacity(self.max_buf_size);
+        let buffer = std::mem::replace(&mut self.buffer, new_buffer);
         self.sink.start_send_unpin(buffer).map_err(map_send_error)?;
         Poll::Ready(Ok(()))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        ready!(self.as_mut().poll_flush(cx))?;
-        ready!(self.sink.poll_close_unpin(cx)).map_err(map_send_error)?;
+        if !self.sink.is_closed() {
+            ready!(self.as_mut().poll_flush(cx))?;
+            ready!(self.sink.poll_close_unpin(cx)).map_err(map_send_error)?;
+        }
         ready!(self.conn.poll_unpin(cx)).map_err(map_hyper_err)?;
         Poll::Ready(Ok(()))
     }
