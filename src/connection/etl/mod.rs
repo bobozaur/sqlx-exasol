@@ -275,14 +275,12 @@ impl rt::Read for ExaSocket {
         cx: &mut Context<'_>,
         mut buf: rt::ReadBufCursor<'_>,
     ) -> Poll<IoResult<()>> {
-        let n = unsafe {
-            let tbuf = std::mem::transmute(buf.as_mut());
-            ready!(AsyncRead::poll_read(self, cx, tbuf))?
-        };
-
         unsafe {
+            let tbuf = std::mem::transmute(buf.as_mut());
+            let n = ready!(AsyncRead::poll_read(self, cx, tbuf))?;
             buf.advance(n);
         }
+
         Poll::Ready(Ok(()))
     }
 }
