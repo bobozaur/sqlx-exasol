@@ -175,10 +175,14 @@ impl AsyncWrite for ExaWriter {
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
-        ready!(self.sink.poll_ready_unpin(cx)).map_err(map_send_error)?;
-        let new_buffer = BytesMut::with_capacity(self.max_buf_size);
-        let buffer = std::mem::replace(&mut self.buffer, new_buffer);
-        self.sink.start_send_unpin(buffer).map_err(map_send_error)?;
+
+        if !self.buffer.is_empty() {
+            ready!(self.sink.poll_ready_unpin(cx)).map_err(map_send_error)?;
+            let new_buffer = BytesMut::with_capacity(self.max_buf_size);
+            let buffer = std::mem::replace(&mut self.buffer, new_buffer);
+            self.sink.start_send_unpin(buffer).map_err(map_send_error)?;
+        }
+
         Poll::Ready(Ok(()))
     }
 
