@@ -24,21 +24,23 @@ impl WithSocketMaker for NonTlsSocketSpawner {
 /// though without TLS there's no need to return a future.
 pub struct WithNonTlsSocket(WithExaSocket);
 
+impl WithNonTlsSocket {
+    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
+        let socket = self.0.with_socket(socket);
+        Ok(socket)
+    }
+
+    async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
+        let (socket, address) = get_etl_addr(socket).await?;
+        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
+        Ok((address, future))
+    }
+}
+
 impl WithSocket for WithNonTlsSocket {
     type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let wrapper = self.0;
-
-        Box::pin(async move {
-            let (socket, address) = get_etl_addr(socket).await?;
-
-            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
-                let socket = wrapper.with_socket(socket);
-                Ok(socket)
-            });
-
-            Ok((address, future))
-        })
+        Box::pin(self.work(socket))
     }
 }

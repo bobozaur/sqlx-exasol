@@ -64,35 +64,38 @@ impl WithRustlsSocket {
     fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
         Self { wrapper, config }
     }
+
+    fn map_tls_error(e: rustls::Error) -> IoError {
+        IoError::new(IoErrorKind::Other, e)
+    }
+
+    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
+        let state = ServerConnection::new(self.config).map_err(Self::map_tls_error)?;
+        let mut socket = RustlsSocket {
+            inner: SyncSocket::new(socket),
+            state,
+            close_notify_sent: false,
+        };
+
+        // Performs the TLS handshake or bails
+        socket.complete_io().await?;
+
+        let socket = self.wrapper.with_socket(socket);
+        Ok(socket)
+    }
+
+    async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
+        let (socket, address) = get_etl_addr(socket).await?;
+        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
+        Ok((address, future))
+    }
 }
 
 impl WithSocket for WithRustlsSocket {
     type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithRustlsSocket { wrapper, config } = self;
-
-        Box::pin(async move {
-            let (socket, address) = get_etl_addr(socket).await?;
-
-            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
-                let state = ServerConnection::new(config)
-                    .map_err(|e| IoError::new(IoErrorKind::Other, e))?;
-                let mut socket = RustlsSocket {
-                    inner: SyncSocket::new(socket),
-                    state,
-                    close_notify_sent: false,
-                };
-
-                // Performs the TLS handshake or bails
-                socket.complete_io().await?;
-
-                let socket = wrapper.with_socket(socket);
-                Ok(socket)
-            });
-
-            Ok((address, future))
-        })
+        Box::pin(self.work(socket))
     }
 }
 

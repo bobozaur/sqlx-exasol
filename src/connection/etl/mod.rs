@@ -155,7 +155,11 @@ where
         }
     });
 
+    // The query future needs to be polled to get the sockets connected.
+    // Once that happens, we return the future so the user can poll it to completion.
     let (sockets, future): (_, JobFuture<'_>) = match select(future, try_join_all(futures)).await {
+        // This arm is here merely for completion.
+        // The query future should never complete before the sockets are actually connected.
         Either::Left((res, _)) => (Vec::new(), Box::pin(async move { res })),
         Either::Right((sockets, future)) => (sockets?, future),
     };

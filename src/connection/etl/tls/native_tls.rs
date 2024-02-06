@@ -57,41 +57,41 @@ impl WithNativeTlsSocket {
     fn new(wrapper: WithExaSocket, acceptor: Arc<TlsAcceptor>) -> Self {
         Self { wrapper, acceptor }
     }
+
+    fn map_tls_error(e: native_tls::Error) -> IoError {
+        IoError::new(IoErrorKind::Other, e)
+    }
+
+    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
+        let mut hs = match self.acceptor.accept(SyncSocket::new(socket)) {
+            Ok(s) => return Ok(self.wrapper.with_socket(NativeTlsSocket(s))),
+            Err(HandshakeError::Failure(e)) => return Err(Self::map_tls_error(e)),
+            Err(HandshakeError::WouldBlock(hs)) => hs,
+        };
+
+        loop {
+            future::poll_fn(|cx| hs.get_mut().poll_ready(cx)).await?;
+
+            match hs.handshake() {
+                Ok(s) => return Ok(self.wrapper.with_socket(NativeTlsSocket(s))),
+                Err(HandshakeError::Failure(e)) => return Err(Self::map_tls_error(e)),
+                Err(HandshakeError::WouldBlock(h)) => hs = h,
+            }
+        }
+    }
+
+    async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
+        let (socket, address) = get_etl_addr(socket).await?;
+        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
+        Ok((address, future))
+    }
 }
 
 impl WithSocket for WithNativeTlsSocket {
     type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithNativeTlsSocket { wrapper, acceptor } = self;
-
-        Box::pin(async move {
-            let (socket, address) = get_etl_addr(socket).await?;
-
-            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
-                let mut hs = match acceptor.accept(SyncSocket::new(socket)) {
-                    Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
-                    Err(HandshakeError::Failure(e)) => {
-                        return Err(IoError::new(IoErrorKind::Other, e))
-                    }
-                    Err(HandshakeError::WouldBlock(hs)) => hs,
-                };
-
-                loop {
-                    future::poll_fn(|cx| hs.get_mut().poll_ready(cx)).await?;
-
-                    match hs.handshake() {
-                        Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
-                        Err(HandshakeError::Failure(e)) => {
-                            return Err(IoError::new(IoErrorKind::Other, e))
-                        }
-                        Err(HandshakeError::WouldBlock(h)) => hs = h,
-                    }
-                }
-            });
-
-            Ok((address, future))
-        })
+        Box::pin(self.work(socket))
     }
 }
 
