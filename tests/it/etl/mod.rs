@@ -252,6 +252,30 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
     Ok(())
 }
 
+#[ignore]
+#[sqlx::test]
+async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+        .await?;
+
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut *conn).await?;
+    let num_writers = writers.len();
+
+    let transport_futs = writers.into_iter().map(pipe_close_writers);
+
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+        .fetch_one(&mut *conn)
+        .await?;
+
+    assert_eq!(num_rows, (NUM_ROWS + num_writers) as u64);
+
+    Ok(())
+}
+
 // ##########################################
 // ############### Utilities ################
 // ##########################################
@@ -283,6 +307,11 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
     writer.write_all(buf.as_bytes()).await?;
     writer.close().await?;
 
+    Ok(())
+}
+
+async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
+    writer.close().await?;
     Ok(())
 }
 

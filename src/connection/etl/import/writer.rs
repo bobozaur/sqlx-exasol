@@ -155,21 +155,15 @@ impl ExaWriter {
 }
 
 impl AsyncWrite for ExaWriter {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
-        let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
         self.poll_write_internal(cx, buf)
     }
 
     fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<IoResult<usize>> {
-        let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
         self.poll_write_vectored_internal(cx, bufs)
     }
 
@@ -191,6 +185,7 @@ impl AsyncWrite for ExaWriter {
             ready!(self.as_mut().poll_flush(cx))?;
             ready!(self.sink.poll_close_unpin(cx)).map_err(map_send_error)?;
         }
+
         ready!(self.conn.poll_unpin(cx)).map_err(map_hyper_err)?;
         Poll::Ready(Ok(()))
     }
