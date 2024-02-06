@@ -310,10 +310,10 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
     Ok(())
 }
 
-async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
-    writer.close().await?;
-    Ok(())
-}
+// async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
+//     writer.close().await?;
+//     Ok(())
+// }
 
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
     let mut buf = vec![0; 5120].into_boxed_slice();
