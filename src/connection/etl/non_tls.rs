@@ -6,7 +6,7 @@ use sqlx_core::{
     net::{Socket, WithSocket},
 };
 
-use super::{get_etl_addr, traits::WithSocketMaker, SocketFuture};
+use super::{get_etl_addr, traits::WithSocketMaker, SocketFuture, WithSocketFuture};
 use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNonTlsSocket`].
@@ -39,7 +39,7 @@ impl WithNonTlsSocket {
 }
 
 impl WithSocket for WithNonTlsSocket {
-    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
+    type Output = WithSocketFuture;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         Box::pin(self.work(socket))

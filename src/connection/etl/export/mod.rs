@@ -15,7 +15,7 @@ pub use export_source::ExportSource;
 use futures_io::AsyncRead;
 pub use options::ExportBuilder;
 use pin_project::pin_project;
-use reader::ExaReader as ExportReader;
+use reader::ExaReader;
 
 use crate::connection::websocket::socket::ExaSocket;
 
@@ -30,20 +30,20 @@ use crate::connection::websocket::socket::ExaSocket;
 /// While not necessarily a problem if you're not interested in the whole export, there's no way to
 /// circumvent that other than handling the error in code.
 
-/// Wrapper enum that handles the compression support for the [`ExportReader`].
+/// Wrapper enum that handles the compression support for the [`ExaReader`].
 /// It makes use of [`ExportBufReader`] because the [`GzipDecoder`] needs a type
 /// implementing [`futures_io::AsyncBufRead`].
-#[pin_project(project = ExaExportReaderProj)]
+#[pin_project(project = ExaExaReaderProj)]
 #[derive(Debug)]
 pub enum ExaExport {
-    Plain(#[pin] ExportReader),
+    Plain(#[pin] ExaReader),
     #[cfg(feature = "compression")]
-    Compressed(#[pin] GzipDecoder<ExportReader>),
+    Compressed(#[pin] GzipDecoder<ExaReader>),
 }
 
 impl ExaExport {
     pub fn new(socket: ExaSocket, with_compression: bool) -> Self {
-        let reader = ExportReader::new(socket);
+        let reader = ExaReader::new(socket);
 
         match with_compression {
             #[cfg(feature = "compression")]
@@ -65,8 +65,8 @@ impl AsyncRead for ExaExport {
     ) -> Poll<IoResult<usize>> {
         match self.project() {
             #[cfg(feature = "compression")]
-            ExaExportReaderProj::Compressed(mut r) => r.as_mut().poll_read(cx, buf),
-            ExaExportReaderProj::Plain(r) => r.poll_read(cx, buf),
+            ExaExaReaderProj::Compressed(mut r) => r.as_mut().poll_read(cx, buf),
+            ExaExaReaderProj::Plain(r) => r.poll_read(cx, buf),
         }
     }
 }

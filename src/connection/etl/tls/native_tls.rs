@@ -1,5 +1,5 @@
 use std::{
-    future,
+    future::poll_fn,
     io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
     net::SocketAddrV4,
     sync::Arc,
@@ -7,7 +7,7 @@ use std::{
 };
 
 use futures_core::future::BoxFuture;
-use native_tls::{HandshakeError, Identity, TlsAcceptor};
+use native_tls::{HandshakeError, Identity, TlsAcceptor, TlsStream};
 use rcgen::Certificate;
 use sqlx_core::{
     error::Error as SqlxError,
@@ -19,7 +19,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
+    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture, WithSocketFuture},
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].
@@ -63,20 +63,17 @@ impl WithNativeTlsSocket {
     }
 
     async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
-        let mut hs = match self.acceptor.accept(SyncSocket::new(socket)) {
-            Ok(s) => return Ok(self.wrapper.with_socket(NativeTlsSocket(s))),
-            Err(HandshakeError::Failure(e)) => return Err(Self::map_tls_error(e)),
-            Err(HandshakeError::WouldBlock(hs)) => hs,
-        };
+        let mut res = self.acceptor.accept(SyncSocket::new(socket));
 
         loop {
-            future::poll_fn(|cx| hs.get_mut().poll_ready(cx)).await?;
-
-            match hs.handshake() {
+            match res {
                 Ok(s) => return Ok(self.wrapper.with_socket(NativeTlsSocket(s))),
                 Err(HandshakeError::Failure(e)) => return Err(Self::map_tls_error(e)),
-                Err(HandshakeError::WouldBlock(h)) => hs = h,
-            }
+                Err(HandshakeError::WouldBlock(mut h)) => {
+                    poll_fn(|cx| h.get_mut().poll_ready(cx)).await?;
+                    res = h.handshake();
+                }
+            };
         }
     }
 
@@ -88,14 +85,14 @@ impl WithNativeTlsSocket {
 }
 
 impl WithSocket for WithNativeTlsSocket {
-    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
+    type Output = WithSocketFuture;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         Box::pin(self.work(socket))
     }
 }
 
-struct NativeTlsSocket<S>(native_tls::TlsStream<SyncSocket<S>>)
+struct NativeTlsSocket<S>(TlsStream<SyncSocket<S>>)
 where
     S: Socket;
 

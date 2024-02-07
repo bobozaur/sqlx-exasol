@@ -115,6 +115,7 @@ const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 /// Type of the future that executes the ETL job.
 type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
+type WithSocketFuture = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
 /// Builds an ETL job comprising of a [`JobFuture`], that drives the execution
 /// of the ETL query, and an array of workers that perform the IO.
@@ -274,14 +275,17 @@ where
 }
 
 impl rt::Read for ExaSocket {
-    #[allow(clippy::transmute_ptr_to_ptr)]
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: rt::ReadBufCursor<'_>,
     ) -> Poll<IoResult<()>> {
+        // SAFETY: The AsyncRead::poll_read call initializes and
+        // fills the provided buffer. We do however need to cast it
+        // to a mutable byte array first so the argument datatype matches.
         unsafe {
-            let buffer = std::mem::transmute(buf.as_mut());
+            let buffer: *mut [std::mem::MaybeUninit<u8>] = buf.as_mut();
+            let buffer = &mut *(buffer as *mut [u8]);
             let n = ready!(AsyncRead::poll_read(self, cx, buffer))?;
             buf.advance(n);
         }

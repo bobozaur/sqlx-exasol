@@ -20,7 +20,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
+    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture, WithSocketFuture},
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
@@ -92,7 +92,7 @@ impl WithRustlsSocket {
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
+    type Output = WithSocketFuture;
 
     fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         Box::pin(self.work(socket))
