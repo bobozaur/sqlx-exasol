@@ -10,9 +10,8 @@ use async_compression::futures::bufread::GzipDecoder;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
 
-use crate::connection::websocket::socket::ExaSocket;
-
 use super::reader::ExaReader;
+use crate::connection::websocket::socket::ExaSocket;
 
 /// An ETL EXPORT worker.
 ///

@@ -10,9 +10,8 @@ use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
 use pin_project::pin_project;
 
-use crate::connection::websocket::socket::ExaSocket;
-
 use super::writer::ExaWriter;
+use crate::connection::websocket::socket::ExaSocket;
 
 /// Wrapper enum that handles the compression support for the [`ExaWriter`].
 #[pin_project(project = ExaExaWriterProj)]
