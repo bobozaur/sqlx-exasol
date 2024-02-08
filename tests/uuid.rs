@@ -1,4 +1,5 @@
 #![cfg(feature = "migrate")]
+#![cfg(feature = "uuid")]
 
 mod macros;
 

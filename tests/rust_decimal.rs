@@ -1,4 +1,5 @@
 #![cfg(feature = "migrate")]
+#![cfg(feature = "rust_decimal")]
 
 mod macros;
 
