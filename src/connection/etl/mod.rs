@@ -90,7 +90,6 @@ use arrayvec::ArrayString;
 pub use export::{ExaExport, ExportBuilder, ExportSource};
 use futures_core::future::BoxFuture;
 use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::future::{select, try_join_all, Either};
 use hyper::rt;
 pub use import::{ExaImport, ImportBuilder, Trim};
 pub use row_separator::RowSeparator;
@@ -146,6 +145,9 @@ where
     let cmd = ExaCommand::new_execute(&query, &con.ws.attributes).try_into()?;
     con.ws.send(cmd).await?;
 
+    // Create the ETL workers
+    let sockets = job.create_workers(futures, with_compression);
+
     // Query execution driving future to be returned and awaited
     // alongside the worker IO operations
     let future = Box::pin(async move {
@@ -155,18 +157,6 @@ where
             QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),
         }
     });
-
-    // The query future needs to be polled to get the sockets connected.
-    // Once that happens, we return the future so the user can poll it to completion.
-    let (sockets, future): (_, JobFuture<'_>) = match select(future, try_join_all(futures)).await {
-        // This arm is here merely for completion.
-        // The query future should never complete before the sockets are actually connected.
-        Either::Left((res, _)) => (Vec::new(), Box::pin(async move { res })),
-        Either::Right((sockets, future)) => (sockets?, future),
-    };
-
-    // Create the ETL workers
-    let sockets = job.create_workers(sockets, with_compression);
 
     Ok((future, sockets))
 }

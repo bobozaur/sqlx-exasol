@@ -5,8 +5,8 @@ use sqlx_core::Error as SqlxError;
 
 use super::{ExaImport, Trim};
 use crate::{
-    connection::{etl::RowSeparator, websocket::socket::ExaSocket},
-    etl::{build_etl, traits::EtlJob, JobFuture},
+    connection::etl::RowSeparator,
+    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
     ExaConnection,
 };
 
@@ -146,10 +146,14 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         self.num_writers
     }
 
-    fn create_workers(&self, sockets: Vec<ExaSocket>, with_compression: bool) -> Vec<Self::Worker> {
-        sockets
+    fn create_workers(
+        &self,
+        socket_futures: Vec<SocketFuture>,
+        with_compression: bool,
+    ) -> Vec<Self::Worker> {
+        socket_futures
             .into_iter()
-            .map(|s| ExaImport::new(s, self.buffer_size, with_compression))
+            .map(|f| ExaImport::Setup(f, self.buffer_size, with_compression))
             .collect()
     }
 

@@ -13,7 +13,6 @@ use futures_util::{future::Fuse, FutureExt, SinkExt, Stream, StreamExt};
 use http_body_util::{combinators::Collect, BodyExt, StreamBody};
 use hyper::{
     body::{Bytes, Frame, Incoming},
-    header::CONNECTION,
     server::conn::http1::{Builder, Connection},
     service::Service,
     Request, Response, StatusCode,
@@ -60,7 +59,6 @@ impl Future for ImportFuture {
         ready!(self.inner.poll_unpin(cx)).map_err(map_hyper_err)?;
 
         let response = Response::builder()
-            .header(CONNECTION, "keep-alive")
             .status(StatusCode::OK)
             .body(StreamBody::new(self.stream.take().unwrap()))
             .map_err(map_http_error);

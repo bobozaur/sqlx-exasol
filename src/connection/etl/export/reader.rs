@@ -17,7 +17,6 @@ use futures_util::{
 use http_body_util::Empty;
 use hyper::{
     body::{Body, Bytes, Incoming},
-    header::CONNECTION,
     server::conn::http1::{Builder, Connection},
     service::Service,
     Request, Response, StatusCode,
@@ -79,7 +78,6 @@ impl Future for ExportFuture {
         };
 
         let response = Response::builder()
-            .header(CONNECTION, "close")
             .status(StatusCode::OK)
             .body(Empty::new())
             .map_err(map_http_error);
