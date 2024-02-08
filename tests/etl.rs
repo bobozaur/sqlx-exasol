@@ -1,4 +1,4 @@
-#![cfg(feature = "migrate")]
+#![cfg(all(feature = "migrate", feature = "etl"))]
 
 mod macros;
 
