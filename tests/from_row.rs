@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 use sqlx::{Executor, FromRow};
 use sqlx_core::pool::PoolConnection;
 use sqlx_exasol::Exasol;

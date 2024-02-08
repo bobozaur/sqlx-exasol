@@ -1,140 +1,7 @@
-mod bool;
-#[cfg(feature = "chrono")]
-mod chrono;
-mod float;
-mod geometry;
-mod int;
-mod invalid;
-#[cfg(feature = "rust_decimal")]
-mod rust_decimal;
-mod str;
-mod uint;
-#[cfg(feature = "uuid")]
-mod uuid;
+#![cfg(feature = "migrate")]
 
-use macros::{test_type_array, test_type_invalid, test_type_valid};
-
-#[sqlx::test]
-async fn test_equal_arrays(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
-    use std::iter::zip;
-
-    use sqlx_core::{executor::Executor, query::query, query_as::query_as};
-
-    con.execute(
-        "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
-    )
-    .await?;
-
-    let bools = vec![false, true, false];
-    let ints = vec![1, 2, 3];
-    let mut strings = vec![Some("one".to_owned()), None, Some(String::new())];
-
-    let query_result = query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
-        .bind(&bools)
-        .bind(&ints)
-        .bind(&strings)
-        .execute(&mut *con)
-        .await?;
-
-    assert_eq!(query_result.rows_affected(), 3);
-
-    let values: Vec<(bool, u32, Option<String>)> =
-        query_as("SELECT * FROM sqlx_test_type ORDER BY col2;")
-            .fetch_all(&mut *con)
-            .await?;
-
-    // Exasol treats empty strings as NULL
-    strings.pop();
-    strings.push(None);
-
-    let expected = zip(zip(bools, ints), strings).map(|((b, i), s)| (b, i, s));
-    for (v, e) in zip(values, expected) {
-        assert_eq!(v, e);
-    }
-
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_unequal_arrays(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query};
-
-    con.execute(
-        "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
-    )
-    .await?;
-
-    let bools = vec![false, true, false];
-    let ints = vec![1, 2, 3, 4];
-    let strings = vec![Some("one".to_owned()), Some(String::new())];
-
-    query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
-        .bind(&bools)
-        .bind(&ints)
-        .bind(&strings)
-        .execute(&mut *con)
-        .await
-        .unwrap_err();
-
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_exceeding_arrays(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query};
-
-    con.execute(
-        "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
-    )
-    .await?;
-
-    let bools = vec![false, true, false];
-    let ints = vec![1, 2, u64::MAX];
-    let strings = vec![Some("one".to_owned()), Some(String::new()), None];
-
-    query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
-        .bind(&bools)
-        .bind(&ints)
-        .bind(&strings)
-        .execute(&mut *con)
-        .await
-        .unwrap_err();
-
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_decode_error(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
-
-    con.execute("CREATE TABLE sqlx_test_type ( col DECIMAL(10, 0) );")
-        .await?;
-
-    query("INSERT INTO sqlx_test_type VALUES (?)")
-        .bind(u32::MAX)
-        .execute(&mut *con)
-        .await?;
-
-    let error = query_scalar::<_, u8>("SELECT col FROM sqlx_test_type")
-        .fetch_one(&mut *con)
-        .await
-        .unwrap_err();
-
-    eprintln!("{error}");
-
-    Ok(())
-}
-
-mod macros {
-    macro_rules! test_type_valid {
+#[macro_export]
+macro_rules! test_type_valid {
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
         paste::item! {
             #[sqlx::test]
@@ -180,19 +47,20 @@ mod macros {
     };
 
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr),+)) => {
-        $crate::types::test_type_valid!($name<$ty>::$datatype::($($unprepared => $unprepared),+));
+        $crate::test_type_valid!($name<$ty>::$datatype::($($unprepared => $unprepared),+));
     };
 
     ($name:ident::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
-        $crate::types::test_type_valid!($name<$name>::$datatype::($($unprepared => $prepared),+));
+        $crate::test_type_valid!($name<$name>::$datatype::($($unprepared => $prepared),+));
     };
 
     ($name:ident::$datatype:literal::($($unprepared:expr),+)) => {
-        $crate::types::test_type_valid!($name::$datatype::($($unprepared => $unprepared),+));
+        $crate::test_type_valid!($name::$datatype::($($unprepared => $unprepared),+));
     };
 }
 
-    macro_rules! test_type_array {
+#[macro_export]
+macro_rules! test_type_array {
     ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
         paste::item! {
             #[sqlx::test]
@@ -224,7 +92,8 @@ mod macros {
     };
 }
 
-    macro_rules! test_type_invalid {
+#[macro_export]
+macro_rules! test_type_invalid {
         ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
             paste::item! {
                 #[sqlx::test]
@@ -263,7 +132,69 @@ mod macros {
 
 }
 
-    pub(crate) use test_type_array;
-    pub(crate) use test_type_invalid;
-    pub(crate) use test_type_valid;
+#[macro_export]
+macro_rules! test_etl {
+    ($kind:literal, $name:literal, $num_workers:expr, $table:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+        paste::item! {
+            $(#[$attr]),*
+            #[ignore]
+            #[sqlx::test]
+            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> AnyResult<()> {
+                let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
+
+                let mut conn1 = pool.acquire().await?;
+                let mut conn2 = pool.acquire().await?;
+
+                conn1
+                    .execute(concat!("CREATE TABLE ", $table, " ( col VARCHAR(200) );"))
+                    .await?;
+
+                sqlx::query(concat!("INSERT INTO ", $table, " VALUES (?)"))
+                    .bind(vec!["dummy"; NUM_ROWS])
+                    .execute(&mut *conn1)
+                    .await?;
+
+                let (export_fut, readers) = $export.num_readers($num_workers).build(&mut conn1).await?;
+                let (import_fut, writers) = $import.num_writers($num_workers).build(&mut conn2).await?;
+                let transport_futs = iter::zip(readers, writers).map($proc);
+
+                let (export_res, import_res, _) =
+                try_join3(export_fut.map_err(From::from), import_fut.map_err(From::from), try_join_all(transport_futs)).await.map_err(|e| anyhow::anyhow! {e})?;
+
+
+                assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
+                assert_eq!(NUM_ROWS as u64, import_res.rows_affected(), "imported rows");
+
+                let num_rows: u64 = sqlx::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
+                    .fetch_one(&mut *conn1)
+                    .await?;
+
+                assert_eq!(num_rows, 2 * NUM_ROWS as u64, "export + import rows");
+
+                Ok(())
+            }
+        }
+    };
 }
+
+#[macro_export]
+macro_rules! test_etl_single_threaded {
+        ($name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::test_etl_single_threaded!($name, 1, $table, $export, $import, $(#[$attr]),*);
+        };
+
+        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::test_etl!("single_threaded", $name, $num_workers, $table, |(r,w)|  pipe(r, w), $export, $import, $(#[$attr]),*);
+        }
+    }
+
+#[macro_export]
+macro_rules! test_etl_multi_threaded {
+        ($name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::test_etl_multi_threaded!($name, 1, $table, $export, $import, $(#[$attr]),*);
+        };
+
+        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
+            $crate::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
+        }
+    }

@@ -1,4 +1,5 @@
 use std::{
+    fmt::Debug,
     io::Result as IoResult,
     pin::Pin,
     task::{Context, Poll},
@@ -9,23 +10,34 @@ use async_compression::futures::bufread::GzipDecoder;
 use futures_io::AsyncRead;
 use pin_project::pin_project;
 
-use super::reader::ExportReader;
+use super::reader::ExaReader;
 use crate::connection::websocket::socket::ExaSocket;
 
-/// Wrapper enum that handles the compression support for the [`ExportReader`].
+/// An ETL EXPORT worker.
+///
+/// The type implements [`AsyncRead`] and is [`Send`] and [`Sync`] so it can be freely used
+/// in any data pipeline.
+///
+/// # IMPORTANT
+///
+/// Dropping a reader before it returned EOF will result in the `EXPORT` query returning an error.
+/// While not necessarily a problem if you're not interested in the whole export, there's no way to
+/// circumvent that other than handling the error in code.
+
+/// Wrapper enum that handles the compression support for the [`ExaReader`].
 /// It makes use of [`ExportBufReader`] because the [`GzipDecoder`] needs a type
 /// implementing [`futures_io::AsyncBufRead`].
-#[pin_project(project = ExaExportReaderProj)]
+#[pin_project(project = ExaExaReaderProj)]
 #[derive(Debug)]
 pub enum ExaExportReader {
-    Plain(#[pin] ExportReader),
+    Plain(#[pin] ExaReader),
     #[cfg(feature = "compression")]
-    Compressed(#[pin] GzipDecoder<ExportReader>),
+    Compressed(#[pin] GzipDecoder<ExaReader>),
 }
 
 impl ExaExportReader {
-    pub fn new(socket: ExaSocket, buffer_size: usize, with_compression: bool) -> Self {
-        let reader = ExportReader::new(socket, buffer_size);
+    pub fn new(socket: ExaSocket, with_compression: bool) -> Self {
+        let reader = ExaReader::new(socket);
 
         match with_compression {
             #[cfg(feature = "compression")]
@@ -47,8 +59,8 @@ impl AsyncRead for ExaExportReader {
     ) -> Poll<IoResult<usize>> {
         match self.project() {
             #[cfg(feature = "compression")]
-            ExaExportReaderProj::Compressed(mut r) => r.as_mut().poll_read(cx, buf),
-            ExaExportReaderProj::Plain(r) => r.poll_read(cx, buf),
+            ExaExaReaderProj::Compressed(mut r) => r.as_mut().poll_read(cx, buf),
+            ExaExaReaderProj::Plain(r) => r.poll_read(cx, buf),
         }
     }
 }

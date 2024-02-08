@@ -1,3 +1,8 @@
+#![cfg(feature = "migrate")]
+#![cfg(feature = "etl")]
+
+mod macros;
+
 use std::iter;
 
 use anyhow::Result as AnyResult;
@@ -16,10 +21,6 @@ use sqlx_exasol::{
 };
 
 const NUM_ROWS: usize = 1_000_000;
-
-use macros::{test_etl_multi_threaded, test_etl_single_threaded};
-
-use self::macros::test_etl;
 
 test_etl_single_threaded!(
     "uncompressed",
@@ -111,7 +112,7 @@ test_etl_multi_threaded!(
 test_etl_single_threaded!(
     "all_arguments",
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).num_readers(1).buffer_size(20000).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).num_readers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
     ImportBuilder::new("TEST_ETL").skip(1).buffer_size(20000).columns(Some(&["col"])).num_writers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").trim(sqlx_exasol::etl::Trim::Both),
     #[cfg(feature = "compression")]
 );
@@ -252,6 +253,34 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
     Ok(())
 }
 
+// // Not much to do about this... This is commented out as the IMPORT
+// // is limited by Exasol in the sense that spawned writer MUST be used.
+// //
+// // This will thus fail, because Exasol will just keep sending new requests.
+// #[ignore]
+// #[sqlx::test]
+// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+//     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+//         .await?;
+
+//     let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut *conn).await?;
+//     let num_writers = writers.len();
+
+//     let transport_futs = writers.into_iter().map(pipe_close_writers);
+
+//     try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
+//         .await
+//         .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+//     let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+//         .fetch_one(&mut *conn)
+//         .await?;
+
+//     assert_eq!(num_rows, (NUM_ROWS + num_writers) as u64);
+
+//     Ok(())
+// }
+
 // ##########################################
 // ############### Utilities ################
 // ##########################################
@@ -286,6 +315,11 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
     Ok(())
 }
 
+// async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
+//     writer.close().await?;
+//     Ok(())
+// }
+
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
     let mut buf = vec![0; 5120].into_boxed_slice();
     let mut read = 1;
@@ -297,74 +331,4 @@ async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
 
     writer.close().await?;
     Ok(())
-}
-
-mod macros {
-    macro_rules! test_etl {
-    ($kind:literal, $name:literal, $num_workers:expr, $table:literal, $proc:expr, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-        paste::item! {
-            $(#[$attr]),*
-            #[ignore]
-            #[sqlx::test]
-            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> AnyResult<()> {
-                let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
-
-                let mut conn1 = pool.acquire().await?;
-                let mut conn2 = pool.acquire().await?;
-
-                conn1
-                    .execute(concat!("CREATE TABLE ", $table, " ( col VARCHAR(200) );"))
-                    .await?;
-
-                sqlx::query(concat!("INSERT INTO ", $table, " VALUES (?)"))
-                    .bind(vec!["dummy"; NUM_ROWS])
-                    .execute(&mut *conn1)
-                    .await?;
-
-                let (export_fut, readers) = $export.num_readers($num_workers).build(&mut conn1).await?;
-                let (import_fut, writers) = $import.num_writers($num_workers).build(&mut conn2).await?;
-                let transport_futs = iter::zip(readers, writers).map($proc);
-
-                let (export_res, import_res, _) =
-                try_join3(export_fut.map_err(From::from), import_fut.map_err(From::from), try_join_all(transport_futs)).await.map_err(|e| anyhow::anyhow! {e})?;
-
-
-                assert_eq!(NUM_ROWS as u64, export_res.rows_affected());
-                assert_eq!(NUM_ROWS as u64, import_res.rows_affected());
-
-                let num_rows: u64 = sqlx::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
-                    .fetch_one(&mut *conn1)
-                    .await?;
-
-                assert_eq!(num_rows, 2 * NUM_ROWS as u64);
-
-                Ok(())
-            }
-        }
-    };
-}
-
-    macro_rules! test_etl_single_threaded {
-        ($name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-            $crate::etl::macros::test_etl_single_threaded!($name, 1, $table, $export, $import, $(#[$attr]),*);
-        };
-
-        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-            $crate::etl::macros::test_etl!("single_threaded", $name, $num_workers, $table, |(r,w)|  pipe(r, w), $export, $import, $(#[$attr]),*);
-        }
-    }
-
-    macro_rules! test_etl_multi_threaded {
-        ($name:literal, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-            $crate::etl::macros::test_etl_multi_threaded!($name, 1, $table, $export, $import, $(#[$attr]),*);
-        };
-
-        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-            $crate::etl::macros::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
-        }
-    }
-
-    pub(crate) use test_etl;
-    pub(crate) use test_etl_multi_threaded;
-    pub(crate) use test_etl_single_threaded;
 }

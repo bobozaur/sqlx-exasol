@@ -15,7 +15,6 @@ use crate::{
 #[derive(Debug)]
 pub struct ExportBuilder<'a> {
     num_readers: usize,
-    buffer_size: usize,
     compression: Option<bool>,
     source: ExportSource<'a>,
     comment: Option<&'a str>,
@@ -31,7 +30,6 @@ impl<'a> ExportBuilder<'a> {
     pub fn new(source: ExportSource<'a>) -> Self {
         Self {
             num_readers: 0,
-            buffer_size: Self::DEFAULT_BUF_SIZE,
             compression: None,
             source,
             comment: None,
@@ -68,11 +66,6 @@ impl<'a> ExportBuilder<'a> {
     /// Providing a number bigger than the number of nodes is the same as providing `0`.
     pub fn num_readers(&mut self, num_readers: usize) -> &mut Self {
         self.num_readers = num_readers;
-        self
-    }
-
-    pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
-        self.buffer_size = buffer_size;
         self
     }
 
@@ -138,7 +131,7 @@ impl<'a> EtlJob for ExportBuilder<'a> {
     ) -> Vec<Self::Worker> {
         socket_futures
             .into_iter()
-            .map(|f| ExaExport::Setup(f, self.buffer_size, with_compression))
+            .map(|f| ExaExport::Setup(f, with_compression))
             .collect()
     }
 

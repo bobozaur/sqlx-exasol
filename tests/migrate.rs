@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 use std::path::Path;
 
 use sqlx::{migrate::Migrator, pool::PoolConnection, Executor, Row};
@@ -7,7 +9,7 @@ use sqlx_exasol::{ExaConnection, Exasol};
 async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     clean_up(&mut conn).await?;
 
-    let migrator = Migrator::new(Path::new("tests/it/migrations_simple")).await?;
+    let migrator = Migrator::new(Path::new("tests/migrations_simple")).await?;
 
     // run migration
     migrator.run(&mut conn).await?;
@@ -29,7 +31,7 @@ async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 async fn reversible(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     clean_up(&mut conn).await?;
 
-    let migrator = Migrator::new(Path::new("tests/it/migrations_reversible")).await?;
+    let migrator = Migrator::new(Path::new("tests/migrations_reversible")).await?;
 
     // run migration
     migrator.run(&mut conn).await?;

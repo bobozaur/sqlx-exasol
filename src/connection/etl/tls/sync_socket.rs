@@ -1,44 +1,24 @@
 use std::{
     io::{Read, Result as IoResult, Write},
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 
 use sqlx_core::net::Socket;
 
 /// Wrapper emulating a synchronous socket from an async one.
 /// Needed by the TLS backends as they need a type implementing [`Read`] and [`Write`].
-pub struct SyncSocket<S>
-where
-    S: Socket,
-{
-    pub socket: S,
-    wants_read: bool,
-    wants_write: bool,
-}
+pub struct SyncSocket<S: Socket>(pub S);
 
 impl<S> SyncSocket<S>
 where
     S: Socket,
 {
-    pub fn new(socket: S) -> Self {
-        Self {
-            socket,
-            wants_read: false,
-            wants_write: false,
-        }
+    pub fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.0.poll_read_ready(cx)
     }
-    pub fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        if self.wants_write {
-            ready!(self.socket.poll_write_ready(cx))?;
-            self.wants_write = false;
-        }
 
-        if self.wants_read {
-            ready!(self.socket.poll_read_ready(cx))?;
-            self.wants_read = false;
-        }
-
-        Poll::Ready(Ok(()))
+    pub fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        self.0.poll_write_ready(cx)
     }
 }
 
@@ -47,11 +27,7 @@ where
     S: Socket,
 {
     fn read(&mut self, mut buf: &mut [u8]) -> IoResult<usize> {
-        self.wants_read = true;
-        let read = self.socket.try_read(&mut buf)?;
-        self.wants_read = false;
-
-        Ok(read)
+        self.0.try_read(&mut buf)
     }
 }
 
@@ -60,11 +36,7 @@ where
     S: Socket,
 {
     fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.wants_write = true;
-        let written = self.socket.try_write(buf)?;
-        self.wants_write = false;
-
-        Ok(written)
+        self.0.try_write(buf)
     }
 
     fn flush(&mut self) -> IoResult<()> {

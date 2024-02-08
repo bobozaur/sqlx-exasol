@@ -1,4 +1,6 @@
-use super::*;
+#![cfg(feature = "migrate")]
+
+mod macros;
 
 const MAX_U64_NUMERIC: u64 = 1_000_000_000_000_000_000;
 const MAX_U128_NUMERIC: u128 = 1_000_000_000_000_000_000;

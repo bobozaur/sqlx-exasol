@@ -1,6 +1,8 @@
+#![cfg(feature = "migrate")]
+
 use sqlx_exasol::ExaPool;
 
-const MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("tests/it/migrations");
+const MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("tests/migrations");
 
 #[sqlx::test]
 async fn it_gets_a_pool(pool: ExaPool) -> sqlx::Result<()> {
@@ -20,7 +22,7 @@ async fn it_gets_a_pool(pool: ExaPool) -> sqlx::Result<()> {
 }
 
 // This should apply migrations and then `fixtures/users.sql`
-#[sqlx::test(migrations = "tests/it/migrations", fixtures("users"))]
+#[sqlx::test(migrations = "tests/migrations", fixtures("users"))]
 async fn it_gets_users(pool: ExaPool) -> sqlx::Result<()> {
     let usernames: Vec<String> =
         sqlx::query_scalar(r#"SELECT username FROM users ORDER BY username"#)
@@ -44,7 +46,7 @@ async fn it_gets_users(pool: ExaPool) -> sqlx::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/it/migrations", fixtures("users", "posts"))]
+#[sqlx::test(migrations = "tests/migrations", fixtures("users", "posts"))]
 async fn it_gets_posts(pool: ExaPool) -> sqlx::Result<()> {
     let post_contents: Vec<String> =
         sqlx::query_scalar("SELECT content FROM post ORDER BY created_at")

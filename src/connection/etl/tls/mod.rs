@@ -31,7 +31,7 @@ pub fn tls_with_socket_maker() -> Result<impl WithSocketMaker, SqlxError> {
     return RustlsSocketSpawner::new(&cert);
 }
 
-fn make_cert() -> Result<Certificate, SqlxError> {
+pub fn make_cert() -> Result<Certificate, SqlxError> {
     let mut rng = rand::thread_rng();
     let bits = 2048;
     let private_key = RsaPrivateKey::new(&mut rng, bits).to_sqlx_err()?;

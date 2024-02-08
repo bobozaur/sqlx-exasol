@@ -1,13 +1,13 @@
 use std::{
-    future,
+    future::poll_fn,
     io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
     net::SocketAddrV4,
     sync::Arc,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 
 use futures_core::future::BoxFuture;
-use native_tls::{HandshakeError, Identity, TlsAcceptor};
+use native_tls::{HandshakeError, Identity, TlsAcceptor, TlsStream};
 use rcgen::Certificate;
 use sqlx_core::{
     error::Error as SqlxError,
@@ -19,7 +19,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ExaResultExt,
-    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
+    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture, WithSocketFuture},
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].
@@ -57,45 +57,43 @@ impl WithNativeTlsSocket {
     fn new(wrapper: WithExaSocket, acceptor: Arc<TlsAcceptor>) -> Self {
         Self { wrapper, acceptor }
     }
-}
 
-impl WithSocket for WithNativeTlsSocket {
-    type Output = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
+    fn map_tls_error(e: native_tls::Error) -> IoError {
+        IoError::new(IoErrorKind::Other, e)
+    }
 
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        let WithNativeTlsSocket { wrapper, acceptor } = self;
+    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
+        let mut res = self.acceptor.accept(SyncSocket(socket));
 
-        Box::pin(async move {
-            let (socket, address) = get_etl_addr(socket).await?;
-
-            let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(async move {
-                let mut hs = match acceptor.accept(SyncSocket::new(socket)) {
-                    Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
-                    Err(HandshakeError::Failure(e)) => {
-                        return Err(IoError::new(IoErrorKind::Other, e))
-                    }
-                    Err(HandshakeError::WouldBlock(hs)) => hs,
-                };
-
-                loop {
-                    future::poll_fn(|cx| hs.get_mut().poll_ready(cx)).await?;
-
-                    match hs.handshake() {
-                        Ok(s) => return Ok(wrapper.with_socket(NativeTlsSocket(s))),
-                        Err(HandshakeError::Failure(e)) => {
-                            return Err(IoError::new(IoErrorKind::Other, e))
-                        }
-                        Err(HandshakeError::WouldBlock(h)) => hs = h,
-                    }
+        loop {
+            match res {
+                Ok(s) => return Ok(self.wrapper.with_socket(NativeTlsSocket(s))),
+                Err(HandshakeError::Failure(e)) => return Err(Self::map_tls_error(e)),
+                Err(HandshakeError::WouldBlock(mut h)) => {
+                    poll_fn(|cx| h.get_mut().poll_read_ready(cx)).await?;
+                    poll_fn(|cx| h.get_mut().poll_write_ready(cx)).await?;
+                    res = h.handshake();
                 }
-            });
+            };
+        }
+    }
 
-            Ok((address, future))
-        })
+    async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
+        let (socket, address) = get_etl_addr(socket).await?;
+        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
+        Ok((address, future))
     }
 }
 
-struct NativeTlsSocket<S>(native_tls::TlsStream<SyncSocket<S>>)
+impl WithSocket for WithNativeTlsSocket {
+    type Output = WithSocketFuture;
+
+    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        Box::pin(self.work(socket))
+    }
+}
+
+struct NativeTlsSocket<S>(TlsStream<SyncSocket<S>>)
 where
     S: Socket;
 
@@ -112,18 +110,21 @@ where
     }
 
     fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.0.get_mut().poll_ready(cx)
+        self.0.get_mut().poll_read_ready(cx)
     }
 
     fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.0.get_mut().poll_ready(cx)
+        self.0.get_mut().poll_write_ready(cx)
     }
 
     fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         match self.0.shutdown() {
-            Err(e) if e.kind() == IoErrorKind::WouldBlock => self.0.get_mut().poll_ready(cx),
-            ready => Poll::Ready(ready),
-        }
+            Err(e) if e.kind() == IoErrorKind::WouldBlock => (),
+            ready => return Poll::Ready(ready),
+        };
+
+        ready!(self.0.get_mut().poll_read_ready(cx))?;
+        self.0.get_mut().poll_write_ready(cx)
     }
 }
 

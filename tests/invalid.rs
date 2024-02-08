@@ -1,4 +1,6 @@
-use super::*;
+#![cfg(feature = "migrate")]
+
+mod macros;
 
 // Test incompatible types
 test_type_invalid!(u16_into_u8<u16>::"DECIMAL(3,0)"::(u16::MAX));
