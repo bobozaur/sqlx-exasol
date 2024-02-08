@@ -73,6 +73,7 @@ impl WithRustlsSocket {
         let mut socket = RustlsSocket {
             inner: SyncSocket(socket),
             state,
+            close_notify_sent: false,
         };
 
         // Performs the TLS handshake or bails
@@ -104,6 +105,7 @@ where
 {
     inner: SyncSocket<S>,
     state: ServerConnection,
+    close_notify_sent: bool,
 }
 
 impl<S> Socket for RustlsSocket<S>
@@ -149,9 +151,20 @@ where
     }
 
     fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        if !self.close_notify_sent {
+            self.state.send_close_notify();
+            self.close_notify_sent = true;
+        }
+
         ready!(self.poll_read_ready(cx))?;
         ready!(self.poll_write_ready(cx))?;
-        self.inner.0.poll_shutdown(cx)
+
+        // Some socket implementations (like `tokio`) try to implicitly shutdown the TCP stream.
+        // That results in a sporadic error because `rustls` already initiates the close.
+        match ready!(self.inner.0.poll_shutdown(cx)) {
+            Err(e) if e.kind() == IoErrorKind::NotConnected => Poll::Ready(Ok(())),
+            res => Poll::Ready(res),
+        }
     }
 }
 
