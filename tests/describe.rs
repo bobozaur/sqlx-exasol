@@ -2,7 +2,7 @@ use sqlx::{Column, Executor, Type, TypeInfo};
 use sqlx_core::pool::PoolConnection;
 use sqlx_exasol::Exasol;
 
-#[sqlx::test(migrations = "tests/it/setup")]
+#[sqlx::test(migrations = "tests/setup")]
 async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let d = conn.describe("SELECT * FROM tweet").await?;
 
@@ -24,7 +24,7 @@ async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/it/setup")]
+#[sqlx::test(migrations = "tests/setup")]
 async fn it_describes_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r#"
@@ -54,7 +54,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/it/setup")]
+#[sqlx::test(migrations = "tests/setup")]
 async fn it_describes_columns_and_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r#"
@@ -101,7 +101,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/it/setup")]
+#[sqlx::test(migrations = "tests/setup")]
 async fn test_boolean(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r#"
@@ -131,7 +131,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/it/setup")]
+#[sqlx::test(migrations = "tests/setup")]
 async fn uses_alias_name(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let d = conn
         .describe("SELECT text AS tweet_text FROM tweet")

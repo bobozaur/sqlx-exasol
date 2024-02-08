@@ -1,4 +1,4 @@
-use super::*;
+mod macros;
 
 test_type_valid!(varchar_ascii<String>::"VARCHAR(100) ASCII"::("'first value'" => "first value", "'second value'" => "second value"));
 test_type_valid!(varchar_utf8<String>::"VARCHAR(100) UTF8"::("'first value 🦀'" => "first value 🦀", "'second value 🦀'" => "second value 🦀"));

@@ -1,4 +1,4 @@
-use super::*;
+mod macros;
 
 test_type_valid!(f32::"DOUBLE PRECISION"::(f32::MIN, f32::MAX));
 test_type_valid!(f64::"DOUBLE PRECISION"::(-3.40282346638529e38f64, 3.40282346638529e38f64));
