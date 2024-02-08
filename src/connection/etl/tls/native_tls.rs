@@ -3,7 +3,7 @@ use std::{
     io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
     net::SocketAddrV4,
     sync::Arc,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 
 use futures_core::future::BoxFuture;
@@ -63,14 +63,15 @@ impl WithNativeTlsSocket {
     }
 
     async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
-        let mut res = self.acceptor.accept(SyncSocket::new(socket));
+        let mut res = self.acceptor.accept(SyncSocket(socket));
 
         loop {
             match res {
                 Ok(s) => return Ok(self.wrapper.with_socket(NativeTlsSocket(s))),
                 Err(HandshakeError::Failure(e)) => return Err(Self::map_tls_error(e)),
                 Err(HandshakeError::WouldBlock(mut h)) => {
-                    poll_fn(|cx| h.get_mut().poll_ready(cx)).await?;
+                    poll_fn(|cx| h.get_mut().poll_read_ready(cx)).await?;
+                    poll_fn(|cx| h.get_mut().poll_write_ready(cx)).await?;
                     res = h.handshake();
                 }
             };
@@ -109,18 +110,21 @@ where
     }
 
     fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.0.get_mut().poll_ready(cx)
+        self.0.get_mut().poll_read_ready(cx)
     }
 
     fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        self.0.get_mut().poll_ready(cx)
+        self.0.get_mut().poll_write_ready(cx)
     }
 
     fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         match self.0.shutdown() {
-            Err(e) if e.kind() == IoErrorKind::WouldBlock => self.0.get_mut().poll_ready(cx),
-            ready => Poll::Ready(ready),
-        }
+            Err(e) if e.kind() == IoErrorKind::WouldBlock => (),
+            ready => return Poll::Ready(ready),
+        };
+
+        ready!(self.0.get_mut().poll_read_ready(cx))?;
+        self.0.get_mut().poll_write_ready(cx)
     }
 }
 
