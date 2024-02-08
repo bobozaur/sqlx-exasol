@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 use sqlx_exasol::ExaPool;
 
 const MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("tests/migrations");

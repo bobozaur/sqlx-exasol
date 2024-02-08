@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 use std::path::Path;
 
 use sqlx::{migrate::Migrator, pool::PoolConnection, Executor, Row};

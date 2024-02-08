@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 use std::collections::HashSet;

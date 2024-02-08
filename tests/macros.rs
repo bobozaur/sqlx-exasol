@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 #[macro_export]
 macro_rules! test_type_valid {
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {

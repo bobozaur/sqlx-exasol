@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 test_type_valid!(varchar_ascii<String>::"VARCHAR(100) ASCII"::("'first value'" => "first value", "'second value'" => "second value"));

@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 use ::rust_decimal::Decimal;

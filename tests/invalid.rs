@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 // Test incompatible types

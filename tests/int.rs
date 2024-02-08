@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 const MIN_I64_NUMERIC: i64 = -999999999999999999;

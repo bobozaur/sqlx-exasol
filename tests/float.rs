@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 test_type_valid!(f32::"DOUBLE PRECISION"::(f32::MIN, f32::MAX));

@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 use ::chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, Utc};

@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 mod macros;
 
 test_type_valid!(geometry<String>::"GEOMETRY"::("'POINT (1 2)'" => "POINT (1 2)", "'POINT (3 4)'" => "POINT (3 4)"));
