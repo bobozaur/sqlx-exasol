@@ -12,8 +12,8 @@ Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (no
 >
 > With that in mind, please favor using a fixed version of `sqlx` and `sqlx-exasol` in `Cargo.toml` to avoid issues, such as:
 > ```toml
-> sqlx = "=0.7.3"
-> sqlx-exasol = "=0.7.3"
+> sqlx = "=0.7.4"
+> sqlx-exasol = "=0.7.4"
 > ```
 
 

@@ -180,11 +180,11 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
         let millis: i64 = millis.parse().map_err(Box::new)?;
         let sign = if days.is_negative() { -1 } else { 1 };
 
-        let duration = chrono::Duration::days(days)
-            + chrono::Duration::hours(hours * sign)
-            + chrono::Duration::minutes(minutes * sign)
-            + chrono::Duration::seconds(seconds * sign)
-            + chrono::Duration::milliseconds(millis * sign);
+        let duration = chrono::Duration::try_days(days).ok_or_else(input_err_fn)?
+            + chrono::Duration::try_hours(hours * sign).ok_or_else(input_err_fn)?
+            + chrono::Duration::try_minutes(minutes * sign).ok_or_else(input_err_fn)?
+            + chrono::Duration::try_seconds(seconds * sign).ok_or_else(input_err_fn)?
+            + chrono::Duration::try_milliseconds(millis * sign).ok_or_else(input_err_fn)?;
 
         Ok(duration)
     }
