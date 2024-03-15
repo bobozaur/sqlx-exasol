@@ -29,10 +29,10 @@ test_type_valid!(datetime_local_str<String>::"TIMESTAMP WITH LOCAL TIME ZONE"::(
 test_type_valid!(datetime_local_option<Option<DateTime<Local>>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("NULL" => None::<DateTime<Local>>, "''" => None::<DateTime<Local>>, "'2023-08-12 19:22:36.591000'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap())));
 test_type_array!(datetime_local_array<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::(vec!["2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000"]));
 
-test_type_valid!(duration<Duration>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
+test_type_valid!(duration<Duration>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => Duration::try_milliseconds(938750123).unwrap(), "'-10 20:45:50.123'" => Duration::try_milliseconds(-938750123).unwrap()));
 test_type_valid!(duration_str<String>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => "+10 20:45:50.123"));
-test_type_valid!(duration_with_prec<Duration>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => Duration::milliseconds(938750123), "'-10 20:45:50.123'" => Duration::milliseconds(-938750123)));
-test_type_valid!(duration_option<Option<Duration>>::"INTERVAL DAY TO SECOND"::("NULL" => None::<Duration>, "''" => None::<Duration>, "'10 20:45:50.123'" => Some(Duration::milliseconds(938750123))));
+test_type_valid!(duration_with_prec<Duration>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => Duration::try_milliseconds(938750123).unwrap(), "'-10 20:45:50.123'" => Duration::try_milliseconds(-938750123).unwrap()));
+test_type_valid!(duration_option<Option<Duration>>::"INTERVAL DAY TO SECOND"::("NULL" => None::<Duration>, "''" => None::<Duration>, "'10 20:45:50.123'" => Some(Duration::try_milliseconds(938750123).unwrap())));
 test_type_array!(duration_array<Duration>::"INTERVAL DAY TO SECOND"::(vec!["10 20:45:50.123", "10 20:45:50.123", "10 20:45:50.123"]));
 
 test_type_valid!(months<Months>::"INTERVAL YEAR TO MONTH"::("'1-5'" => Months::new(17), "'-1-5'" => Months::new(-17)));

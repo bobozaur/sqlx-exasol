@@ -1,6 +1,6 @@
 [package]
 name = "sqlx-exasol"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2021"
 authors = ["bobozaur"]
 description = "Exasol driver for the SQLx framework."
@@ -39,33 +39,33 @@ etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
 
 [dependencies]
 rand = "0.8.5"
-base64 = "0.21.2"
-thiserror = "1.0.30"
-url = "2.2.2"
-rsa = "0.9.2"
-async-tungstenite = "0.24.0"
-futures-io = "0.3.28"
-futures-util = "0.3.28"
-futures-core = "0.3.28"
-serde_json = { version = "1.0.100", features = ["raw_value"] }
-serde = { version = "1.0.169", features = ["derive"] }
-pin-project = "1.1.2"
-lru = "0.12.0"
-sqlx-core = "0.7.3"
-sqlx-macros-core = "0.7.3"
-tracing = { version = "0.1.37", features = ["log"] }
+base64 = "0.22.0"
+thiserror = "1.0.58"
+url = "2.5.0"
+rsa = "0.9.6"
+async-tungstenite = "0.25.0"
+futures-io = "0.3.30"
+futures-util = "0.3.30"
+futures-core = "0.3.30"
+serde_json = { version = "1.0.114", features = ["raw_value"] }
+serde = { version = "1.0.197", features = ["derive"] }
+pin-project = "1.1.5"
+lru = "0.12.3"
+sqlx-core = "0.7.4"
+sqlx-macros-core = "0.7.4"
+tracing = { version = "0.1.40", features = ["log"] }
 arrayvec = "0.7.4"
-rcgen = { version = "0.12.0", optional = true }
+rcgen = { version = "0.12.1", optional = true }
 tungstenite = "0.21.0"
 
 # Feature flagged optional dependencies
-uuid = { version = "1.4.1", features = ["serde"], optional = true }
-chrono = { version = "0.4.26", features = ["serde"], optional = true }
-rust_decimal = { version = "1.30.0", optional = true }
+uuid = { version = "1.7.0", features = ["serde"], optional = true }
+chrono = { version = "0.4.35", features = ["serde"], optional = true }
+rust_decimal = { version = "1.34.3", optional = true }
 dotenvy = { version = "0.15.7", optional = true }
 hex = { version = "0.4.3", optional = true }
-flate2 = { version = "1.0.22", optional = true }
-async-compression = { version = "0.4.1", features = [
+flate2 = { version = "1.0.28", optional = true }
+async-compression = { version = "0.4.6", features = [
     "futures-io",
     "gzip",
 ], optional = true }
@@ -73,19 +73,19 @@ rustls = { version = "0.21", default-features = false, features = [
     "dangerous_configuration",
     "tls12",
 ], optional = true }
-native-tls = { version = "0.2.10", optional = true }
+native-tls = { version = "0.2.11", optional = true }
 hyper-util = { version = "0.1", features = ["full"], optional = true }
 http-body-util = { version = "0.1", optional = true }
-hyper = { version = "1.1", features = ["server", "http1"], optional = true }
+hyper = { version = "1.2.0", features = ["server", "http1"], optional = true }
 bytes = { version = "1.5", optional = true }
 futures-channel = { version = "0.3.30", optional = true }
 
 [dev-dependencies]
-sqlx = { version = "0.7.3", features = [
+sqlx = { version = "0.7.4", features = [
     "runtime-tokio",
     "tls-native-tls",
     "migrate",
 ] }
 paste = "1.0.14"
-anyhow = "1.0.72"
-tokio = { version = "1.31.0", features = ["full"] }
+anyhow = "1.0.81"
+tokio = { version = "1.36.0", features = ["full"] }
