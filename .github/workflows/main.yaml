@@ -8,7 +8,7 @@ on:
     branches: ["main"]
 
 env:
-  RUST_TOOLCHAIN: 1.70.0
+  RUST_TOOLCHAIN: 1.74.0
   EXASOL_VERSION: 7.0.22
   NUM_NODES: 2
   ETL_TEST_THREADS: 4
