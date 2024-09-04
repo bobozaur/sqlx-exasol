@@ -274,7 +274,8 @@ where
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self {
+        #[allow(clippy::explicit_iter_loop)] // false positive
+        for value in self.iter() {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
