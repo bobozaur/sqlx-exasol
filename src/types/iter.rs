@@ -273,7 +273,7 @@ where
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
         let mut output = None;
 
-        for value in self.iter() {
+        for value in self {
             match (&output, value.produces()) {
                 (None, Some(new)) => output = Some(new),
                 (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),

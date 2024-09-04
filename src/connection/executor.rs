@@ -19,6 +19,7 @@ use crate::{
     ExaConnection,
 };
 
+#[allow(clippy::multiple_bound_locations)]
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;
 

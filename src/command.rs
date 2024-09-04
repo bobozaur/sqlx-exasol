@@ -1,3 +1,4 @@
+#[cfg(feature = "etl")]
 use std::net::IpAddr;
 
 use serde::{
@@ -154,6 +155,7 @@ pub(crate) struct LoginInfo {
     protocol_version: ProtocolVersion,
 }
 
+#[cfg(feature = "etl")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GetHosts {
@@ -168,17 +170,12 @@ pub(crate) struct Sql<'a> {
     sql_text: &'a str,
 }
 
+#[cfg(feature = "migrate")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BatchSql<'a> {
     attributes: &'a ExaAttributes,
     sql_texts: Vec<&'a str>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct SqlBatch {
-    sql_texts: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -52,11 +52,11 @@ serde = { version = "1.0.197", features = ["derive"] }
 pin-project = "1.1.5"
 lru = "0.12.3"
 sqlx-core = "0.7.4"
-sqlx-macros-core = "0.7.4"
+# sqlx-macros-core = "0.7.4"
 tracing = { version = "0.1.40", features = ["log"] }
 arrayvec = "0.7.4"
 rcgen = { version = "0.12.1", optional = true }
-tungstenite = "0.21.0"
+# tungstenite = "0.21.0"
 
 # Feature flagged optional dependencies
 uuid = { version = "1.7.0", features = ["serde"], optional = true }
@@ -89,3 +89,27 @@ sqlx = { version = "0.7.4", features = [
 paste = "1.0.14"
 anyhow = "1.0.81"
 tokio = { version = "1.36.0", features = ["full"] }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+struct_excessive_bools = "allow"
+trivially_copy_pass_by_ref = "allow"
+must_use_candidate = "allow"
+match_bool = "allow"
+module_name_repetitions = "allow"
+
+[lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2021_compatibility = { level = "warn", priority = -1 }
+meta_variable_misuse = "warn"
+missing_abi = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+non_ascii_idents = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
