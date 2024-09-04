@@ -4,8 +4,7 @@ use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
-    types::Text,
-    types::Type,
+    types::{Text, Type},
 };
 
 use crate::{arguments::ExaBuffer, ExaTypeInfo, ExaValueRef, Exasol};

@@ -1,7 +1,6 @@
 use serde::Serialize;
 use serde_json::Error as SerdeError;
-use sqlx_core::error::BoxDynError;
-use sqlx_core::{arguments::Arguments, encode::Encode, types::Type};
+use sqlx_core::{arguments::Arguments, encode::Encode, error::BoxDynError, types::Type};
 
 use crate::{database::Exasol, error::ExaProtocolError, type_info::ExaTypeInfo};
 
