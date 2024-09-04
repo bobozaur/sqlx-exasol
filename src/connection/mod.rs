@@ -158,7 +158,7 @@ impl ExaConnection {
     async fn execute_prepared<'a, C, F>(
         &'a mut self,
         sql: &str,
-        mut args: ExaArguments,
+        args: ExaArguments,
         persist: bool,
         future_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
@@ -166,12 +166,6 @@ impl ExaConnection {
         C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
     {
-        // If some error occurred while binding parameters,
-        // we couldn't return it then, so we stored it and return it now.
-        if let Some(err) = args.buf.binding_err.take() {
-            Err(err)?;
-        }
-
         let prepared = self
             .ws
             .get_or_prepare(&mut self.statement_cache, sql, persist)
@@ -193,7 +187,7 @@ impl ExaConnection {
             &prepared.parameters,
             args.buf,
             &self.ws.attributes,
-        )?
+        )
         .try_into()?;
 
         self.ws

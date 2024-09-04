@@ -20,9 +20,9 @@ impl Type<Exasol> for bool {
 }
 
 impl Encode<'_, Exasol> for bool {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -30,8 +30,11 @@ impl Encode<'_, Exasol> for bool {
     }
 
     fn size_hint(&self) -> usize {
-        // length of true or false as strings
-        5
+        if *self {
+            stringify!(true).len()
+        } else {
+            stringify!(false).len()
+        }
     }
 }
 

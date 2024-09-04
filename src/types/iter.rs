@@ -1,6 +1,7 @@
 use sqlx_core::{
     database::Database,
     encode::{Encode, IsNull},
+    error::BoxDynError,
     types::Type,
 };
 
@@ -76,9 +77,9 @@ where
         output.or_else(|| Some(T::type_info()))
     }
 
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.value.clone());
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append_iter(self.value.clone())?;
+        Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {
@@ -120,9 +121,9 @@ where
         output.or_else(|| Some(T::type_info()))
     }
 
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.iter());
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append_iter(self.iter())?;
+        Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {
@@ -161,9 +162,9 @@ where
         output.or_else(|| Some(T::type_info()))
     }
 
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.iter());
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append_iter(self.iter())?;
+        Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {
@@ -202,9 +203,9 @@ where
         output.or_else(|| Some(T::type_info()))
     }
 
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.iter());
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append_iter(self.iter())?;
+        Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {
@@ -243,9 +244,9 @@ where
         output.or_else(|| Some(T::type_info()))
     }
 
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.iter());
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append_iter(self.iter())?;
+        Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {
@@ -284,9 +285,9 @@ where
         output.or_else(|| Some(T::type_info()))
     }
 
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append_iter(self.iter());
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append_iter(self.iter())?;
+        Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {

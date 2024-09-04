@@ -27,15 +27,15 @@ impl Type<Exasol> for str {
 }
 
 impl Encode<'_, Exasol> for &'_ str {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         // Exasol treats empty strings as NULL
         if self.is_empty() {
-            buf.append(());
-            return IsNull::Yes;
+            buf.append(())?;
+            return Ok(IsNull::Yes);
         }
 
-        buf.append(self);
-        IsNull::No
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -65,7 +65,7 @@ impl Type<Exasol> for String {
 }
 
 impl Encode<'_, Exasol> for String {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Exasol>>::encode(&**self, buf)
     }
 
@@ -95,7 +95,7 @@ impl Type<Exasol> for Cow<'_, str> {
 }
 
 impl Encode<'_, Exasol> for Cow<'_, str> {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         match self {
             Cow::Borrowed(str) => <&str as Encode<Exasol>>::encode(*str, buf),
             Cow::Owned(str) => <&str as Encode<Exasol>>::encode(&**str, buf),

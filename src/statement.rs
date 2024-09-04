@@ -1,11 +1,8 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use sqlx_core::{
-    column::ColumnIndex,
-    database::{Database, HasStatement},
-    impl_statement_query,
-    statement::Statement,
-    Either, Error as SqlxError,
+    column::ColumnIndex, database::Database, impl_statement_query, statement::Statement, Either,
+    Error as SqlxError,
 };
 
 use crate::{arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
@@ -42,7 +39,7 @@ impl ExaStatementMetadata {
 impl<'q> Statement<'q> for ExaStatement<'q> {
     type Database = Exasol;
 
-    fn to_owned(&self) -> <Self::Database as HasStatement<'static>>::Statement {
+    fn to_owned(&self) -> <Self::Database as Database>::Statement<'static> {
         ExaStatement {
             sql: Cow::Owned(self.sql.clone().into_owned()),
             metadata: self.metadata.clone(),

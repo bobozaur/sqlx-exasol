@@ -1,6 +1,6 @@
 [package]
 name = "sqlx-exasol"
-version = "0.7.4"
+version = "0.8.2"
 edition = "2021"
 authors = ["bobozaur"]
 description = "Exasol driver for the SQLx framework."
@@ -47,16 +47,15 @@ async-tungstenite = "0.25.0"
 futures-io = "0.3.30"
 futures-util = "0.3.30"
 futures-core = "0.3.30"
-serde_json = { version = "1.0.114", features = ["raw_value"] }
+serde_json = { version = "1.0.114" }
 serde = { version = "1.0.197", features = ["derive"] }
 pin-project = "1.1.5"
 lru = "0.12.3"
-sqlx-core = "0.7.4"
-# sqlx-macros-core = "0.7.4"
+sqlx-core = "0.8.2"
+# sqlx-macros-core = "0.8.2"
 tracing = { version = "0.1.40", features = ["log"] }
-arrayvec = "0.7.4"
+arrayvec = "0.7.6"
 rcgen = { version = "0.12.1", optional = true }
-# tungstenite = "0.21.0"
 
 # Feature flagged optional dependencies
 uuid = { version = "1.7.0", features = ["serde"], optional = true }
@@ -81,7 +80,7 @@ bytes = { version = "1.5", optional = true }
 futures-channel = { version = "0.3.30", optional = true }
 
 [dev-dependencies]
-sqlx = { version = "0.7.4", features = [
+sqlx = { version = "0.8.2", features = [
     "runtime-tokio",
     "tls-native-tls",
     "migrate",

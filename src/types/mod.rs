@@ -8,6 +8,7 @@ mod option;
 #[cfg(feature = "rust_decimal")]
 mod rust_decimal;
 mod str;
+mod text;
 mod uint;
 #[cfg(feature = "uuid")]
 mod uuid;

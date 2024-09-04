@@ -28,7 +28,7 @@ impl Type<Exasol> for DateTime<Utc> {
 }
 
 impl Encode<'_, Exasol> for DateTime<Utc> {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         Encode::<Exasol>::encode(self.naive_utc(), buf)
     }
 
@@ -55,7 +55,7 @@ impl Type<Exasol> for DateTime<Local> {
 }
 
 impl Encode<'_, Exasol> for DateTime<Local> {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         Encode::<Exasol>::encode(self.naive_local(), buf)
     }
 
@@ -86,7 +86,7 @@ impl Type<Exasol> for NaiveDateTime {
 }
 
 impl Encode<'_, Exasol> for NaiveDateTime {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(format_args!("{}", self.format(TIMESTAMP_FMT)));
         IsNull::No
     }
@@ -124,7 +124,7 @@ impl Type<Exasol> for chrono::Duration {
 }
 
 impl Encode<'_, Exasol> for chrono::Duration {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(format_args!(
             "{} {}:{}:{}.{}",
             self.num_days(),
@@ -197,7 +197,7 @@ impl Type<Exasol> for NaiveDate {
 }
 
 impl Encode<'_, Exasol> for NaiveDate {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(self);
         IsNull::No
     }
@@ -245,7 +245,7 @@ impl Type<Exasol> for Months {
 }
 
 impl Encode<'_, Exasol> for Months {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         let years = self.0 / 12;
         let months = (self.0 % 12).abs();
         buf.append(format_args!("{years}-{months}"));

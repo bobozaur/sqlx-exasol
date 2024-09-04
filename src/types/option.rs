@@ -1,5 +1,6 @@
 use sqlx_core::{
     encode::{Encode, IsNull},
+    error::BoxDynError,
     types::Type,
 };
 
@@ -19,22 +20,22 @@ where
     }
 
     #[inline]
-    fn encode(self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode(self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         if let Some(v) = self {
             v.encode(buf)
         } else {
-            buf.append(());
-            IsNull::Yes
+            buf.append(())?;
+            Ok(IsNull::Yes)
         }
     }
 
     #[inline]
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         if let Some(v) = self {
             v.encode_by_ref(buf)
         } else {
-            buf.append(());
-            IsNull::Yes
+            buf.append(())?;
+            Ok(IsNull::Yes)
         }
     }
 

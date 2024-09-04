@@ -25,7 +25,7 @@ impl Type<Exasol> for Uuid {
 }
 
 impl Encode<'_, Exasol> for Uuid {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(self.simple());
         IsNull::No
     }
