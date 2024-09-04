@@ -87,8 +87,8 @@ impl Type<Exasol> for NaiveDateTime {
 
 impl Encode<'_, Exasol> for NaiveDateTime {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append(format_args!("{}", self.format(TIMESTAMP_FMT)));
-        IsNull::No
+        buf.append(format_args!("{}", self.format(TIMESTAMP_FMT)))?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -132,9 +132,9 @@ impl Encode<'_, Exasol> for chrono::Duration {
             self.num_minutes().abs() % 60,
             self.num_seconds().abs() % 60,
             self.num_milliseconds().abs() % 1000
-        ));
+        ))?;
 
-        IsNull::No
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -198,8 +198,8 @@ impl Type<Exasol> for NaiveDate {
 
 impl Encode<'_, Exasol> for NaiveDate {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append(self);
-        IsNull::No
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -248,9 +248,9 @@ impl Encode<'_, Exasol> for Months {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         let years = self.0 / 12;
         let months = (self.0 % 12).abs();
-        buf.append(format_args!("{years}-{months}"));
+        buf.append(format_args!("{years}-{months}"))?;
 
-        IsNull::No
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {

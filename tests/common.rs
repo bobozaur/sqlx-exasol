@@ -1,8 +1,10 @@
 #![cfg(feature = "migrate")]
 
 use futures_util::TryStreamExt;
-use sqlx::{Column, Connection, Executor, Row, Statement, TypeInfo};
-use sqlx_core::pool::PoolConnection;
+use sqlx::{
+    error::BoxDynError, pool::PoolConnection, Column, Connection, Executor, Row, Statement,
+    TypeInfo,
+};
 use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaRow, Exasol};
 
 #[sqlx::test]
@@ -411,9 +413,7 @@ async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow
 // }
 
 #[sqlx::test]
-async fn test_equal_arrays(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
+async fn test_equal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     use std::iter::zip;
 
     use sqlx_core::{executor::Executor, query::query, query_as::query_as};
@@ -454,9 +454,7 @@ async fn test_equal_arrays(
 }
 
 #[sqlx::test]
-async fn test_unequal_arrays(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
+async fn test_unequal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     use sqlx_core::{executor::Executor, query::query};
 
     con.execute(
@@ -480,9 +478,7 @@ async fn test_unequal_arrays(
 }
 
 #[sqlx::test]
-async fn test_exceeding_arrays(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
+async fn test_exceeding_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     use sqlx_core::{executor::Executor, query::query};
 
     con.execute(
@@ -506,9 +502,7 @@ async fn test_exceeding_arrays(
 }
 
 #[sqlx::test]
-async fn test_decode_error(
-    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> Result<(), sqlx_core::error::BoxDynError> {
+async fn test_decode_error(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
 
     con.execute("CREATE TABLE sqlx_test_type ( col DECIMAL(10, 0) );")

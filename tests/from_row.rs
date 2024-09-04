@@ -14,12 +14,12 @@ struct TestRow {
 #[sqlx::test]
 async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
-        r#"
+        r"
         CREATE TABLE TEST_FROM_ROW (
             name VARCHAR(200), 
             age DECIMAL(3, 0), 
             amount DECIMAL(15, 0)
-         );"#,
+         );",
     )
     .await?;
 
@@ -32,7 +32,7 @@ async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let test_row2 = TestRow {
         name: "Stitch".to_owned(),
         age: 123,
-        amount: 43759384749,
+        amount: 43_759_384_749,
     };
 
     sqlx::query("INSERT INTO TEST_FROM_ROW VALUES (?, ?, ?)")

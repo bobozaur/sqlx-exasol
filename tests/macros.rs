@@ -82,7 +82,8 @@ macro_rules! test_type_array {
                         .fetch_all(&mut *con)
                         .await?;
 
-                    assert_eq!(query_result.rows_affected() as usize, values.len());
+                    let rows_affected = usize::try_from(query_result.rows_affected()).unwrap();
+                    assert_eq!(rows_affected, values.len());
                     con.execute("DELETE FROM sqlx_test_type;").await?;
                 )+
 
