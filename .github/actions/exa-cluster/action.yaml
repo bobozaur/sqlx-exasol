@@ -33,28 +33,19 @@ runs:
       run: docker image load --input ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
       shell: bash
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pipenv
-      shell: bash
-
-    - uses: actions/checkout@v3
-      with:
-        repository: Exasol/docker-db
-        ref: ${{ inputs.exasol-version }}
-
     - name: Set up Exasol Cluster
       run: |
-        pipenv install -r exadt_requirements.txt
-        pipenv run ./exadt create-cluster --root ~/sqlx --create-root sqlx
-        pipenv run ./exadt init-cluster --image exasol/docker-db:${{ inputs.exasol-version }} --license ./license/license.xml --num-nodes ${{ inputs.num-nodes }} --auto-storage sqlx
-        pipenv run ./exadt start-cluster sqlx
+        docker network create --driver=bridge --subnet=10.10.10.0/24 sqlx
+
+        docker run -v $HOME/sqlx1:/exa --rm --privileged -i exasol/docker-db:7.0.22 init-sc --template --num-nodes 3
+        docker run --rm -v $HOME/sqlx1:/exa exasol/docker-db:7.0.22 exaconf modify-volume -n DataVolume1 -s 4GiB
+        sudo truncate -s 6G $HOME/sqlx1/data/storage/dev.1
+        sudo cp -R $HOME/sqlx1 $HOME/sqlx2
+        sudo cp -R $HOME/sqlx1 $HOME/sqlx3
+
+        docker run --name sqlx1 --detach --network=sqlx --ip 10.10.10.11 --privileged --stop-timeout 120 -v $HOME/sqlx1:/exa exasol/docker-db:7.0.22 init-sc --node-id 11
+        docker run --name sqlx2 --detach --network=sqlx --ip 10.10.10.12 --privileged --stop-timeout 120 -v $HOME/sqlx2:/exa exasol/docker-db:7.0.22 init-sc --node-id 12
+        docker run --name sqlx3 --detach --network=sqlx --ip 10.10.10.13 --privileged --stop-timeout 120 -v $HOME/sqlx3:/exa exasol/docker-db:7.0.22 init-sc --node-id 13
       shell: bash
 
     # The exadt tool always creates the Exasol cluster with this subnet
@@ -65,6 +56,3 @@ runs:
         echo "no-tls-url=$DATABASE_URL?ssl-mode=disabled" >> $GITHUB_OUTPUT
         echo "tls-url=$DATABASE_URL?ssl-mode=required" >> $GITHUB_OUTPUT
       shell: bash
-
-    # Checkout the main repository again
-    - uses: actions/checkout@v3
