@@ -18,7 +18,7 @@ features = ["etl", "chrono", "rust_decimal", "uuid"]
 # ########### User-facing features ###########
 # ############################################
 
-compression = ["dep:async-compression", "dep:flate2"]
+compression = ["dep:async-compression"]
 uuid = ["dep:uuid"]
 chrono = ["dep:chrono"]
 rust_decimal = ["dep:rust_decimal"]
@@ -61,6 +61,7 @@ flate2 = { version = "1.0.28", optional = true }
 async-compression = { version = "0.4.6", features = [
     "futures-io",
     "gzip",
+    "zlib",
 ], optional = true }
 rustls = { version = "0.21", default-features = false, features = [
     "dangerous_configuration",
