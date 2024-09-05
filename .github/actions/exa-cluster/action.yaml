@@ -43,14 +43,14 @@ runs:
         docker run --rm -v $HOME/sqlx1:/exa exasol/docker-db:${{ inputs.exasol-version }} exaconf modify-volume -n DataVolume1 -s 4GiB
         sudo truncate -s 6G $HOME/sqlx1/data/storage/dev.1
 
-        for (( i=1; i<3; i++ )); do
+        for (( i=2; i<=${{ inputs.num-nodes }}; i++ )); do
           sudo cp -R $HOME/sqlx1 $HOME/sqlx$i
         done
       shell: bash
 
     - name: Start Exasol cluster
       run: |
-        for (( i=1; i<=3; i++ )); do
+        for (( i=1; i<=${{ inputs.num-nodes }}; i++ )); do
           docker run --name sqlx$i --detach --network=sqlx --ip 10.10.10.1$i --privileged --stop-timeout 120 -v $HOME/sqlx$i:/exa exasol/docker-db:${{ inputs.exasol-version }} init-sc --node-id 1$i
         done
       shell: bash
