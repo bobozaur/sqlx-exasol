@@ -8,7 +8,7 @@ use std::{
 
 use futures_core::future::BoxFuture;
 use native_tls::{HandshakeError, Identity, TlsAcceptor, TlsStream};
-use rcgen::Certificate;
+use rcgen::{Certificate, KeyPair};
 use sqlx_core::{
     error::Error as SqlxError,
     io::ReadBuf,
@@ -26,11 +26,11 @@ use crate::{
 pub struct NativeTlsSocketSpawner(Arc<TlsAcceptor>);
 
 impl NativeTlsSocketSpawner {
-    pub fn new(cert: &Certificate) -> Result<Self, SqlxError> {
+    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> Result<Self, SqlxError> {
         tracing::trace!("creating 'native-tls' socket spawner");
 
-        let tls_cert = cert.serialize_pem().to_sqlx_err()?;
-        let key = cert.serialize_private_key_pem();
+        let tls_cert = cert.pem();
+        let key = key_pair.serialize_pem();
 
         let ident = Identity::from_pkcs8(tls_cert.as_bytes(), key.as_bytes()).to_sqlx_err()?;
         let acceptor = TlsAcceptor::new(ident).to_sqlx_err()?;

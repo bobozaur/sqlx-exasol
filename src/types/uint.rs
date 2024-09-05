@@ -30,9 +30,9 @@ impl Type<Exasol> for u8 {
 }
 
 impl Encode<'_, Exasol> for u8 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -62,9 +62,9 @@ impl Type<Exasol> for u16 {
 }
 
 impl Encode<'_, Exasol> for u16 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -94,9 +94,9 @@ impl Type<Exasol> for u32 {
 }
 
 impl Encode<'_, Exasol> for u32 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -126,15 +126,15 @@ impl Type<Exasol> for u64 {
 }
 
 impl Encode<'_, Exasol> for u64 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         if self < &MAX_U64_NUMERIC {
-            buf.append(self);
+            buf.append(self)?;
         } else {
             // Large numbers get serialized as strings
-            buf.append(format_args!("{self}"));
+            buf.append(format_args!("{self}"))?;
         };
 
-        IsNull::No
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -168,15 +168,15 @@ impl Type<Exasol> for u128 {
 }
 
 impl Encode<'_, Exasol> for u128 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         if self < &MAX_U128_NUMERIC {
-            buf.append(self);
+            buf.append(self)?;
         } else {
             // Large numbers get serialized as strings
-            buf.append(format_args!("{self}"));
+            buf.append(format_args!("{self}"))?;
         };
 
-        IsNull::No
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {

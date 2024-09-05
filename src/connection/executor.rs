@@ -1,9 +1,9 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, future::ready};
 
 use futures_core::{future::BoxFuture, stream::BoxStream};
-use futures_util::TryStreamExt;
+use futures_util::{FutureExt, TryStreamExt};
 use sqlx_core::{
-    database::{Database, HasStatement},
+    database::Database,
     describe::Describe,
     executor::{Execute, Executor},
     logger::QueryLogger,
@@ -19,6 +19,7 @@ use crate::{
     ExaConnection,
 };
 
+#[allow(clippy::multiple_bound_locations)]
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;
 
@@ -37,8 +38,11 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         E: Execute<'q, Self::Database>,
     {
         let sql = query.sql();
-        let arguments = query.take_arguments();
         let persistent = query.persistent();
+        let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
+            Ok(a) => a,
+            Err(e) => return Box::pin(ready(Err(e)).into_stream()),
+        };
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
 
@@ -71,7 +75,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         self,
         sql: &'q str,
         _parameters: &'e [<Self::Database as Database>::TypeInfo],
-    ) -> BoxFuture<'e, Result<<Self::Database as HasStatement<'q>>::Statement, SqlxError>>
+    ) -> BoxFuture<'e, Result<<Self::Database as Database>::Statement<'q>, SqlxError>>
     where
         'c: 'e,
     {

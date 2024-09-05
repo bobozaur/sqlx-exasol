@@ -1,4 +1,4 @@
-use sqlx_core::database::{Database, HasArguments, HasStatement, HasStatementCache, HasValueRef};
+use sqlx_core::database::{Database, HasStatementCache};
 
 use crate::{
     arguments::{ExaArguments, ExaBuffer},
@@ -33,26 +33,14 @@ impl Database for Exasol {
     const NAME: &'static str = "Exasol";
 
     const URL_SCHEMES: &'static [&'static str] = &["exa"];
-}
 
-impl<'r> HasValueRef<'r> for Exasol {
-    type Database = Exasol;
+    type ValueRef<'r> = ExaValueRef<'r>;
 
-    type ValueRef = ExaValueRef<'r>;
-}
+    type Arguments<'q> = ExaArguments;
 
-impl HasArguments<'_> for Exasol {
-    type Database = Exasol;
+    type ArgumentBuffer<'q> = ExaBuffer;
 
-    type Arguments = ExaArguments;
-
-    type ArgumentBuffer = ExaBuffer;
-}
-
-impl<'q> HasStatement<'q> for Exasol {
-    type Database = Exasol;
-
-    type Statement = ExaStatement<'q>;
+    type Statement<'q> = ExaStatement<'q>;
 }
 
 impl HasStatementCache for Exasol {}

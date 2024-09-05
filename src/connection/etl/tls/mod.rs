@@ -4,7 +4,7 @@ mod native_tls;
 mod rustls;
 mod sync_socket;
 
-use rcgen::{Certificate, CertificateParams, KeyPair, PKCS_RSA_SHA256};
+use rcgen::{CertificateParams, KeyPair};
 use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
     RsaPrivateKey,
@@ -23,15 +23,18 @@ compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
 
 #[allow(unreachable_code)]
 pub fn tls_with_socket_maker() -> Result<impl WithSocketMaker, SqlxError> {
-    let cert = make_cert()?;
+    let key_pair = make_key()?;
+    let cert = CertificateParams::default()
+        .self_signed(&key_pair)
+        .to_sqlx_err()?;
 
     #[cfg(feature = "etl_native_tls")]
-    return NativeTlsSocketSpawner::new(&cert);
+    return NativeTlsSocketSpawner::new(&cert, &key_pair);
     #[cfg(feature = "etl_rustls")]
-    return RustlsSocketSpawner::new(&cert);
+    return RustlsSocketSpawner::new(&cert, &key_pair);
 }
 
-pub fn make_cert() -> Result<Certificate, SqlxError> {
+fn make_key() -> Result<KeyPair, SqlxError> {
     let mut rng = rand::thread_rng();
     let bits = 2048;
     let private_key = RsaPrivateKey::new(&mut rng, bits).to_sqlx_err()?;
@@ -41,13 +44,7 @@ pub fn make_cert() -> Result<Certificate, SqlxError> {
         .map_err(From::from)
         .map_err(SqlxError::Tls)?;
 
-    let key_pair = KeyPair::from_pem(&key).to_sqlx_err()?;
-
-    let mut params = CertificateParams::default();
-    params.alg = &PKCS_RSA_SHA256;
-    params.key_pair = Some(key_pair);
-
-    Certificate::from_params(params).to_sqlx_err()
+    KeyPair::from_pem(&key).to_sqlx_err()
 }
 
 impl<T> ExaResultExt<T> for Result<T, rcgen::Error> {

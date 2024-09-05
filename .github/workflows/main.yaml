@@ -7,12 +7,17 @@ on:
   pull_request:
     branches: ["main"]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   RUST_TOOLCHAIN: 1.74.0
   EXASOL_VERSION: 7.0.22
-  NUM_NODES: 2
+  NUM_NODES: 4
   ETL_TEST_THREADS: 4
-  ETL_JOB_TIMEOUT: 20
+  ETL_JOB_TIMEOUT: 15
+  EXA_CLUSTER_SETUP_TIMEOUT: 15
 
 jobs:
   format:
@@ -88,6 +93,9 @@ jobs:
         with:
           command: check
           args: --tests --features compression,migrate,etl,rust_decimal,uuid,chrono
+        # See: https://aws.github.io/aws-lc-rs/resources.html#troubleshooting
+        env:
+          AWS_LC_SYS_NO_ASM: 1
 
   check_mac_os:
     name: Check MacOS builds
@@ -122,6 +130,7 @@ jobs:
         uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
         id: exa-cluster
         uses: ./.github/actions/exa-cluster
         with:
@@ -159,6 +168,7 @@ jobs:
         uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
         id: exa-cluster
         uses: ./.github/actions/exa-cluster
         with:
@@ -196,6 +206,7 @@ jobs:
         uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
         id: exa-cluster
         uses: ./.github/actions/exa-cluster
         with:
@@ -239,6 +250,7 @@ jobs:
         uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
         id: exa-cluster
         uses: ./.github/actions/exa-cluster
         with:
@@ -272,6 +284,7 @@ jobs:
         uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
         id: exa-cluster
         uses: ./.github/actions/exa-cluster
         with:

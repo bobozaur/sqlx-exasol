@@ -37,9 +37,9 @@ impl Type<Exasol> for i8 {
 }
 
 impl Encode<'_, Exasol> for i8 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -70,9 +70,9 @@ impl Type<Exasol> for i16 {
 }
 
 impl Encode<'_, Exasol> for i16 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -103,9 +103,9 @@ impl Type<Exasol> for i32 {
 }
 
 impl Encode<'_, Exasol> for i32 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(self);
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(self)?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -136,15 +136,15 @@ impl Type<Exasol> for i64 {
 }
 
 impl Encode<'_, Exasol> for i64 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         if NUMERIC_I64_RANGE.contains(self) {
-            buf.append(self);
+            buf.append(self)?;
         } else {
             // Large numbers get serialized as strings
-            buf.append(format_args!("{self}"));
+            buf.append(format_args!("{self}"))?;
         };
 
-        IsNull::No
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
@@ -179,15 +179,15 @@ impl Type<Exasol> for i128 {
 }
 
 impl Encode<'_, Exasol> for i128 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         if NUMERIC_I128_RANGE.contains(self) {
-            buf.append(self);
+            buf.append(self)?;
         } else {
             // Large numbers get serialized as strings
-            buf.append(format_args!("{self}"));
+            buf.append(format_args!("{self}"))?;
         };
 
-        IsNull::No
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {

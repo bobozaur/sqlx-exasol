@@ -1,5 +1,6 @@
 use serde::Serialize;
-use sqlx_core::{arguments::Arguments, encode::Encode, types::Type, Error as SqlxError};
+use serde_json::Error as SerdeError;
+use sqlx_core::{arguments::Arguments, encode::Encode, error::BoxDynError, types::Type};
 
 use crate::{database::Exasol, error::ExaProtocolError, type_info::ExaTypeInfo};
 
@@ -17,48 +18,48 @@ impl<'q> Arguments<'q> for ExaArguments {
         self.buf.inner.reserve(size);
     }
 
-    fn add<T>(&mut self, value: T)
+    fn add<T>(&mut self, value: T) -> Result<(), BoxDynError>
     where
-        T: 'q + Send + Encode<'q, Self::Database> + Type<Self::Database>,
+        T: 'q + Encode<'q, Self::Database> + Type<Self::Database>,
     {
         let ty = value.produces().unwrap_or_else(T::type_info);
-        self.types.push(ty);
 
         self.buf.start_seq();
-        let _ = value.encode(&mut self.buf);
+        let _ = value.encode(&mut self.buf)?;
         self.buf.end_seq();
         self.buf.add_separator();
 
-        self.buf.register_param_count();
+        self.buf.check_param_count()?;
+
+        self.types.push(ty);
+
+        Ok(())
+    }
+
+    fn len(&self) -> usize {
+        self.types.len()
     }
 }
 
 #[derive(Debug)]
 pub struct ExaBuffer {
     pub(crate) inner: Vec<u8>,
-    pub(crate) num_param_sets: NumParamSets,
-    pub(crate) binding_err: Option<SqlxError>,
-    params_count: usize,
+    pub(crate) params_count: usize,
+    pub(crate) num_param_sets: Option<usize>,
 }
 
 impl ExaBuffer {
     /// Serializes and appends a value to this buffer.
-    pub fn append<T>(&mut self, value: T)
+    pub fn append<T>(&mut self, value: T) -> Result<(), SerdeError>
     where
         T: Serialize,
     {
         self.params_count += 1;
-
-        // We can't error out here, so store the first error encountered for later
-        if let Err(e) = serde_json::to_writer(&mut self.inner, &value) {
-            if self.binding_err.is_none() {
-                self.binding_err = Some(SqlxError::Protocol(e.to_string()));
-            }
-        }
+        serde_json::to_writer(&mut self.inner, &value)
     }
 
     /// Serializes and appends an iterator of values to this buffer.
-    pub fn append_iter<'q, I, T>(&mut self, iter: I)
+    pub fn append_iter<'q, I, T>(&mut self, iter: I) -> Result<(), BoxDynError>
     where
         I: IntoIterator<Item = T>,
         T: 'q + Encode<'q, Exasol> + Type<Exasol>,
@@ -66,13 +67,15 @@ impl ExaBuffer {
         let mut iter = iter.into_iter();
 
         if let Some(value) = iter.next() {
-            let _ = value.encode(self);
+            let _ = value.encode(self)?;
         }
 
         for value in iter {
             self.add_separator();
-            let _ = value.encode(self);
+            let _ = value.encode(self)?;
         }
+
+        Ok(())
     }
 
     /// Outputs the numbers of parameter sets in the buffer.
@@ -80,12 +83,8 @@ impl ExaBuffer {
     /// # Errors
     ///
     /// Will throw an error if a mismatch was recorded.
-    pub(crate) fn num_param_sets(&self) -> Result<usize, ExaProtocolError> {
-        match self.num_param_sets {
-            NumParamSets::NotSet => Ok(0),
-            NumParamSets::Set(n) => Ok(n),
-            NumParamSets::Mismatch(n, m) => Err(ExaProtocolError::ParameterLengthMismatch(n, m)),
-        }
+    pub(crate) fn num_param_sets(&self) -> usize {
+        self.num_param_sets.unwrap_or_default()
     }
 
     /// Ends the main sequence serialization in the buffer.
@@ -120,24 +119,27 @@ impl ExaBuffer {
     /// Registers the number of rows we bound parameters for.
     ///
     /// The first time we add an argument, we store the number of rows
-    /// we pass parameters for.
+    /// we pass parameters for. This is useful for when arrays of
+    /// parameters get passed for each column.
     ///
     /// All subsequent calls will check that the number of rows is the same.
     /// If it is not, the first mismatch is recorded so we can throw
     /// an error later (before sending data to the database).
     ///
     /// This is also due to `Encode` not throwing errors.
-    fn register_param_count(&mut self) {
+    fn check_param_count(&mut self) -> Result<(), ExaProtocolError> {
         let count = self.params_count;
-
-        self.num_param_sets = match self.num_param_sets {
-            NumParamSets::NotSet => NumParamSets::Set(count),
-            NumParamSets::Set(n) if n != count => NumParamSets::Mismatch(n, count),
-            num_rows => num_rows,
-        };
 
         // We must reset the count in preparation for the next parameter.
         self.params_count = 0;
+
+        match self.num_param_sets {
+            Some(n) if n == count => (),
+            Some(n) => Err(ExaProtocolError::ParameterLengthMismatch(count, n))?,
+            None => self.num_param_sets = Some(count),
+        };
+
+        Ok(())
     }
 }
 
@@ -146,21 +148,11 @@ impl Default for ExaBuffer {
         let inner = Vec::with_capacity(1);
         let mut buffer = Self {
             inner,
-            num_param_sets: NumParamSets::NotSet,
             params_count: 0,
-            binding_err: None,
+            num_param_sets: None,
         };
 
         buffer.start_seq();
         buffer
     }
-}
-
-/// Enum illustrating the state of the parameter sets number
-/// provided as bind arguments to a query.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum NumParamSets {
-    NotSet,
-    Set(usize),
-    Mismatch(usize, usize),
 }

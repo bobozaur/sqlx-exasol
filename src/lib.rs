@@ -1,3 +1,4 @@
+#![cfg_attr(not(test), warn(unused_crate_dependencies))]
 //! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.  
 //!
 //! **MSRV**: `1.74`
@@ -226,34 +227,8 @@
 //! is only circumvented in migrations through a somewhat limited, convoluted and possibly costly
 //! workaround that tries to split queries by `;`, which does not make it applicable for runtime
 //! queries at all.<br>
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    meta_variable_misuse,
-    missing_abi,
-    missing_copy_implementations,
-    missing_debug_implementations,
-    non_ascii_idents,
-    pointer_structural_match,
-    rust_2018_idioms,
-    rust_2021_compatibility,
-    single_use_lifetimes,
-    trivial_casts,
-    trivial_numeric_casts,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_lifetimes,
-    unused_qualifications
-)]
-#![allow(single_use_lifetimes)]
-#![allow(let_underscore_drop)]
-#![allow(clippy::struct_excessive_bools)]
-#![allow(clippy::trivially_copy_pass_by_ref)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::match_bool)]
-#![allow(clippy::no_effect_underscore_binding)]
-#![allow(clippy::module_name_repetitions)]
 
+/// Gets rid of unused dependencies warning from dev-dependencies.
 mod arguments;
 mod column;
 mod command;

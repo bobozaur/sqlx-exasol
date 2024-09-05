@@ -1,8 +1,6 @@
-use std::io::Write;
-
+use async_compression::futures::{bufread::ZlibDecoder, write::ZlibEncoder};
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
-use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
-use futures_util::{io::BufReader, SinkExt, StreamExt};
+use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt, SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
 
@@ -20,10 +18,10 @@ impl CompressedWebSocket {
     pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
         let byte_cmd = cmd.as_bytes();
         let mut compressed_cmd = Vec::new();
-        let mut enc = ZlibEncoder::new(&mut compressed_cmd, Compression::default());
+        let mut enc = ZlibEncoder::new(&mut compressed_cmd);
 
-        enc.write_all(byte_cmd)?;
-        enc.finish()?;
+        enc.write_all(byte_cmd).await?;
+        enc.close().await?;
 
         self.0
             .send(Message::Binary(compressed_cmd))
@@ -47,8 +45,14 @@ impl CompressedWebSocket {
                 _ => continue,
             };
 
-            let dec = ZlibDecoder::new(bytes.as_slice());
-            return serde_json::from_reader(dec).to_sqlx_err();
+            // The whole point of compression is to end up with have smaller data
+            // we might as well allocate the length we know from the encoded one in advance.
+            let mut decoded = Vec::with_capacity(bytes.len());
+            ZlibDecoder::new(bytes.as_slice())
+                .read_to_end(&mut decoded)
+                .await?;
+
+            return serde_json::from_slice(&decoded).to_sqlx_err();
         }
 
         Err(ExaProtocolError::MissingMessage)?

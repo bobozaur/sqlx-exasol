@@ -14,8 +14,7 @@ async fn it_gets_a_pool(pool: ExaPool) -> sqlx::Result<()> {
 
     assert!(
         db_name.starts_with("_sqlx_test_database_"),
-        "db_name: {:?}",
-        db_name
+        "db_name: {db_name:?}",
     );
 
     Ok(())
@@ -25,7 +24,7 @@ async fn it_gets_a_pool(pool: ExaPool) -> sqlx::Result<()> {
 #[sqlx::test(migrations = "tests/migrations", fixtures("users"))]
 async fn it_gets_users(pool: ExaPool) -> sqlx::Result<()> {
     let usernames: Vec<String> =
-        sqlx::query_scalar(r#"SELECT username FROM users ORDER BY username"#)
+        sqlx::query_scalar(r"SELECT username FROM users ORDER BY username")
             .fetch_all(&pool)
             .await?;
 

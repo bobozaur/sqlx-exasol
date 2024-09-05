@@ -25,16 +25,16 @@ impl Type<Exasol> for f32 {
 }
 
 impl Encode<'_, Exasol> for f32 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         // NaN is treated as NULL by Exasol.
         // Infinity is not supported by Exasol but serde_json
         // serializes it as NULL as well.
         if self.is_finite() {
-            buf.append(self);
-            IsNull::No
+            buf.append(self)?;
+            Ok(IsNull::No)
         } else {
-            buf.append(());
-            IsNull::Yes
+            buf.append(())?;
+            Ok(IsNull::Yes)
         }
     }
 
@@ -64,16 +64,16 @@ impl Type<Exasol> for f64 {
 }
 
 impl Encode<'_, Exasol> for f64 {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         // NaN is treated as NULL by Exasol.
         // Infinity is not supported by Exasol but serde_json
         // serializes it as NULL as well.
         if self.is_finite() {
-            buf.append(self);
-            IsNull::No
+            buf.append(self)?;
+            Ok(IsNull::No)
         } else {
-            buf.append(());
-            IsNull::Yes
+            buf.append(())?;
+            Ok(IsNull::Yes)
         }
     }
 

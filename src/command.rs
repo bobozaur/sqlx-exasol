@@ -1,14 +1,12 @@
+#[cfg(feature = "etl")]
 use std::net::IpAddr;
 
-use serde::{
-    ser::{Error, SerializeSeq},
-    Serialize, Serializer,
-};
-use serde_json::value::RawValue;
+use serde::{ser::SerializeSeq, Serialize, Serializer};
+use serde_json::Deserializer;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    arguments::{ExaBuffer, NumParamSets},
+    arguments::ExaBuffer,
     options::{ExaConnectOptionsRef, ProtocolVersion},
     responses::ExaAttributes,
     ExaTypeInfo,
@@ -87,9 +85,9 @@ impl<'a> ExaCommand<'a> {
         columns: &'a [ExaTypeInfo],
         buf: ExaBuffer,
         attributes: &'a ExaAttributes,
-    ) -> Result<Self, SqlxError> {
-        let prepared = ExecutePreparedStmt::new(handle, columns, buf, attributes)?;
-        Ok(Self::ExecutePreparedStatement(prepared))
+    ) -> Self {
+        let prepared = ExecutePreparedStmt::new(handle, columns, buf, attributes);
+        Self::ExecutePreparedStatement(prepared)
     }
 
     pub fn new_close_prepared(handle: u16) -> Self {
@@ -154,6 +152,7 @@ pub(crate) struct LoginInfo {
     protocol_version: ProtocolVersion,
 }
 
+#[cfg(feature = "etl")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GetHosts {
@@ -168,17 +167,12 @@ pub(crate) struct Sql<'a> {
     sql_text: &'a str,
 }
 
+#[cfg(feature = "migrate")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BatchSql<'a> {
     attributes: &'a ExaAttributes,
     sql_texts: Vec<&'a str>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct SqlBatch {
-    sql_texts: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -215,17 +209,15 @@ impl<'a> ExecutePreparedStmt<'a> {
         columns: &'a [ExaTypeInfo],
         data: ExaBuffer,
         attributes: &'a ExaAttributes,
-    ) -> Result<Self, SqlxError> {
-        let prepared = Self {
+    ) -> Self {
+        Self {
             attributes,
             statement_handle: handle,
             num_columns: columns.len(),
-            num_rows: data.num_param_sets()?,
+            num_rows: data.num_param_sets(),
             columns,
             data: data.into(),
-        };
-
-        Ok(prepared)
+        }
     }
 
     fn serialize_parameters<S>(parameters: &[ExaTypeInfo], serializer: S) -> Result<S::Ok, S::Error>
@@ -243,16 +235,12 @@ impl<'a> ExecutePreparedStmt<'a> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExaParameter<'a> {
-    // name: &'static str,
     data_type: &'a ExaTypeInfo,
 }
 
 impl<'a> From<&'a ExaTypeInfo> for ExaParameter<'a> {
     fn from(value: &'a ExaTypeInfo) -> Self {
-        Self {
-            // name: "",
-            data_type: value,
-        }
+        Self { data_type: value }
     }
 }
 
@@ -270,12 +258,12 @@ pub(crate) struct ClosePreparedStmt {
 #[derive(Debug, Clone)]
 struct PreparedStmtData {
     inner: Vec<u8>,
-    num_rows: NumParamSets,
+    num_rows: usize,
 }
 
 impl PreparedStmtData {
     fn is_empty(&self) -> bool {
-        matches!(self.num_rows, NumParamSets::NotSet | NumParamSets::Set(0))
+        self.num_rows == 0
     }
 }
 
@@ -284,8 +272,7 @@ impl Serialize for PreparedStmtData {
     where
         S: Serializer,
     {
-        let raw_value: &RawValue = serde_json::from_slice(&self.inner).map_err(Error::custom)?;
-        raw_value.serialize(serializer)
+        serde_transcode::transcode(&mut Deserializer::from_slice(&self.inner), serializer)
     }
 }
 
@@ -294,8 +281,8 @@ impl From<ExaBuffer> for PreparedStmtData {
         value.finalize();
 
         Self {
+            num_rows: value.num_param_sets(),
             inner: value.inner,
-            num_rows: value.num_param_sets,
         }
     }
 }

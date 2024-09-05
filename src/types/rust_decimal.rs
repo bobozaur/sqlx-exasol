@@ -32,9 +32,9 @@ impl Type<Exasol> for rust_decimal::Decimal {
 }
 
 impl Encode<'_, Exasol> for rust_decimal::Decimal {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> IsNull {
-        buf.append(format_args!("{self}"));
-        IsNull::No
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        buf.append(format_args!("{self}"))?;
+        Ok(IsNull::No)
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {

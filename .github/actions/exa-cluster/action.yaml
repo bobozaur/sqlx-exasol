@@ -33,31 +33,41 @@ runs:
       run: docker image load --input ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
       shell: bash
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pipenv
+    - name: Set up Docker network
+      run: docker network create --driver=bridge --subnet=10.10.10.0/24 sqlx
       shell: bash
 
-    - uses: actions/checkout@v3
-      with:
-        repository: Exasol/docker-db
-        ref: ${{ inputs.exasol-version }}
-
-    - name: Set up Exasol Cluster
+    - name: Initialize Exasol cluster
       run: |
-        pipenv install -r exadt_requirements.txt
-        pipenv run ./exadt create-cluster --root ~/sqlx --create-root sqlx
-        pipenv run ./exadt init-cluster --image exasol/docker-db:${{ inputs.exasol-version }} --license ./license/license.xml --num-nodes ${{ inputs.num-nodes }} --auto-storage sqlx
-        pipenv run ./exadt start-cluster sqlx
+        docker run -v $HOME/sqlx1:/exa --rm --privileged -i exasol/docker-db:${{ inputs.exasol-version }} init-sc --template --num-nodes ${{ inputs.num-nodes }}
+        docker run --rm -v $HOME/sqlx1:/exa exasol/docker-db:${{ inputs.exasol-version }} exaconf modify-volume -n DataVolume1 -s 4GiB
+        sudo truncate -s 6G $HOME/sqlx1/data/storage/dev.1
+
+        for (( i=2; i<=${{ inputs.num-nodes }}; i++ )); do
+          sudo cp -R $HOME/sqlx1 $HOME/sqlx$i
+        done
       shell: bash
 
-    # The exadt tool always creates the Exasol cluster with this subnet
+    - name: Start Exasol cluster
+      run: |
+        for (( i=1; i<=${{ inputs.num-nodes }}; i++ )); do
+          docker run --name sqlx$i --detach --network=sqlx --ip 10.10.10.1$i --privileged --stop-timeout 120 -v $HOME/sqlx$i:/exa exasol/docker-db:${{ inputs.exasol-version }} init-sc --node-id 1$i
+        done
+      shell: bash
+
+    - name: Wait until Exasol cluster is live
+      run: |
+        set +e
+        RC=1
+
+        while [[ $RC -ne 0 ]]; do
+          docker exec sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"' &>/dev/null
+          RC=$?
+          sleep 5
+        done
+      shell: bash
+
+    # The Exasol cluster is created with this subnet by default
     - name: Create connection strings
       id: connection-strings
       run: |
@@ -65,6 +75,3 @@ runs:
         echo "no-tls-url=$DATABASE_URL?ssl-mode=disabled" >> $GITHUB_OUTPUT
         echo "tls-url=$DATABASE_URL?ssl-mode=required" >> $GITHUB_OUTPUT
       shell: bash
-
-    # Checkout the main repository again
-    - uses: actions/checkout@v3

@@ -29,7 +29,7 @@ async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
 #[sqlx::test(migrations = "tests/setup")]
 async fn it_describes_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
-        r#"
+        r"
 CREATE TABLE with_hashtype_and_tinyint (
     id INT IDENTITY PRIMARY KEY,
     value_hashtype_1 HASHTYPE(1 BYTE),
@@ -37,7 +37,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     hashtype_n HASHTYPE(8 BYTE),
     value_int TINYINT
 );
-    "#,
+    ",
     )
     .await?;
 
@@ -59,7 +59,7 @@ CREATE TABLE with_hashtype_and_tinyint (
 #[sqlx::test(migrations = "tests/setup")]
 async fn it_describes_columns_and_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
-        r#"
+        r"
 CREATE TABLE with_hashtype_and_tinyint (
     id INT IDENTITY PRIMARY KEY,
     value_hashtype_1 HASHTYPE(1 BYTE),
@@ -67,7 +67,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     hashtype_n HASHTYPE(8 BYTE),
     value_int TINYINT
 );
-    "#,
+    ",
     )
     .await?;
 
@@ -106,7 +106,7 @@ CREATE TABLE with_hashtype_and_tinyint (
 #[sqlx::test(migrations = "tests/setup")]
 async fn test_boolean(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
-        r#"
+        r"
 CREATE TABLE with_hashtype_and_tinyint (
     id INT IDENTITY PRIMARY KEY,
     value_hashtype_1 HASHTYPE(1 BYTE),
@@ -114,7 +114,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     hashtype_n HASHTYPE(8 BYTE),
     value_int TINYINT
 );
-    "#,
+    ",
     )
     .await?;
 
