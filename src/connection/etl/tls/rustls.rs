@@ -7,8 +7,8 @@ use std::{
 };
 
 use futures_core::future::BoxFuture;
-use rcgen::Certificate;
-use rustls::{Certificate as RustlsCert, PrivateKey, ServerConfig, ServerConnection};
+use rcgen::{Certificate, KeyPair};
+use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 use sqlx_core::{
     error::Error as SqlxError,
     io::ReadBuf,
@@ -26,16 +26,15 @@ use crate::{
 pub struct RustlsSocketSpawner(Arc<ServerConfig>);
 
 impl RustlsSocketSpawner {
-    pub fn new(cert: &Certificate) -> Result<Self, SqlxError> {
+    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> Result<Self, SqlxError> {
         tracing::trace!("creating 'rustls' socket spawner");
 
-        let tls_cert = RustlsCert(cert.serialize_der().to_sqlx_err()?);
-        let key = PrivateKey(cert.serialize_private_key_der());
+        let tls_cert = cert.der().clone();
+        let key = PrivateKeyDer::Pkcs8(key_pair.serialize_der().into());
 
         let config = {
             Arc::new(
                 ServerConfig::builder()
-                    .with_safe_defaults()
                     .with_no_client_auth()
                     .with_single_cert(vec![tls_cert], key)
                     .to_sqlx_err()?,

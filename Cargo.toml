@@ -11,7 +11,7 @@ exclude = ["tests/*"]
 categories = ["database"]
 
 [package.metadata.docs.rs]
-features = ["etl", "chrono", "rust_decimal", "uuid"]
+features = ["etl", "chrono", "rust_decimal", "uuid", "compression", "migrate"]
 
 [features]
 # ############################################
@@ -63,6 +63,7 @@ async-compression = { version = "0.4.12", features = [
     "zlib",
 ], optional = true }
 rustls = { version = "0.23.12", default-features = false, features = [
+    "std",
     "tls12",
 ], optional = true }
 native-tls = { version = "0.2.12", optional = true }
