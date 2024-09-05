@@ -78,6 +78,15 @@ impl ExaBuffer {
         Ok(())
     }
 
+    /// Outputs the numbers of parameter sets in the buffer.
+    ///
+    /// # Errors
+    ///
+    /// Will throw an error if a mismatch was recorded.
+    pub(crate) fn num_param_sets(&self) -> usize {
+        self.num_param_sets.unwrap_or_default()
+    }
+
     /// Ends the main sequence serialization in the buffer.
     ///
     /// We're technically always guaranteed to have at least
@@ -125,7 +134,7 @@ impl ExaBuffer {
         self.params_count = 0;
 
         match self.num_param_sets {
-            Some(n) if n == self.params_count => (),
+            Some(n) if n == count => (),
             Some(n) => Err(ExaProtocolError::ParameterLengthMismatch(count, n))?,
             None => self.num_param_sets = Some(count),
         };

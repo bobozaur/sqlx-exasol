@@ -2,6 +2,7 @@
 use std::net::IpAddr;
 
 use serde::{ser::SerializeSeq, Serialize, Serializer};
+use serde_json::Deserializer;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
@@ -213,7 +214,7 @@ impl<'a> ExecutePreparedStmt<'a> {
             attributes,
             statement_handle: handle,
             num_columns: columns.len(),
-            num_rows: data.params_count,
+            num_rows: data.num_param_sets(),
             columns,
             data: data.into(),
         }
@@ -234,16 +235,12 @@ impl<'a> ExecutePreparedStmt<'a> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExaParameter<'a> {
-    // name: &'static str,
     data_type: &'a ExaTypeInfo,
 }
 
 impl<'a> From<&'a ExaTypeInfo> for ExaParameter<'a> {
     fn from(value: &'a ExaTypeInfo) -> Self {
-        Self {
-            // name: "",
-            data_type: value,
-        }
+        Self { data_type: value }
     }
 }
 
@@ -261,12 +258,12 @@ pub(crate) struct ClosePreparedStmt {
 #[derive(Debug, Clone)]
 struct PreparedStmtData {
     inner: Vec<u8>,
-    num_rows: Option<usize>,
+    num_rows: usize,
 }
 
 impl PreparedStmtData {
     fn is_empty(&self) -> bool {
-        matches!(self.num_rows, None | Some(0))
+        self.num_rows == 0
     }
 }
 
@@ -275,7 +272,7 @@ impl Serialize for PreparedStmtData {
     where
         S: Serializer,
     {
-        self.inner.serialize(serializer)
+        serde_transcode::transcode(&mut Deserializer::from_slice(&self.inner), serializer)
     }
 }
 
@@ -284,8 +281,8 @@ impl From<ExaBuffer> for PreparedStmtData {
         value.finalize();
 
         Self {
+            num_rows: value.num_param_sets(),
             inner: value.inner,
-            num_rows: value.num_param_sets,
         }
     }
 }

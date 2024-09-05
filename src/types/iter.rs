@@ -64,17 +64,13 @@ where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
-        let mut output = None;
-
-        for value in self.value.clone() {
-            match (&output, value.produces()) {
-                (None, Some(new)) => output = Some(new),
-                (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
-                _ => (),
-            }
-        }
-
-        output.or_else(|| Some(T::type_info()))
+        self.value
+            .clone()
+            .into_iter()
+            .next()
+            .as_ref()
+            .and_then(Encode::produces)
+            .or_else(|| Some(T::type_info()))
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
@@ -90,9 +86,9 @@ where
     }
 }
 
-impl<'a, T> Type<Exasol> for &'a [T]
+impl<T> Type<Exasol> for &[T]
 where
-    T: Type<Exasol> + 'a,
+    T: Type<Exasol>,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
@@ -108,17 +104,9 @@ where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
-        let mut output = None;
-
-        for value in *self {
-            match (&output, value.produces()) {
-                (None, Some(new)) => output = Some(new),
-                (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
-                _ => (),
-            }
-        }
-
-        output.or_else(|| Some(T::type_info()))
+        self.first()
+            .and_then(Encode::produces)
+            .or_else(|| Some(T::type_info()))
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
@@ -131,9 +119,9 @@ where
     }
 }
 
-impl<'a, T> Type<Exasol> for &'a mut [T]
+impl<T> Type<Exasol> for &mut [T]
 where
-    T: Type<Exasol> + 'a,
+    T: Type<Exasol>,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
@@ -149,26 +137,15 @@ where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
-        let mut output = None;
-
-        for value in self.iter() {
-            match (&output, value.produces()) {
-                (None, Some(new)) => output = Some(new),
-                (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
-                _ => (),
-            }
-        }
-
-        output.or_else(|| Some(T::type_info()))
+        (&**self).produces()
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append_iter(self.iter())?;
-        Ok(IsNull::No)
+        (&**self).encode_by_ref(buf)
     }
 
     fn size_hint(&self) -> usize {
-        self.iter().fold(0, |sum, item| sum + item.size_hint())
+        (&**self).size_hint()
     }
 }
 
@@ -190,26 +167,15 @@ where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
-        let mut output = None;
-
-        for value in self {
-            match (&output, value.produces()) {
-                (None, Some(new)) => output = Some(new),
-                (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
-                _ => (),
-            }
-        }
-
-        output.or_else(|| Some(T::type_info()))
+        self.as_slice().produces()
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append_iter(self.iter())?;
-        Ok(IsNull::No)
+        self.as_slice().encode_by_ref(buf)
     }
 
     fn size_hint(&self) -> usize {
-        self.iter().fold(0, |sum, item| sum + item.size_hint())
+        self.as_slice().size_hint()
     }
 }
 
@@ -231,26 +197,15 @@ where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
-        let mut output = None;
-
-        for value in self {
-            match (&output, value.produces()) {
-                (None, Some(new)) => output = Some(new),
-                (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
-                _ => (),
-            }
-        }
-
-        output.or_else(|| Some(T::type_info()))
+        (&**self).produces()
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append_iter(self.iter())?;
-        Ok(IsNull::No)
+        (&**self).encode_by_ref(buf)
     }
 
     fn size_hint(&self) -> usize {
-        self.iter().fold(0, |sum, item| sum + item.size_hint())
+        (&**self).size_hint()
     }
 }
 
@@ -272,26 +227,14 @@ where
     for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
 {
     fn produces(&self) -> Option<<Exasol as Database>::TypeInfo> {
-        let mut output = None;
-
-        #[allow(clippy::explicit_iter_loop)] // false positive
-        for value in self.iter() {
-            match (&output, value.produces()) {
-                (None, Some(new)) => output = Some(new),
-                (Some(old), Some(new)) if !old.compatible(&new) => output = Some(new),
-                _ => (),
-            }
-        }
-
-        output.or_else(|| Some(T::type_info()))
+        (&**self).produces()
     }
 
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append_iter(self.iter())?;
-        Ok(IsNull::No)
+        (&**self).encode_by_ref(buf)
     }
 
     fn size_hint(&self) -> usize {
-        self.iter().fold(0, |sum, item| sum + item.size_hint())
+        (&**self).size_hint()
     }
 }
