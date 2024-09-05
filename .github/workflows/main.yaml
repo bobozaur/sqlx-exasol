@@ -93,6 +93,9 @@ jobs:
         with:
           command: check
           args: --tests --features compression,migrate,etl,rust_decimal,uuid,chrono
+        # See: https://aws.github.io/aws-lc-rs/resources.html#troubleshooting
+        env:
+          AWS_LC_SYS_NO_ASM: 1
 
   check_mac_os:
     name: Check MacOS builds
