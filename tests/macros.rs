@@ -21,10 +21,8 @@ macro_rules! test_type_valid {
 
                     assert_eq!(query_result.rows_affected(), 1);
                     let query_str = format!("INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));", $unprepared, $datatype);
-                    eprintln!("{query_str}");
 
                     let query_result = con.execute(query_str.as_str()).await?;
-
                     assert_eq!(query_result.rows_affected(), 1);
 
                     let mut values: Vec<$ty> = query_scalar("SELECT * FROM sqlx_test_type;")
@@ -141,6 +139,9 @@ macro_rules! test_etl {
             #[ignore]
             #[sqlx::test]
             async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> AnyResult<()> {
+                CryptoProvider::install_default(aws_lc_rs::default_provider())
+                    .ok();
+
                 let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
 
                 let mut conn1 = pool.acquire().await?;

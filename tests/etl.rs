@@ -10,6 +10,7 @@ use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
+use rustls::crypto::{aws_lc_rs, CryptoProvider};
 use sqlx::{Connection, Executor};
 use sqlx_core::{
     error::BoxDynError,
@@ -133,11 +134,7 @@ test_etl!(
 #[ignore]
 #[sqlx::test]
 async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    async fn read_data(mut reader: ExaExport) -> AnyResult<()> {
-        let mut buf = String::new();
-        reader.read_to_string(&mut buf).await?;
-        Ok(())
-    }
+    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
 
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
@@ -164,6 +161,8 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
 #[ignore]
 #[sqlx::test]
 async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
+
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -191,6 +190,8 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
 #[ignore]
 #[sqlx::test]
 async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
+
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -223,6 +224,8 @@ async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) 
 #[ignore]
 #[sqlx::test]
 async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
+
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -260,6 +263,15 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // #[ignore]
 // #[sqlx::test]
 // async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+//
+//     async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
+//         writer.close().await?;
+//         Ok(())
+//     }
+//
+//     rustls::crypto::CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider())
+//        .ok();
+//
 //     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
 //         .await?;
 
@@ -284,6 +296,12 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // ##########################################
 // ############### Utilities ################
 // ##########################################
+
+async fn read_data(mut reader: ExaExport) -> AnyResult<()> {
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf).await?;
+    Ok(())
+}
 
 async fn write_one_row(mut writer: ExaImport) -> Result<(), BoxDynError> {
     writer.write_all(b"blabla\r\n").await?;
@@ -314,11 +332,6 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
 
     Ok(())
 }
-
-// async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
-//     writer.close().await?;
-//     Ok(())
-// }
 
 async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
     let mut buf = vec![0; 5120].into_boxed_slice();
