@@ -57,10 +57,11 @@ runs:
 
     - name: Wait until Exasol cluster is live
       run: |
+        set +e
         RC=1
 
         while [[ $RC -ne 0 ]]; do
-          docker exec -it sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"'
+          docker exec sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"' &>/dev/null
           RC=$?
           sleep 5
         done
