@@ -86,9 +86,9 @@ where
     }
 }
 
-impl<T> Type<Exasol> for &[T]
+impl<'a, T> Type<Exasol> for &'a [T]
 where
-    T: Type<Exasol>,
+    T: Type<Exasol> + 'a,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
@@ -119,9 +119,9 @@ where
     }
 }
 
-impl<T> Type<Exasol> for &mut [T]
+impl<'a, T> Type<Exasol> for &'a mut [T]
 where
-    T: Type<Exasol>,
+    T: Type<Exasol> + 'a,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
