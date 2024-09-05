@@ -56,7 +56,6 @@ runs:
       shell: bash
 
     - name: Wait until Exasol cluster is live
-      timeout-minutes: 5
       run: |
         RC=1
 
