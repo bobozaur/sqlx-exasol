@@ -33,22 +33,41 @@ runs:
       run: docker image load --input ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
       shell: bash
 
-    - name: Set up Exasol Cluster
-      run: |
-        docker network create --driver=bridge --subnet=10.10.10.0/24 sqlx
-
-        docker run -v $HOME/sqlx1:/exa --rm --privileged -i exasol/docker-db:7.0.22 init-sc --template --num-nodes 3
-        docker run --rm -v $HOME/sqlx1:/exa exasol/docker-db:7.0.22 exaconf modify-volume -n DataVolume1 -s 4GiB
-        sudo truncate -s 6G $HOME/sqlx1/data/storage/dev.1
-        sudo cp -R $HOME/sqlx1 $HOME/sqlx2
-        sudo cp -R $HOME/sqlx1 $HOME/sqlx3
-
-        docker run --name sqlx1 --detach --network=sqlx --ip 10.10.10.11 --privileged --stop-timeout 120 -v $HOME/sqlx1:/exa exasol/docker-db:7.0.22 init-sc --node-id 11
-        docker run --name sqlx2 --detach --network=sqlx --ip 10.10.10.12 --privileged --stop-timeout 120 -v $HOME/sqlx2:/exa exasol/docker-db:7.0.22 init-sc --node-id 12
-        docker run --name sqlx3 --detach --network=sqlx --ip 10.10.10.13 --privileged --stop-timeout 120 -v $HOME/sqlx3:/exa exasol/docker-db:7.0.22 init-sc --node-id 13
+    - name: Set up Docker network
+      run: docker network create --driver=bridge --subnet=10.10.10.0/24 sqlx
       shell: bash
 
-    # The exadt tool always creates the Exasol cluster with this subnet
+    - name: Initialize Exasol cluster
+      run: |
+        docker run -v $HOME/sqlx1:/exa --rm --privileged -i exasol/docker-db:${{ inputs.exasol-version }} init-sc --template --num-nodes ${{ inputs.num-nodes }}
+        docker run --rm -v $HOME/sqlx1:/exa exasol/docker-db:${{ inputs.exasol-version }} exaconf modify-volume -n DataVolume1 -s 4GiB
+        sudo truncate -s 6G $HOME/sqlx1/data/storage/dev.1
+
+        for (( i=1; i<3; i++ )); do
+          sudo cp -R $HOME/sqlx1 $HOME/sqlx$i
+        done
+      shell: bash
+
+    - name: Start Exasol cluster
+      run: |
+        for (( i=1; i<=3; i++ )); do
+          docker run --name sqlx$i --detach --network=sqlx --ip 10.10.10.1$i --privileged --stop-timeout 120 -v $HOME/sqlx$i:/exa exasol/docker-db:${{ inputs.exasol-version }} init-sc --node-id 1$i
+        done
+      shell: bash
+
+    - name: Wait until Exasol cluster is live
+      timeout-minutes: 5
+      run: |
+        RC=1
+
+        while [[ $RC -ne 0 ]]; do
+          docker exec -it sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"'
+          RC=$?
+          sleep 5
+        done
+      shell: bash
+
+    # The Exasol cluster is created with this subnet by default
     - name: Create connection strings
       id: connection-strings
       run: |
