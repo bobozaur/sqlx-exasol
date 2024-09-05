@@ -21,6 +21,7 @@ impl CompressedWebSocket {
         let mut enc = ZlibEncoder::new(&mut compressed_cmd);
 
         enc.write_all(byte_cmd).await?;
+        enc.close().await?;
 
         self.0
             .send(Message::Binary(compressed_cmd))
