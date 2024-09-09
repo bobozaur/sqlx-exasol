@@ -48,3 +48,48 @@ where
         Ok(Self(s.try_into()?))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use sqlx::{types::Text, Encode};
+
+    use crate::ExaArguments;
+
+    #[test]
+    fn test_text_null_string() {
+        let mut arg_buffer = ExaArguments::default();
+        let is_null = Text(String::new())
+            .encode_by_ref(&mut arg_buffer.buf)
+            .unwrap();
+
+        assert!(is_null.is_null());
+    }
+
+    #[test]
+    fn test_text_null_str() {
+        let mut arg_buffer = ExaArguments::default();
+        let is_null = Text("").encode_by_ref(&mut arg_buffer.buf).unwrap();
+
+        assert!(is_null.is_null());
+    }
+
+    #[test]
+    fn test_text_non_null_string() {
+        let mut arg_buffer = ExaArguments::default();
+        let is_null = Text(String::from("something"))
+            .encode_by_ref(&mut arg_buffer.buf)
+            .unwrap();
+
+        assert!(!is_null.is_null());
+    }
+
+    #[test]
+    fn test_text_non_null_str() {
+        let mut arg_buffer = ExaArguments::default();
+        let is_null = Text("something")
+            .encode_by_ref(&mut arg_buffer.buf)
+            .unwrap();
+
+        assert!(!is_null.is_null());
+    }
+}
