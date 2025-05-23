@@ -7,9 +7,9 @@ use std::net::SocketAddr;
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 #[cfg(feature = "compression")]
 use compressed::CompressedWebSocket;
-use futures_util::{io::BufReader, SinkExt};
+use futures_util::io::BufReader;
 use serde::de::DeserializeOwned;
-use sqlx_core::Error as SqlxError;
+use sqlx_core::{bytes::Bytes, Error as SqlxError};
 pub use uncompressed::PlainWebSocket;
 
 use super::socket::ExaSocket;
@@ -75,7 +75,7 @@ impl WebSocketExt {
             WebSocketExt::Compressed(ws) => &mut ws.0,
         };
 
-        ws.send(Message::Ping(Vec::new())).await.to_sqlx_err()?;
+        ws.send(Message::Ping(Bytes::new())).await.to_sqlx_err()?;
         Ok(())
     }
 }

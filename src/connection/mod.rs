@@ -94,19 +94,10 @@ impl ExaConnection {
                 let with_socket = WithMaybeTlsExaSocket::new(wrapper, host, opts.into());
                 let socket_res = sqlx_core::net::connect_tcp(host, opts.port, with_socket).await;
 
-                // Continue if we couldn't make the socket connect future
-                let socket_res = match socket_res {
-                    Ok(socket) => socket.await,
-                    Err(err) => {
-                        ws_result = Err(err);
-                        continue;
-                    }
-                };
-
                 // Continue if the future to connect a socket failed
                 let (socket, with_tls) = match socket_res {
-                    Ok(socket) => socket,
-                    Err(err) => {
+                    Ok(Ok((socket, with_tls))) => (socket, with_tls),
+                    Ok(Err(err)) | Err(err) => {
                         ws_result = Err(err);
                         continue;
                     }
@@ -244,7 +235,7 @@ impl Connection for ExaConnection {
     where
         Self: Sized,
     {
-        Transaction::begin(self)
+        Transaction::begin(self, None)
     }
 
     fn shrink_buffers(&mut self) {}

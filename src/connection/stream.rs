@@ -280,7 +280,7 @@ where
             match ready!(this.chunk_stream.poll_next(cx)?) {
                 Some(chunk) => this.chunk_iter.renew(chunk),
                 None => return Poll::Ready(None),
-            };
+            }
         }
     }
 }

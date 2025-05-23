@@ -5,15 +5,15 @@
 A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework, based on the Exasol [Websocket API](https://github.com/exasol/websocket-api).  
 Inspired by [Py-Exasol](https://github.com/exasol/pyexasol) and based on the (now archived) [rust-exasol](https://github.com/bobozaur/rust-exasol) sync driver.
 
-**MSRV**: `1.74`
+**MSRV**: `1.82`
 
 ## Note
 >The crate's version resembles the `sqlx` version it is based on so that managing dependencies is simpler.   
 >
 > With that in mind, please favor using a fixed version of `sqlx` and `sqlx-exasol` in `Cargo.toml` to avoid issues, such as:
 > ```toml
-> sqlx = "=0.8.2"
-> sqlx-exasol = "=0.8.2"
+> sqlx = "=0.8.6"
+> sqlx-exasol = "=0.8.6"
 > ```
 
 

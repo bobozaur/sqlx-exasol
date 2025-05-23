@@ -48,9 +48,10 @@ impl ExaWebSocket {
         options: ExaConnectOptionsRef<'_>,
         with_tls: bool,
     ) -> Result<(Self, SessionInfo), SqlxError> {
-        let scheme = match with_tls {
-            true => Self::WSS_SCHEME,
-            false => Self::WS_SCHEME,
+        let scheme = if with_tls {
+            Self::WSS_SCHEME
+        } else {
+            Self::WS_SCHEME
         };
 
         let host = format!("{scheme}://{host}:{port}");
@@ -89,7 +90,7 @@ impl ExaWebSocket {
         cmd: Command,
         rs_handle: &mut Option<u16>,
         future_maker: C,
-    ) -> Result<QueryResultStream<'_, C, F>, SqlxError>
+    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
     where
         C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
         F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,

@@ -91,7 +91,7 @@ impl<'a> From<&'a Credentials> for CredentialsRef<'a> {
     }
 }
 
-impl<'a> CredentialsRef<'a> {
+impl CredentialsRef<'_> {
     /// Encrypts the password with the provided key.
     ///
     /// When connecting using [`Login::Credentials`], Exasol first sends out

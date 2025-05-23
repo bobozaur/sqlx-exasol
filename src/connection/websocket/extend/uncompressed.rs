@@ -1,5 +1,5 @@
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
-use futures_util::{io::BufReader, SinkExt, StreamExt};
+use futures_util::{io::BufReader, StreamExt};
 use rsa::RsaPublicKey;
 use serde::de::{DeserializeOwned, IgnoredAny};
 use sqlx_core::Error as SqlxError;
@@ -70,7 +70,7 @@ impl PlainWebSocket {
 
     /// Sends an uncompressed command.
     pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
-        self.0.send(Message::Text(cmd)).await.to_sqlx_err()
+        self.0.send(Message::Text(cmd.into())).await.to_sqlx_err()
     }
 
     /// Receives an uncompressed [`Response<T>`].

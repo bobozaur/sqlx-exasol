@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use futures_core::future::BoxFuture;
 use sqlx_core::{transaction::TransactionManager, Error as SqlxError};
 
@@ -9,7 +11,10 @@ pub struct ExaTransactionManager;
 impl TransactionManager for ExaTransactionManager {
     type Database = Exasol;
 
-    fn begin(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
+    fn begin<'conn>(
+        conn: &'conn mut ExaConnection,
+        _: Option<Cow<'static, str>>,
+    ) -> BoxFuture<'conn, Result<(), SqlxError>> {
         Box::pin(async move { conn.ws.begin() })
     }
 
@@ -26,5 +31,9 @@ impl TransactionManager for ExaTransactionManager {
         if conn.ws.attributes.open_transaction {
             conn.ws.pending_rollback = true;
         }
+    }
+
+    fn get_transaction_depth(conn: &ExaConnection) -> usize {
+        conn.attributes().open_transaction().into()
     }
 }

@@ -19,7 +19,7 @@ pub struct WithExaSocket(pub SocketAddr);
 impl WithSocket for WithExaSocket {
     type Output = ExaSocket;
 
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         ExaSocket {
             sock_addr: self.0,
             inner: Box::new(socket),

@@ -27,8 +27,8 @@ pub enum ExaProtocolError {
     CompressionDisabled,
 }
 
-impl<'a> From<Option<CloseFrame<'a>>> for ExaProtocolError {
-    fn from(value: Option<CloseFrame<'a>>) -> Self {
+impl From<Option<CloseFrame>> for ExaProtocolError {
+    fn from(value: Option<CloseFrame>) -> Self {
         let msg = value.map_or("unknown reason".to_owned(), |c| c.to_string());
         Self::WebsocketClosed(msg)
     }
