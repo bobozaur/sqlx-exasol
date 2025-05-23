@@ -28,7 +28,10 @@ pub(crate) const URL_SCHEME: &str = "exa";
 
 pub(crate) const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
 pub(crate) const DEFAULT_PORT: u16 = 8563;
-pub(crate) const DEFAULT_CACHE_CAPACITY: usize = 100;
+pub(crate) const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
+    Some(v) => v,
+    None => unreachable!(),
+};
 
 pub(crate) const PARAM_ACCESS_TOKEN: &str = "access-token";
 pub(crate) const PARAM_REFRESH_TOKEN: &str = "refresh-token";
@@ -67,6 +70,7 @@ pub struct ExaConnectOptions {
 }
 
 impl ExaConnectOptions {
+    #[must_use]
     pub fn builder() -> ExaConnectOptionsBuilder {
         ExaConnectOptionsBuilder::default()
     }

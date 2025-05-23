@@ -1,8 +1,6 @@
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, ops::Not};
 
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-
-use crate::options::{DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE};
 
 /// Struct representing attributes related to the connection with the Exasol server.
 /// These can either be returned by an explicit `getAttributes` call or as part of any response.
@@ -14,55 +12,60 @@ use crate::options::{DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE};
 /// Moreover, we store in this other custom connection related attributes, specific to the driver.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ExaAttributes {
     // ##########################################################
     // ############# Database read-write attributes #############
     // ##########################################################
-    pub(crate) autocommit: bool,
+    autocommit: bool,
     // The API doesn't having no schema open through this attribute,
     // hence the serialization skip.
     //
     // It is possible to change it through the attribute though.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) current_schema: Option<String>,
-    pub(crate) feedback_interval: u64,
-    pub(crate) numeric_characters: String,
-    pub(crate) query_timeout: u64,
-    pub(crate) snapshot_transactions_enabled: bool,
-    pub(crate) timestamp_utc_enabled: bool,
+    current_schema: Option<String>,
+    feedback_interval: u64,
+    numeric_characters: String,
+    query_timeout: u64,
+    snapshot_transactions_enabled: bool,
+    timestamp_utc_enabled: bool,
     // ##########################################################
     // ############# Database read-only attributes ##############
     // ##########################################################
     #[serde(skip_serializing)]
-    pub(crate) compression_enabled: bool,
+    compression_enabled: bool,
     #[serde(skip_serializing)]
-    pub(crate) date_format: String,
+    date_format: String,
     #[serde(skip_serializing)]
-    pub(crate) date_language: String,
+    date_language: String,
     #[serde(skip_serializing)]
-    pub(crate) datetime_format: String,
+    datetime_format: String,
     #[serde(skip_serializing)]
-    pub(crate) default_like_escape_character: String,
+    default_like_escape_character: String,
     #[serde(skip_serializing)]
-    pub(crate) open_transaction: bool,
+    open_transaction: bool,
     #[serde(skip_serializing)]
-    pub(crate) timezone: String,
+    timezone: String,
     #[serde(skip_serializing)]
-    pub(crate) timezone_behavior: String,
+    timezone_behavior: String,
     // ##########################################################
     // ############# Driver specific attributes #################
     // ##########################################################
     #[serde(skip_serializing)]
-    pub(crate) fetch_size: usize,
+    fetch_size: usize,
     #[serde(skip_serializing)]
-    pub(crate) encryption_enabled: bool,
+    encryption_enabled: bool,
     #[serde(skip_serializing)]
-    pub(crate) statement_cache_capacity: NonZeroUsize,
+    statement_cache_capacity: NonZeroUsize,
 }
 
-/// Sensible attribute defaults that anyway get overwritten after connection login.
-impl Default for ExaAttributes {
-    fn default() -> Self {
+impl ExaAttributes {
+    pub(crate) fn new(
+        compression_enabled: bool,
+        fetch_size: usize,
+        encryption_enabled: bool,
+        statement_cache_capacity: NonZeroUsize,
+    ) -> Self {
         Self {
             autocommit: true,
             current_schema: None,
@@ -71,7 +74,7 @@ impl Default for ExaAttributes {
             query_timeout: 0,
             snapshot_transactions_enabled: false,
             timestamp_utc_enabled: false,
-            compression_enabled: false,
+            compression_enabled,
             date_format: "YYYY-MM-DD".to_owned(),
             date_language: "ENG".to_owned(),
             datetime_format: "YYYY-MM-DD HH24:MI:SS.FF6".to_owned(),
@@ -79,14 +82,12 @@ impl Default for ExaAttributes {
             open_transaction: false,
             timezone: "UNIVERSAL".to_owned(),
             timezone_behavior: "INVALID SHIFT AMBIGUOUS ST".to_owned(),
-            fetch_size: DEFAULT_FETCH_SIZE,
-            encryption_enabled: true,
-            statement_cache_capacity: NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
+            fetch_size,
+            encryption_enabled,
+            statement_cache_capacity,
         }
     }
-}
-
-impl ExaAttributes {
+    #[must_use]
     pub fn autocommit(&self) -> bool {
         self.autocommit
     }
@@ -96,6 +97,7 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn current_schema(&self) -> Option<&str> {
         self.current_schema.as_deref()
     }
@@ -110,6 +112,7 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn feedback_interval(&self) -> u64 {
         self.feedback_interval
     }
@@ -119,6 +122,7 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn numeric_characters(&self) -> &str {
         &self.numeric_characters
     }
@@ -128,15 +132,18 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn query_timeout(&self) -> u64 {
         self.query_timeout
     }
 
+    #[must_use]
     pub fn set_query_timeout(&mut self, query_timeout: u64) -> &mut Self {
         self.query_timeout = query_timeout;
         self
     }
 
+    #[must_use]
     pub fn snapshot_transactions_enabled(&self) -> bool {
         self.snapshot_transactions_enabled
     }
@@ -146,6 +153,7 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn timestamp_utc_enabled(&self) -> bool {
         self.timestamp_utc_enabled
     }
@@ -155,38 +163,47 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn compression_enabled(&self) -> bool {
         self.compression_enabled
     }
 
+    #[must_use]
     pub fn date_format(&self) -> &str {
         &self.date_format
     }
 
+    #[must_use]
     pub fn date_language(&self) -> &str {
         &self.date_language
     }
 
+    #[must_use]
     pub fn datetime_format(&self) -> &str {
         &self.datetime_format
     }
 
+    #[must_use]
     pub fn default_like_escape_character(&self) -> &str {
         &self.default_like_escape_character
     }
 
+    #[must_use]
     pub fn open_transaction(&self) -> bool {
         self.open_transaction
     }
 
+    #[must_use]
     pub fn timezone(&self) -> &str {
         &self.timezone
     }
 
+    #[must_use]
     pub fn timezone_behavior(&self) -> &str {
         &self.timezone_behavior
     }
 
+    #[must_use]
     pub fn fetch_size(&self) -> usize {
         self.fetch_size
     }
@@ -196,12 +213,19 @@ impl ExaAttributes {
         self
     }
 
+    #[must_use]
     pub fn encryption_enabled(&self) -> bool {
         self.encryption_enabled
     }
 
+    #[must_use]
     pub fn statement_cache_capacity(&self) -> NonZeroUsize {
         self.statement_cache_capacity
+    }
+
+    pub(crate) fn set_open_transaction(&mut self, open_transaction: bool) -> &mut Self {
+        self.open_transaction = open_transaction;
+        self
     }
 
     pub(crate) fn update(&mut self, other: Attributes) {
@@ -301,9 +325,6 @@ impl Attributes {
             return Ok(None);
         };
 
-        match String::is_empty(&value) {
-            true => Ok(None),
-            false => Ok(Some(value)),
-        }
+        Ok(String::is_empty(&value).not().then_some(value))
     }
 }

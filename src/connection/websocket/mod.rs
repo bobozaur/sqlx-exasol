@@ -60,18 +60,17 @@ impl ExaWebSocket {
             .await
             .to_sqlx_err()?;
 
-        let attributes = ExaAttributes {
-            compression_enabled: options.compression,
-            fetch_size: options.fetch_size,
-            encryption_enabled: with_tls,
-            statement_cache_capacity: options.statement_cache_capacity,
-            ..Default::default()
-        };
+        let attributes = ExaAttributes::new(
+            options.compression,
+            options.fetch_size,
+            with_tls,
+            options.statement_cache_capacity,
+        );
 
         // Login is always uncompressed
         let mut plain_ws = PlainWebSocket(ws);
         let session_info = plain_ws.login(options).await?;
-        let ws = WebSocketExt::new(plain_ws.0, attributes.compression_enabled);
+        let ws = WebSocketExt::new(plain_ws.0, attributes.compression_enabled());
 
         let mut this = Self {
             ws,
@@ -152,22 +151,22 @@ impl ExaWebSocket {
 
     pub fn begin(&mut self) -> Result<(), SqlxError> {
         // Exasol does not have nested transactions.
-        if self.attributes.open_transaction {
+        if self.attributes.open_transaction() {
             return Err(ExaProtocolError::TransactionAlreadyOpen)?;
         }
 
         // The next time a query is executed, the transaction will be started.
         // We could eagerly start it as well, but that implies one more
         // round-trip to the server and back with no benefit.
-        self.attributes.autocommit = false;
-        self.attributes.open_transaction = true;
+        self.attributes.set_autocommit(false);
+        self.attributes.set_open_transaction(true);
         Ok(())
     }
 
     pub async fn commit(&mut self) -> Result<(), SqlxError> {
         // It's fine to set this before executing the command
         // since we want to commit anyway.
-        self.attributes.autocommit = true;
+        self.attributes.set_autocommit(true);
 
         // Just changing `autocommit` attribute implies a COMMIT,
         // but we would still have to send a command to the server
@@ -175,7 +174,7 @@ impl ExaWebSocket {
         let cmd = ExaCommand::new_execute("COMMIT;", &self.attributes).try_into()?;
         self.send_cmd_ignore_response(cmd).await?;
 
-        self.attributes.open_transaction = false;
+        self.attributes.set_open_transaction(false);
         Ok(())
     }
 
@@ -187,8 +186,8 @@ impl ExaWebSocket {
 
         // We explicitly set the attribute after
         // we know the rollback was successful.
-        self.attributes.autocommit = true;
-        self.attributes.open_transaction = false;
+        self.attributes.set_autocommit(true);
+        self.attributes.set_open_transaction(false);
         self.pending_rollback = false;
         Ok(())
     }

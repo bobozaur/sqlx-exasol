@@ -21,6 +21,7 @@ impl ExaTypeInfo {
     ///
     /// Returns true if the [`ExaTypeInfo`] instance is compatible/bigger/able to
     /// accommodate the `other` instance.
+    #[must_use]
     pub fn compatible(&self, other: &Self) -> bool {
         self.datatype.compatible(&other.datatype)
     }
@@ -338,17 +339,17 @@ impl Decimal {
         Self { precision, scale }
     }
 
-    pub fn precision(&self) -> u32 {
+    pub fn precision(self) -> u32 {
         self.precision
     }
 
-    pub fn scale(&self) -> u32 {
+    pub fn scale(self) -> u32 {
         self.scale
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::Decimal(d) => self >= d,
+            ExaDataType::Decimal(d) => self >= *d,
             ExaDataType::Double => self.scale > 0,
             ExaDataType::Null => true,
             _ => false,
@@ -405,11 +406,11 @@ impl Geometry {
         Self { srid }
     }
 
-    pub fn srid(&self) -> u16 {
+    pub fn srid(self) -> u16 {
         self.srid
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
             ExaDataType::Geometry(g) => self.srid == g.srid,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
@@ -460,17 +461,17 @@ impl IntervalDayToSecond {
         }
     }
 
-    pub fn precision(&self) -> u32 {
+    pub fn precision(self) -> u32 {
         self.precision
     }
 
-    pub fn fraction(&self) -> u32 {
+    pub fn fraction(self) -> u32 {
         self.fraction
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::IntervalDayToSecond(i) => self >= i,
+            ExaDataType::IntervalDayToSecond(i) => self >= *i,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
@@ -490,13 +491,13 @@ impl IntervalYearToMonth {
         Self { precision }
     }
 
-    pub fn precision(&self) -> u32 {
+    pub fn precision(self) -> u32 {
         self.precision
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::IntervalYearToMonth(i) => self >= i,
+            ExaDataType::IntervalYearToMonth(i) => self >= *i,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
@@ -524,11 +525,11 @@ impl Hashtype {
         Self { size: size * 2 }
     }
 
-    pub fn size(&self) -> u16 {
+    pub fn size(self) -> u16 {
         self.size / 2
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
             ExaDataType::Hashtype(h) => self.size >= h.size,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,

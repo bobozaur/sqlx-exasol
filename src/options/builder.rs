@@ -41,7 +41,7 @@ impl Default for ExaConnectOptionsBuilder {
             ssl_ca: None,
             ssl_client_cert: None,
             ssl_client_key: None,
-            statement_cache_capacity: NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
+            statement_cache_capacity: DEFAULT_CACHE_CAPACITY,
             username: None,
             password: None,
             access_token: None,

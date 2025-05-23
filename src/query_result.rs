@@ -6,10 +6,12 @@ pub struct ExaQueryResult {
 }
 
 impl ExaQueryResult {
+    #[must_use]
     pub fn new(rows_affected: u64) -> Self {
         Self { rows_affected }
     }
 
+    #[must_use]
     pub fn rows_affected(&self) -> u64 {
         self.rows_affected
     }

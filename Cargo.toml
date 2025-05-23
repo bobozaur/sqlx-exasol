@@ -86,6 +86,7 @@ tokio = { version = "1", features = ["full"] }
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
 
 [lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }

@@ -14,6 +14,7 @@ pub struct ExaRow {
 }
 
 impl ExaRow {
+    #[must_use]
     pub fn new(
         data: Vec<Value>,
         columns: Arc<[ExaColumn]>,
