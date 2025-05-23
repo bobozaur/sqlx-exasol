@@ -27,6 +27,7 @@ pub struct ExportBuilder<'a> {
 }
 
 impl<'a> ExportBuilder<'a> {
+    #[must_use]
     pub fn new(source: ExportSource<'a>) -> Self {
         Self {
             num_readers: 0,

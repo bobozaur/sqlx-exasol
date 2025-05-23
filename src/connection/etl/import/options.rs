@@ -31,6 +31,7 @@ pub struct ImportBuilder<'a> {
 }
 
 impl<'a> ImportBuilder<'a> {
+    #[must_use]
     pub fn new(dest_table: &'a str) -> Self {
         Self {
             num_writers: 0,

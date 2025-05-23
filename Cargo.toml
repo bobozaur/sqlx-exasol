@@ -3,6 +3,7 @@ name = "sqlx-exasol"
 version = "0.8.6"
 edition = "2021"
 authors = ["bobozaur"]
+rust-version = "1.82.0"
 description = "Exasol driver for the SQLx framework."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/bobozaur/sqlx-exasol"
@@ -38,11 +39,9 @@ base64 = "0.22"
 futures-io = "0.3"
 futures-util = "0.3"
 futures-core = "0.3"
-futures-channel = { version = "0.3", optional = true }
 lru = "0.12"
 pin-project = "1"
 rand = "0.8"
-rcgen = { version = "0.13", optional = true }
 rsa = "0.9"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1" }
@@ -60,11 +59,13 @@ async-compression = { version = "0.4", features = [
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true }
 dotenvy = { version = "0.15", optional = true }
+futures-channel = { version = "0.3", features = ["sink"], optional = true }
 hex = { version = "0.4", optional = true }
 http-body-util = { version = "0.1", optional = true }
 hyper = { version = "1.4", features = ["server", "http1"], optional = true }
 native-tls = { version = "0.2", optional = true }
 uuid = { version = "1", features = ["serde"], optional = true }
+rcgen = { version = "0.13", optional = true }
 rust_decimal = { version = "1", optional = true }
 rustls = { version = "0.23", default-features = false, features = [
     "std",

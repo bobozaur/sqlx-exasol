@@ -1,13 +1,12 @@
-use std::{io::Result as IoResult, net::SocketAddrV4};
+use std::net::SocketAddrV4;
 
-use futures_core::future::BoxFuture;
 use sqlx_core::{
     error::Error as SqlxError,
     net::{Socket, WithSocket},
 };
 
-use super::{get_etl_addr, traits::WithSocketMaker, SocketFuture, WithSocketFuture};
-use crate::connection::websocket::socket::{ExaSocket, WithExaSocket};
+use super::{get_etl_addr, traits::WithSocketMaker, SocketFuture};
+use crate::connection::websocket::socket::WithExaSocket;
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNonTlsSocket`].
 pub struct NonTlsSocketSpawner;
@@ -25,23 +24,17 @@ impl WithSocketMaker for NonTlsSocketSpawner {
 pub struct WithNonTlsSocket(WithExaSocket);
 
 impl WithNonTlsSocket {
-    #[allow(clippy::unused_async)]
-    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
-        let socket = self.0.with_socket(socket);
-        Ok(socket)
-    }
-
     async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
         let (socket, address) = get_etl_addr(socket).await?;
-        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
+        let future = Box::pin(async move { Ok(self.0.with_socket(socket).await) });
         Ok((address, future))
     }
 }
 
 impl WithSocket for WithNonTlsSocket {
-    type Output = WithSocketFuture;
+    type Output = Result<(SocketAddrV4, SocketFuture), SqlxError>;
 
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        Box::pin(self.work(socket))
+    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        self.work(socket).await
     }
 }

@@ -114,7 +114,6 @@ const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 /// Type of the future that executes the ETL job.
 type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
-type WithSocketFuture = BoxFuture<'static, Result<(SocketAddrV4, SocketFuture), SqlxError>>;
 
 /// Builds an ETL job comprising of a [`JobFuture`], that drives the execution
 /// of the ETL query, and an array of workers that perform the IO.
@@ -128,10 +127,10 @@ where
 {
     let ips = con.ws.get_hosts().await?;
     let port = con.ws.socket_addr().port();
-    let with_tls = con.attributes().encryption_enabled;
+    let with_tls = con.attributes().encryption_enabled();
     let with_compression = job
         .use_compression()
-        .unwrap_or(con.attributes().compression_enabled);
+        .unwrap_or(con.attributes().compression_enabled());
 
     // Get the internal Exasol node addresses and the socket spawning futures
     let (addrs, futures): (Vec<_>, Vec<_>) =
@@ -162,6 +161,7 @@ where
 }
 
 /// Wrapper over [`_socket_spawners`] used to handle TLS/non-TLS reasoning.
+#[allow(clippy::match_bool)]
 async fn socket_spawners(
     num: usize,
     ips: Vec<IpAddr>,
@@ -203,9 +203,7 @@ where
 
         let wrapper = WithExaSocket(SocketAddr::new(ip, port));
         let with_socket = socket_spawner.make_with_socket(wrapper);
-        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket)
-            .await?
-            .await?;
+        let (addr, future) = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await??;
 
         output.push((addr, future));
     }

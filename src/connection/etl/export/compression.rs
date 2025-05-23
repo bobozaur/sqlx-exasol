@@ -23,7 +23,7 @@ use crate::connection::websocket::socket::ExaSocket;
 /// Dropping a reader before it returned EOF will result in the `EXPORT` query returning an error.
 /// While not necessarily a problem if you're not interested in the whole export, there's no way to
 /// circumvent that other than handling the error in code.
-
+///
 /// Wrapper enum that handles the compression support for the [`ExaReader`].
 /// It makes use of [`ExportBufReader`] because the [`GzipDecoder`] needs a type
 /// implementing [`futures_io::AsyncBufRead`].

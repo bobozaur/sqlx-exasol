@@ -37,14 +37,16 @@ pub trait EtlJob: Send + Sync {
         with_tls: bool,
         with_compression: bool,
     ) {
-        let prefix = match with_tls {
-            false => Self::HTTP_SCHEME,
-            true => Self::HTTPS_SCHEME,
+        let prefix = if with_tls {
+            Self::HTTPS_SCHEME
+        } else {
+            Self::HTTP_SCHEME
         };
 
-        let ext = match with_compression {
-            false => Self::CSV_FILE_EXT,
-            true => Self::GZ_FILE_EXT,
+        let ext = if with_compression {
+            Self::GZ_FILE_EXT
+        } else {
+            Self::CSV_FILE_EXT
         };
 
         for (idx, addr) in addrs.into_iter().enumerate() {
