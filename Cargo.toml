@@ -32,65 +32,60 @@ etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
 # ############################################
 
 [dependencies]
-rand = "0.8.5"
-base64 = "0.22.1"
-thiserror = "1.0.63"
-url = "2.5.2"
-rsa = "0.9.6"
-async-tungstenite = "0.28.0"
-futures-io = "0.3.30"
-futures-util = "0.3.30"
-futures-core = "0.3.30"
-futures-channel = { version = "0.3.30", optional = true }
-serde_json = { version = "1.0.128" }
-serde = { version = "1.0.209", features = ["derive", "rc"] }
-pin-project = "1.1.5"
-lru = "0.12.4"
-sqlx-core = "0.8.2"
-tracing = { version = "0.1.40", features = ["log"] }
-arrayvec = "0.7.6"
-rcgen = { version = "0.13.1", optional = true }
+arrayvec = "0.7"
+async-tungstenite = "0.29"
+base64 = "0.22"
+futures-io = "0.3"
+futures-util = "0.3"
+futures-core = "0.3"
+futures-channel = { version = "0.3", optional = true }
+lru = "0.12"
+pin-project = "1"
+rand = "0.8"
+rcgen = { version = "0.13", optional = true }
+rsa = "0.9"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1" }
+sqlx-core = "=0.8.6"
+thiserror = "1"
+tracing = { version = "0.1", features = ["log"] }
+url = "2"
 
 # Feature flagged optional dependencies
-uuid = { version = "1.10.0", features = ["serde"], optional = true }
-chrono = { version = "0.4.38", features = ["serde"], optional = true }
-rust_decimal = { version = "1.36.0", optional = true }
-dotenvy = { version = "0.15.7", optional = true }
-hex = { version = "0.4.3", optional = true }
-async-compression = { version = "0.4.12", features = [
+async-compression = { version = "0.4", features = [
     "futures-io",
     "gzip",
     "zlib",
 ], optional = true }
-rustls = { version = "0.23.12", default-features = false, features = [
+bytes = { version = "1", optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true }
+dotenvy = { version = "0.15", optional = true }
+hex = { version = "0.4", optional = true }
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1.4", features = ["server", "http1"], optional = true }
+native-tls = { version = "0.2", optional = true }
+uuid = { version = "1", features = ["serde"], optional = true }
+rust_decimal = { version = "1", optional = true }
+rustls = { version = "0.23", default-features = false, features = [
     "std",
     "tls12",
 ], optional = true }
-native-tls = { version = "0.2.12", optional = true }
-http-body-util = { version = "0.1.2", optional = true }
-hyper = { version = "1.4.1", features = ["server", "http1"], optional = true }
-bytes = { version = "1.7.1", optional = true }
-serde-transcode = { version = "1.1.1" }
+serde-transcode = { version = "1" }
 
 [dev-dependencies]
-rustls = { version = "0.23.12" }
-sqlx = { version = "0.8.2", features = [
+anyhow = "1"
+paste = "1"
+rustls = { version = "0.23" }
+sqlx = { version = "=0.8.6", features = [
     "runtime-tokio",
     "tls-native-tls",
     "migrate",
 ] }
-paste = "1.0.15"
-anyhow = "1.0.86"
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-struct_excessive_bools = "allow"
-trivially_copy_pass_by_ref = "allow"
-must_use_candidate = "allow"
-match_bool = "allow"
-module_name_repetitions = "allow"
 
 [lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }
