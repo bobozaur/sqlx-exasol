@@ -22,7 +22,7 @@ env:
 jobs:
   format:
     name: Format
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
@@ -42,7 +42,7 @@ jobs:
   clippy:
     name: Clippy
     needs: format
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         etl:
@@ -121,7 +121,7 @@ jobs:
   connection_tests:
     name: Connection tests
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -159,7 +159,7 @@ jobs:
   tls_connection_tests:
     name: TLS connection tests
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -197,7 +197,7 @@ jobs:
   etl_tests:
     name: ETL tests
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -241,7 +241,7 @@ jobs:
   native_tls_etl_tests:
     name: ETL tests with native-tls
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -275,7 +275,7 @@ jobs:
   rustls_etl_tests:
     name: ETL tests with rustls
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
