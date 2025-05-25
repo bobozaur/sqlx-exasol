@@ -1,8 +1,6 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 //! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.  
 //!
-//! **MSRV**: `1.82`
-//!
 //! ## Crate Features flags
 //! * `etl` - enables the usage ETL jobs without TLS encryption.
 //! * `etl_native_tls` - enables the `etl` feature and adds TLS encryption through

@@ -85,7 +85,7 @@ impl Migrate for ExaConnection {
                 execution_time DECIMAL(20, 0) NOT NULL
             );"#;
 
-            self.ws.execute_batch(query).await?;
+            self.ws.execute_batch(&[query]).await?;
 
             Ok(())
         })

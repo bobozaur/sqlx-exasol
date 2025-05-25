@@ -243,87 +243,11 @@ impl ExaWebSocket {
     ///
     /// If batch execution fails, we will try to separate statements and execute them
     /// one by one.
-    #[cfg(feature = "migrate")]
-    pub async fn execute_batch(&mut self, sql: &str) -> Result<(), SqlxError> {
-        // Trim the query end so we don't have an empty statement at the end of the array.
-        let sql = sql.trim_end();
-        let sql = sql.strip_suffix(';').unwrap_or(sql);
-
-        // Do a naive yet valiant attempt at splitting the query.
-        let sql_batch = sql.split(';').collect();
-        let cmd = ExaCommand::new_execute_batch(sql_batch, &self.attributes).try_into()?;
+    pub async fn execute_batch(&mut self, sql_texts: &[&str]) -> Result<(), SqlxError> {
+        let cmd = ExaCommand::new_execute_batch(sql_texts, &self.attributes).try_into()?;
 
         // Run batch SQL command
-        match self.send_cmd_ignore_response(cmd).await {
-            Ok(()) => return Ok(()),
-            Err(e) => tracing::warn!(
-                "failed to execute batch SQL: {e}; will attempt sequential execution"
-            ),
-        };
-
-        // If we got here then batch execution failed.
-        // This will pretty much be happening if  there are ';' literals in the query.
-        //
-        // So.. we'll do an incremental identification of queries, still splitting by ';'
-        // but this time, if a statement execution fails, we concatenate it with the next string
-        // up until the next ';'.
-        let mut result = Ok(());
-        let mut position = 0;
-        let mut sql_start = 0;
-
-        let handle_err_fn = |err: SqlxError, result: &mut Result<(), SqlxError>| {
-            // Exasol doesn't seem to have a dedicated code for malformed queries.
-            // There's `42000` but it does not look to only be related to syntax errors.
-            //
-            // So we at least check if this is a database error and continue if so.
-            // Otherwise something else is wrong and we can fail early.
-            let db_err = match &err {
-                SqlxError::Database(_) => err,
-                _ => return Err(err),
-            };
-
-            tracing::warn!("error running statement: {db_err}; perhaps it's incomplete?");
-
-            // We wanna store the first error occurred.
-            // If at some point, after further concatenations, the query
-            // succeeds, then we'll set the result to `Ok`.
-            if result.is_ok() {
-                *result = Err(db_err);
-            }
-
-            Ok(())
-        };
-
-        while let Some(sql_end) = sql[position..].find(';') {
-            // Found a separator, split the SQL.
-            let sql = sql[sql_start..position + sql_end].trim();
-
-            let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
-            // Next lookup will be after the just encountered separator.
-            position += sql_end + 1;
-
-            if let Err(err) = self.send_cmd_ignore_response(cmd).await {
-                handle_err_fn(err, &mut result)?;
-            } else {
-                // Yay!!!
-                sql_start = position;
-                result = Ok(());
-            }
-        }
-
-        // We need to run the remaining statement, if any.
-        let sql = sql[sql_start..].trim();
-
-        if !sql.is_empty() {
-            let cmd = ExaCommand::new_execute(sql, &self.attributes).try_into()?;
-            if let Err(err) = self.send_cmd_ignore_response(cmd).await {
-                handle_err_fn(err, &mut result)?;
-            } else {
-                result = Ok(());
-            }
-        }
-
-        result
+        self.send_cmd_ignore_response(cmd).await
     }
 
     pub fn socket_addr(&self) -> SocketAddr {

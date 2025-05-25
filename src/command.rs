@@ -30,7 +30,6 @@ pub(crate) enum ExaCommand<'a> {
     CreatePreparedStatement(Sql<'a>),
     ExecutePreparedStatement(ExecutePreparedStmt<'a>),
     ClosePreparedStatement(ClosePreparedStmt),
-    #[cfg(feature = "migrate")]
     ExecuteBatch(BatchSql<'a>),
 }
 
@@ -95,12 +94,10 @@ impl<'a> ExaCommand<'a> {
             statement_handle: handle,
         })
     }
-
-    #[cfg(feature = "migrate")]
-    pub fn new_execute_batch(sql_batch: Vec<&'a str>, attributes: &'a ExaAttributes) -> Self {
+    pub fn new_execute_batch(sql_texts: &'a [&'a str], attributes: &'a ExaAttributes) -> Self {
         Self::ExecuteBatch(BatchSql {
             attributes,
-            sql_texts: sql_batch,
+            sql_texts,
         })
     }
 }
@@ -167,12 +164,11 @@ pub(crate) struct Sql<'a> {
     sql_text: &'a str,
 }
 
-#[cfg(feature = "migrate")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BatchSql<'a> {
     attributes: &'a ExaAttributes,
-    sql_texts: Vec<&'a str>,
+    sql_texts: &'a [&'a str],
 }
 
 #[derive(Clone, Debug, Serialize)]

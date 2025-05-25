@@ -105,15 +105,15 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     let mut conn = master_pool.acquire().await?;
 
-    let query_str = r#"
-        CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";
-
-        CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
+    let queries = &[
+        r#"CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";"#,
+        r#"CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
             db_id DECIMAL(20, 0) IDENTITY,
             test_path CLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );"#;
-    conn.ws.execute_batch(query_str).await?;
+        );"#,
+    ];
+    conn.ws.execute_batch(queries).await?;
 
     // Record the current time _before_ we acquire the `DO_CLEANUP` permit. This
     // prevents the first test thread from accidentally deleting new test dbs
@@ -165,8 +165,8 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
 async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Result<usize, Error> {
     let query_str = r#"
-        SELECT db_id FROM 
-        "_sqlx_tests"."_sqlx_test_databases" 
+        SELECT db_id FROM
+        "_sqlx_tests"."_sqlx_test_databases"
         WHERE created_at < FROM_POSIX_TIME(?);
         "#;
 

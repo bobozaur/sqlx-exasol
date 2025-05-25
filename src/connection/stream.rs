@@ -86,7 +86,7 @@ where
 
 /// The [`Stream`] implementation here encapsulates end-stages actions
 /// such as using the [`QueryLogger`] or taking note of whether an error occurred
-/// (and stopp streaming, if it did).
+/// (and stop streaming if it did).
 impl<'a, C, F1, F2> Stream for ResultStream<'a, C, F1, F2>
 where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F1, SqlxError>,
@@ -100,8 +100,7 @@ where
             return Poll::Ready(None);
         }
 
-        let opt = ready!(self.as_mut().poll_next_impl(cx));
-        let Some(res) = opt else {
+        let Some(res) = ready!(self.as_mut().poll_next_impl(cx)) else {
             return Poll::Ready(None);
         };
 

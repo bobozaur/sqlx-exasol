@@ -71,6 +71,8 @@ use super::SocketFuture;
 ///
 /// Since not using one or more import workers seems to be treated as an error on Exasol's side,
 /// it's best not to create excess writers that you don't plan on using to avoid such issues.
+///
+/// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ExaImportProj)]
 pub enum ExaImport {

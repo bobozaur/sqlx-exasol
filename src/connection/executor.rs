@@ -1,7 +1,7 @@
 use std::{borrow::Cow, future::ready};
 
 use futures_core::{future::BoxFuture, stream::BoxStream};
-use futures_util::{FutureExt, TryStreamExt};
+use futures_util::{FutureExt, StreamExt, TryStreamExt};
 use sqlx_core::{
     database::Database,
     describe::Describe,
@@ -10,9 +10,10 @@ use sqlx_core::{
     Either, Error as SqlxError,
 };
 
-use super::{macros::fetcher_closure, stream::ResultStream};
+use super::stream::ResultStream;
 use crate::{
     command::ExaCommand,
+    connection::websocket::ExaWebSocket,
     database::Exasol,
     responses::DescribeStatement,
     statement::{ExaStatement, ExaStatementMetadata},
@@ -22,6 +23,72 @@ use crate::{
 #[allow(clippy::multiple_bound_locations)]
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;
+
+    fn execute<'e, 'q: 'e, E>(
+        self,
+        query: E,
+    ) -> BoxFuture<'e, Result<<Self::Database as Database>::QueryResult, SqlxError>>
+    where
+        'c: 'e,
+        E: 'q + Execute<'q, Self::Database>,
+    {
+        // self.fetch(query).try_collect().boxed()
+        todo!()
+    }
+
+    fn execute_many<'e, 'q: 'e, E>(
+        self,
+        query: E,
+    ) -> BoxStream<'e, Result<<Self::Database as Database>::QueryResult, SqlxError>>
+    where
+        'c: 'e,
+        E: 'q + Execute<'q, Self::Database>,
+    {
+        self.fetch_many(query)
+            .try_filter_map(|step| async move {
+                Ok(match step {
+                    Either::Left(rows) => Some(rows),
+                    Either::Right(_) => None,
+                })
+            })
+            .boxed()
+    }
+
+    fn fetch<'e, 'q: 'e, E>(
+        self,
+        mut query: E,
+    ) -> BoxStream<'e, Result<<Self::Database as Database>::Row, SqlxError>>
+    where
+        'c: 'e,
+        E: 'q + Execute<'q, Self::Database>,
+    {
+        let sql = query.sql();
+        let persistent = query.persistent();
+        let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
+            Ok(a) => a,
+            Err(e) => return Box::pin(ready(Err(e)).into_stream()),
+        };
+
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
+
+        let fetcher_closure = move |ws: &'e mut ExaWebSocket, handle: u16, pos: usize| {
+            let fetch_size = ws.attributes.fetch_size();
+            let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
+            let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
+            Ok(future)
+        };
+
+        let future = self.execute_query(sql, arguments, persistent, fetcher_closure);
+
+        Box::pin(
+            ResultStream::new(future, logger).try_filter_map(|step| async move {
+                Ok(match step {
+                    Either::Left(_) => None,
+                    Either::Right(row) => Some(row),
+                })
+            }),
+        )
+    }
 
     fn fetch_many<'e, 'q: 'e, E: 'q>(
         self,
@@ -46,7 +113,14 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
 
-        let future = self.execute_query(sql, arguments, persistent, fetcher_closure!('e));
+        let fetcher_closure = move |ws: &'e mut ExaWebSocket, handle: u16, pos: usize| {
+            let fetch_size = ws.attributes.fetch_size();
+            let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
+            let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
+            Ok(future)
+        };
+
+        let future = self.execute_query(sql, arguments, persistent, fetcher_closure);
         Box::pin(ResultStream::new(future, logger))
     }
 

@@ -1,7 +1,7 @@
 #[cfg(feature = "etl")]
 pub mod etl;
 mod executor;
-mod macros;
+mod query_splitter;
 mod stream;
 mod websocket;
 
