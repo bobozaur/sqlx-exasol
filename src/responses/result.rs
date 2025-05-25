@@ -53,10 +53,10 @@ impl QueryResult {
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "ResultSetDe")]
 pub struct ResultSet {
-    pub(crate) total_rows_num: usize,
-    pub(crate) total_rows_pos: usize,
-    pub(crate) output: ResultSetOutput,
-    pub(crate) columns: Arc<[ExaColumn]>,
+    pub total_rows_num: usize,
+    pub total_rows_pos: usize,
+    pub output: ResultSetOutput,
+    pub columns: Arc<[ExaColumn]>,
 }
 
 impl TryFrom<ResultSetDe> for ResultSet {

@@ -8,9 +8,9 @@ use crate::{ExaColumn, ExaTypeInfo};
 #[derive(Clone, Debug, Deserialize)]
 #[serde(from = "DescribeStatementDe")]
 pub struct DescribeStatement {
-    pub(crate) statement_handle: u16,
-    pub(crate) columns: Vec<ExaColumn>,
-    pub(crate) parameters: Vec<ExaTypeInfo>,
+    pub statement_handle: u16,
+    pub columns: Vec<ExaColumn>,
+    pub parameters: Vec<ExaTypeInfo>,
 }
 
 impl From<DescribeStatementDe> for DescribeStatement {

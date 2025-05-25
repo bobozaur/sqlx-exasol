@@ -273,28 +273,28 @@ pub struct Attributes {
     // ##########################################################
     // ############# Database read-write attributes #############
     // ##########################################################
-    pub(crate) autocommit: Option<bool>,
+    pub autocommit: Option<bool>,
     #[serde(default)]
     #[serde(deserialize_with = "Attributes::deserialize_current_schema")]
-    pub(crate) current_schema: Option<String>,
-    pub(crate) feedback_interval: Option<u64>,
-    pub(crate) numeric_characters: Option<String>,
-    pub(crate) query_timeout: Option<u64>,
-    pub(crate) snapshot_transactions_enabled: Option<bool>,
-    pub(crate) timestamp_utc_enabled: Option<bool>,
+    pub current_schema: Option<String>,
+    pub feedback_interval: Option<u64>,
+    pub numeric_characters: Option<String>,
+    pub query_timeout: Option<u64>,
+    pub snapshot_transactions_enabled: Option<bool>,
+    pub timestamp_utc_enabled: Option<bool>,
     // ##########################################################
     // ############# Database read-only attributes ##############
     // ##########################################################
-    pub(crate) compression_enabled: Option<bool>,
-    pub(crate) date_format: Option<String>,
-    pub(crate) date_language: Option<String>,
-    pub(crate) datetime_format: Option<String>,
-    pub(crate) default_like_escape_character: Option<String>,
+    pub compression_enabled: Option<bool>,
+    pub date_format: Option<String>,
+    pub date_language: Option<String>,
+    pub datetime_format: Option<String>,
+    pub default_like_escape_character: Option<String>,
     #[serde(default)]
     #[serde(deserialize_with = "Attributes::deserialize_open_transaction")]
-    pub(crate) open_transaction: Option<bool>,
-    pub(crate) timezone: Option<String>,
-    pub(crate) timezone_behavior: Option<String>,
+    pub open_transaction: Option<bool>,
+    pub timezone: Option<String>,
+    pub timezone_behavior: Option<String>,
 }
 
 impl Attributes {

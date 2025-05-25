@@ -234,7 +234,7 @@ where
                 let future = future_maker(ws, handle, total_rows_pos)?;
                 let future = Some(future);
 
-                let chunk_stream = MultiChunkStream {
+                let chunk_stream = MultiChunkStream2 {
                     future,
                     future_maker,
                     handle,
@@ -298,7 +298,7 @@ where
     C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
     F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>>,
 {
-    Multi(#[pin] MultiChunkStream<'a, C, F>),
+    Multi(#[pin] MultiChunkStream2<'a, C, F>),
     Single(#[pin] Once<Ready<Result<DataChunk, SqlxError>>>),
 }
 
@@ -314,6 +314,68 @@ where
             ChunkStreamProj::Multi(s) => s.poll_next(cx),
             ChunkStreamProj::Single(s) => s.poll_next(cx),
         }
+    }
+}
+
+/// A stream of chunks for a given result set that was given a handle.
+///
+/// This is used if the [`ResultSet`] has more than 1000 rows, so data will
+/// arrive in chunks of rows which can then be iterated over.
+#[pin_project]
+struct MultiChunkStream2<'a, C, F>
+where
+    C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+{
+    #[pin]
+    future: Option<F>,
+    future_maker: C,
+    handle: u16,
+    total_rows_num: usize,
+    total_rows_pos: usize,
+}
+
+impl<'a, C, F> MultiChunkStream2<'a, C, F>
+where
+    C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+{
+    fn update_future(
+        self: Pin<&mut Self>,
+        ws: &'a mut ExaWebSocket,
+    ) -> Result<Option<F>, SqlxError> {
+        if self.total_rows_pos >= self.total_rows_num {
+            return Ok(None);
+        }
+
+        let this = self.project();
+        let future = (this.future_maker)(ws, *this.handle, *this.total_rows_pos)?;
+        Ok(Some(future))
+    }
+}
+
+impl<'a, C, F> Stream for MultiChunkStream2<'a, C, F>
+where
+    C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
+    F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
+{
+    type Item = Result<DataChunk, SqlxError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.as_mut().project();
+
+        let (chunk, ws) = match this.future.as_pin_mut() {
+            Some(f) => ready!(f.poll(cx)?),
+            None => return Poll::Ready(None),
+        };
+
+        let future = self.as_mut().update_future(ws)?;
+
+        let mut this = self.project();
+        *this.total_rows_pos += chunk.num_rows;
+        this.future.set(future);
+
+        Poll::Ready(Some(Ok(chunk)))
     }
 }
 
@@ -378,6 +440,7 @@ where
         Poll::Ready(Some(Ok(chunk)))
     }
 }
+
 
 /// An iterator over a chunk of data from a result set.
 ///

@@ -16,7 +16,7 @@ use crate::{
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "command")]
-pub(crate) enum ExaCommand<'a> {
+pub enum ExaCommand<'a> {
     Disconnect,
     GetAttributes,
     SetAttributes(SetAttributes<'a>),
@@ -102,63 +102,44 @@ impl<'a> ExaCommand<'a> {
     }
 }
 
-/// Represents a serialized command, ready to be sent to the server.
-// We use this wrapper so that we can serialize the command (which would happen anyway)
-// and get rid of lifetimes and borrow checker conflicts sooner.
-//
-// The wrapper ensures that the only ways of creating a command
-// is through the implemented conversions.
-#[derive(Debug)]
-pub struct Command(String);
-
-impl Command {
-    pub(crate) fn into_inner(self) -> String {
-        self.0
-    }
-}
-
-impl<'a> TryFrom<ExaCommand<'a>> for Command {
+impl<'a> TryFrom<ExaCommand<'a>> for String {
     type Error = SqlxError;
 
     fn try_from(value: ExaCommand<'a>) -> Result<Self, Self::Error> {
-        serde_json::to_string(&value)
-            .map_err(|e| SqlxError::Protocol(e.to_string()))
-            .map(Self)
+        serde_json::to_string(&value).map_err(|e| SqlxError::Protocol(e.to_string()))
     }
 }
 
-impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for Command {
+impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for String {
     type Error = SqlxError;
 
     fn try_from(value: &'a ExaConnectOptionsRef<'a>) -> Result<Self, Self::Error> {
-        serde_json::to_string(value)
-            .map_err(|e| SqlxError::Protocol(e.to_string()))
-            .map(Self)
+        serde_json::to_string(value).map_err(|e| SqlxError::Protocol(e.to_string()))
     }
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SetAttributes<'a> {
+pub struct SetAttributes<'a> {
     attributes: &'a ExaAttributes,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LoginInfo {
+pub struct LoginInfo {
     protocol_version: ProtocolVersion,
 }
 
 #[cfg(feature = "etl")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct GetHosts {
+pub struct GetHosts {
     host_ip: IpAddr,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct Sql<'a> {
+pub struct Sql<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     attributes: Option<&'a ExaAttributes>,
     sql_text: &'a str,
@@ -166,14 +147,14 @@ pub(crate) struct Sql<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BatchSql<'a> {
+pub struct BatchSql<'a> {
     attributes: &'a ExaAttributes,
     sql_texts: &'a [&'a str],
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct Fetch {
+pub struct Fetch {
     result_set_handle: u16,
     start_position: usize,
     num_bytes: usize,
@@ -181,13 +162,13 @@ pub(crate) struct Fetch {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CloseResultSet {
+pub struct CloseResultSet {
     result_set_handles: [u16; 1],
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ExecutePreparedStmt<'a> {
+pub struct ExecutePreparedStmt<'a> {
     attributes: &'a ExaAttributes,
     statement_handle: u16,
     num_columns: usize,
@@ -242,7 +223,7 @@ impl<'a> From<&'a ExaTypeInfo> for ExaParameter<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ClosePreparedStmt {
+pub struct ClosePreparedStmt {
     statement_handle: u16,
 }
 

@@ -15,9 +15,9 @@ pub struct ExaStatement<'q> {
 
 #[derive(Debug, Clone)]
 pub struct ExaStatementMetadata {
-    pub(crate) columns: Arc<[ExaColumn]>,
-    pub(crate) column_names: HashMap<Arc<str>, usize>,
-    pub(crate) parameters: Arc<[ExaTypeInfo]>,
+    pub columns: Arc<[ExaColumn]>,
+    pub column_names: HashMap<Arc<str>, usize>,
+    pub parameters: Arc<[ExaTypeInfo]>,
 }
 
 impl ExaStatementMetadata {

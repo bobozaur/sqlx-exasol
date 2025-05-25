@@ -1,4 +1,4 @@
-mod extend;
+mod transport;
 pub mod socket;
 mod tls;
 
@@ -6,7 +6,7 @@ mod tls;
 use std::net::IpAddr;
 use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
 
-use extend::WebSocketExt;
+use transport::WebSocket;
 use futures_util::{io::BufReader, Future};
 use lru::LruCache;
 use serde::de::{DeserializeOwned, IgnoredAny};
@@ -14,13 +14,13 @@ use socket::ExaSocket;
 use sqlx_core::Error as SqlxError;
 pub use tls::WithMaybeTlsExaSocket;
 
-use self::extend::PlainWebSocket;
+use self::transport::PlainWebSocket;
 use super::stream::QueryResultStream;
 #[cfg(feature = "etl")]
 use crate::responses::Hosts;
 use crate::{
-    command::{Command, ExaCommand},
-    error::{ExaProtocolError, ExaResultExt},
+    command::ExaCommand,
+    error::{ExaProtocolError, ToSqlxError},
     options::ExaConnectOptionsRef,
     responses::{
         DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, QueryResult, Results,
@@ -32,7 +32,7 @@ use crate::{
 /// interaction with the database.
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub ws: WebSocketExt,
+    pub ws: WebSocket,
     pub attributes: ExaAttributes,
     pub pending_rollback: bool,
 }
@@ -41,7 +41,7 @@ impl ExaWebSocket {
     const WS_SCHEME: &'static str = "ws";
     const WSS_SCHEME: &'static str = "wss";
 
-    pub(crate) async fn new(
+    pub async fn new(
         host: &str,
         port: u16,
         socket: ExaSocket,
@@ -58,7 +58,7 @@ impl ExaWebSocket {
 
         let (ws, _) = async_tungstenite::client_async(host, BufReader::new(socket))
             .await
-            .to_sqlx_err()?;
+            .map_err(ToSqlxError::to_sqlx_err)?;
 
         let attributes = ExaAttributes::new(
             options.compression,
@@ -70,7 +70,7 @@ impl ExaWebSocket {
         // Login is always uncompressed
         let mut plain_ws = PlainWebSocket(ws);
         let session_info = plain_ws.login(options).await?;
-        let ws = WebSocketExt::new(plain_ws.0, attributes.compression_enabled());
+        let ws = WebSocket::new(plain_ws.0, attributes.compression_enabled());
 
         let mut this = Self {
             ws,
@@ -83,10 +83,10 @@ impl ExaWebSocket {
         Ok((this, session_info))
     }
 
-    /// Executes a [`Command`] and returns a [`QueryResultStream`].
+    /// Executes a command and returns a [`QueryResultStream`].
     pub async fn get_result_stream<'a, C, F>(
         &'a mut self,
-        cmd: Command,
+        cmd: String,
         rs_handle: &mut Option<u16>,
         future_maker: C,
     ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
@@ -105,8 +105,8 @@ impl ExaWebSocket {
         QueryResultStream::new(self, query_result, future_maker)
     }
 
-    pub async fn get_query_result(&mut self, cmd: Command) -> Result<QueryResult, SqlxError> {
-        self.send_and_recv::<Results>(cmd).await.map(From::from)
+    pub async fn get_query_result(&mut self, cmd: String) -> Result<QueryResult, SqlxError> {
+        self.transfer::<Results>(cmd).await.map(From::from)
     }
 
     pub async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
@@ -115,12 +115,12 @@ impl ExaWebSocket {
         Ok(())
     }
 
-    pub async fn create_prepared(&mut self, cmd: Command) -> Result<PreparedStatement, SqlxError> {
-        self.send_and_recv(cmd).await
+    pub async fn create_prepared(&mut self, cmd: String) -> Result<PreparedStatement, SqlxError> {
+        self.transfer(cmd).await
     }
 
-    pub async fn describe(&mut self, cmd: Command) -> Result<DescribeStatement, SqlxError> {
-        self.send_and_recv(cmd).await
+    pub async fn describe(&mut self, cmd: String) -> Result<DescribeStatement, SqlxError> {
+        self.transfer(cmd).await
     }
 
     pub async fn close_prepared(&mut self, handle: u16) -> Result<(), SqlxError> {
@@ -128,8 +128,8 @@ impl ExaWebSocket {
         self.send_cmd_ignore_response(cmd).await
     }
 
-    pub async fn fetch_chunk(&mut self, cmd: Command) -> Result<DataChunk, SqlxError> {
-        self.send_and_recv(cmd).await
+    pub async fn fetch_chunk(&mut self, cmd: String) -> Result<DataChunk, SqlxError> {
+        self.transfer(cmd).await
     }
 
     pub async fn set_attributes(&mut self) -> Result<(), SqlxError> {
@@ -141,7 +141,7 @@ impl ExaWebSocket {
     pub async fn get_hosts(&mut self) -> Result<Vec<IpAddr>, SqlxError> {
         let host_ip = self.socket_addr().ip();
         let cmd = ExaCommand::new_get_hosts(host_ip).try_into()?;
-        self.send_and_recv::<Hosts>(cmd).await.map(From::from)
+        self.transfer::<Hosts>(cmd).await.map(From::from)
     }
 
     pub async fn get_attributes(&mut self) -> Result<(), SqlxError> {
@@ -256,15 +256,15 @@ impl ExaWebSocket {
 
     /// Utility method for when the `response_data` field of the [`Response`] is not of any
     /// interest. Note that attributes will still get updated.
-    async fn send_cmd_ignore_response(&mut self, cmd: Command) -> Result<(), SqlxError> {
-        self.send_and_recv::<Option<IgnoredAny>>(cmd).await?;
+    async fn send_cmd_ignore_response(&mut self, cmd: String) -> Result<(), SqlxError> {
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
         Ok(())
     }
 
-    /// Sends a [`Command`] to the database and returns the `response_data` field of the
+    /// Sends a command to the database and returns the `response_data` field of the
     /// [`Response`]. We will also await on the response from a previously started command, if
     /// needed.
-    async fn send_and_recv<T>(&mut self, cmd: Command) -> Result<T, SqlxError>
+    async fn transfer<T>(&mut self, cmd: String) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
     {
@@ -272,8 +272,8 @@ impl ExaWebSocket {
         self.recv().await
     }
 
-    /// Sends a [`Command`] to the database, also ensuring a rollback is issued if pending.
-    pub(crate) async fn send(&mut self, cmd: Command) -> Result<(), SqlxError> {
+    /// Sends a command to the database, also ensuring a rollback is issued if pending.
+    pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
         // If a rollback is pending, which really only happens when a transaction is dropped
         // then we need to send that first before the actual command.
         if self.pending_rollback {
@@ -284,17 +284,15 @@ impl ExaWebSocket {
         self.raw_send(cmd).await
     }
 
-    /// Sends a [`Command`] to the database.
-    async fn raw_send(&mut self, cmd: Command) -> Result<(), SqlxError> {
-        let cmd = cmd.into_inner();
+    /// Sends a command to the database.
+    async fn raw_send(&mut self, cmd: String) -> Result<(), SqlxError> {
         tracing::debug!("sending command to database: {cmd}");
-
         self.ws.send(cmd).await
     }
 
     /// Receives a database response containing attributes,
     /// processes the attributes and returns the inner data.
-    pub(crate) async fn recv<T>(&mut self) -> Result<T, SqlxError>
+    pub async fn recv<T>(&mut self) -> Result<T, SqlxError>
     where
         T: DeserializeOwned + Debug,
     {

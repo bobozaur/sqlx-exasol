@@ -24,27 +24,27 @@ use url::Url;
 
 use crate::connection::ExaConnection;
 
-pub(crate) const URL_SCHEME: &str = "exa";
+pub const URL_SCHEME: &str = "exa";
 
-pub(crate) const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
-pub(crate) const DEFAULT_PORT: u16 = 8563;
-pub(crate) const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
+pub const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
+pub const DEFAULT_PORT: u16 = 8563;
+pub const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
     Some(v) => v,
     None => unreachable!(),
 };
 
-pub(crate) const PARAM_ACCESS_TOKEN: &str = "access-token";
-pub(crate) const PARAM_REFRESH_TOKEN: &str = "refresh-token";
-pub(crate) const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
-pub(crate) const PARAM_SSL_MODE: &str = "ssl-mode";
-pub(crate) const PARAM_SSL_CA: &str = "ssl-ca";
-pub(crate) const PARAM_SSL_CERT: &str = "ssl-cert";
-pub(crate) const PARAM_SSL_KEY: &str = "ssl-key";
-pub(crate) const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
-pub(crate) const PARAM_FETCH_SIZE: &str = "fetch-size";
-pub(crate) const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
-pub(crate) const PARAM_COMPRESSION: &str = "compression";
-pub(crate) const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
+pub const PARAM_ACCESS_TOKEN: &str = "access-token";
+pub const PARAM_REFRESH_TOKEN: &str = "refresh-token";
+pub const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
+pub const PARAM_SSL_MODE: &str = "ssl-mode";
+pub const PARAM_SSL_CA: &str = "ssl-ca";
+pub const PARAM_SSL_CERT: &str = "ssl-cert";
+pub const PARAM_SSL_KEY: &str = "ssl-key";
+pub const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
+pub const PARAM_FETCH_SIZE: &str = "fetch-size";
+pub const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
+pub const PARAM_COMPRESSION: &str = "compression";
+pub const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
 /// Options for connecting to the Exasol database.
 ///
@@ -230,15 +230,15 @@ impl ConnectOptions for ExaConnectOptions {
 // stored as such.
 #[derive(Debug, Clone, Serialize)]
 #[serde(into = "SerializableConOpts<'_>")]
-pub(crate) struct ExaConnectOptionsRef<'a> {
-    pub(crate) login: LoginRef<'a>,
-    pub(crate) protocol_version: ProtocolVersion,
-    pub(crate) schema: Option<&'a str>,
-    pub(crate) fetch_size: usize,
-    pub(crate) query_timeout: u64,
-    pub(crate) compression: bool,
-    pub(crate) feedback_interval: u8,
-    pub(crate) statement_cache_capacity: NonZeroUsize,
+pub struct ExaConnectOptionsRef<'a> {
+    pub login: LoginRef<'a>,
+    pub protocol_version: ProtocolVersion,
+    pub schema: Option<&'a str>,
+    pub fetch_size: usize,
+    pub query_timeout: u64,
+    pub compression: bool,
+    pub feedback_interval: u8,
+    pub statement_cache_capacity: NonZeroUsize,
 }
 
 impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
@@ -260,10 +260,10 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
 #[derive(Debug, Clone, Copy)]
 #[allow(clippy::struct_field_names)]
 pub struct ExaTlsOptionsRef<'a> {
-    pub(crate) ssl_mode: ExaSslMode,
-    pub(crate) ssl_ca: Option<&'a CertificateInput>,
-    pub(crate) ssl_client_cert: Option<&'a CertificateInput>,
-    pub(crate) ssl_client_key: Option<&'a CertificateInput>,
+    pub ssl_mode: ExaSslMode,
+    pub ssl_ca: Option<&'a CertificateInput>,
+    pub ssl_client_cert: Option<&'a CertificateInput>,
+    pub ssl_client_key: Option<&'a CertificateInput>,
 }
 
 impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {

@@ -79,10 +79,6 @@ impl ExaBuffer {
     }
 
     /// Outputs the numbers of parameter sets in the buffer.
-    ///
-    /// # Errors
-    ///
-    /// Will throw an error if a mismatch was recorded.
     pub(crate) fn num_param_sets(&self) -> usize {
         self.num_param_sets.unwrap_or_default()
     }

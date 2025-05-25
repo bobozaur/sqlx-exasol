@@ -5,9 +5,9 @@ use serde::de::{DeserializeOwned, IgnoredAny};
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    command::{Command, ExaCommand},
+    command::ExaCommand,
     connection::websocket::socket::ExaSocket,
-    error::{ExaProtocolError, ExaResultExt},
+    error::{ExaProtocolError, ToSqlxError},
     options::{CredentialsRef, ExaConnectOptionsRef, LoginRef},
     responses::{PublicKey, Response, SessionInfo},
     ProtocolVersion,
@@ -22,7 +22,7 @@ impl PlainWebSocket {
     /// finishing the login by sending the connection options.
     ///
     /// It is ALWAYS uncompressed.
-    pub(crate) async fn login(
+    pub async fn login(
         &mut self,
         mut opts: ExaConnectOptionsRef<'_>,
     ) -> Result<SessionInfo, SqlxError> {
@@ -48,8 +48,8 @@ impl PlainWebSocket {
 
     /// Starts the login flow using a token.
     async fn login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), SqlxError> {
-        let cmd: Command = ExaCommand::new_login_token(protocol_version).try_into()?;
-        self.send(cmd.into_inner()).await?;
+        let cmd = ExaCommand::new_login_token(protocol_version).try_into()?;
+        self.send(cmd).await?;
         self.recv_data::<Option<IgnoredAny>>().await?;
         Ok(())
     }
@@ -58,19 +58,22 @@ impl PlainWebSocket {
         &mut self,
         protocol_version: ProtocolVersion,
     ) -> Result<RsaPublicKey, SqlxError> {
-        let cmd: Command = ExaCommand::new_login(protocol_version).try_into()?;
-        self.send(cmd.into_inner()).await?;
+        let cmd = ExaCommand::new_login(protocol_version).try_into()?;
+        self.send(cmd).await?;
         self.recv_data::<PublicKey>().await.map(From::from)
     }
 
-    async fn get_session_info(&mut self, cmd: Command) -> Result<SessionInfo, SqlxError> {
-        self.send(cmd.into_inner()).await?;
+    async fn get_session_info(&mut self, cmd: String) -> Result<SessionInfo, SqlxError> {
+        self.send(cmd).await?;
         self.recv_data().await
     }
 
     /// Sends an uncompressed command.
     pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
-        self.0.send(Message::Text(cmd.into())).await.to_sqlx_err()
+        self.0
+            .send(Message::Text(cmd.into()))
+            .await
+            .map_err(ToSqlxError::to_sqlx_err)
     }
 
     /// Receives an uncompressed [`Response<T>`].
@@ -79,11 +82,11 @@ impl PlainWebSocket {
         T: DeserializeOwned,
     {
         while let Some(response) = self.0.next().await {
-            let msg = response.to_sqlx_err()?;
+            let msg = response.map_err(ToSqlxError::to_sqlx_err)?;
 
             return match msg {
-                Message::Text(s) => serde_json::from_str(&s).to_sqlx_err(),
-                Message::Binary(v) => serde_json::from_slice(&v).to_sqlx_err(),
+                Message::Text(s) => serde_json::from_str(&s).map_err(ToSqlxError::to_sqlx_err),
+                Message::Binary(v) => serde_json::from_slice(&v).map_err(ToSqlxError::to_sqlx_err),
                 Message::Close(c) => {
                     self.close().await.ok();
                     Err(ExaProtocolError::from(c))?
@@ -96,7 +99,7 @@ impl PlainWebSocket {
     }
 
     pub async fn close(&mut self) -> Result<(), SqlxError> {
-        self.0.close(None).await.to_sqlx_err()?;
+        self.0.close(None).await.map_err(ToSqlxError::to_sqlx_err)?;
         Ok(())
     }
 

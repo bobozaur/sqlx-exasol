@@ -41,18 +41,13 @@ impl From<ExaProtocolError> for SqlxError {
 }
 
 /// Helper trait used for converting errors from various underlying libraries to `SQLx`.
-pub(crate) trait ExaResultExt<T> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError>;
+pub trait ToSqlxError {
+    fn to_sqlx_err(self) -> SqlxError;
 }
 
-impl<T> ExaResultExt<T> for Result<T, WsError> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        let e = match self {
-            Ok(v) => return Ok(v),
-            Err(e) => e,
-        };
-
-        let e = match e {
+impl ToSqlxError for WsError {
+    fn to_sqlx_err(self) -> SqlxError {
+        match self {
             WsError::ConnectionClosed => SqlxError::Protocol(WsError::ConnectionClosed.to_string()),
             WsError::AlreadyClosed => SqlxError::Protocol(WsError::AlreadyClosed.to_string()),
             WsError::Io(e) => SqlxError::Io(e),
@@ -65,20 +60,18 @@ impl<T> ExaResultExt<T> for Result<T, WsError> {
             WsError::Http(r) => SqlxError::Protocol(format!("HTTP error: {}", r.status())),
             WsError::HttpFormat(e) => SqlxError::Protocol(e.to_string()),
             WsError::AttackAttempt => SqlxError::Tls(WsError::AttackAttempt.into()),
-        };
-
-        Err(e)
+        }
     }
 }
 
-impl<T> ExaResultExt<T> for Result<T, RsaError> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Protocol(e.to_string()))
+impl ToSqlxError for RsaError {
+    fn to_sqlx_err(self) -> SqlxError {
+        SqlxError::Protocol(self.to_string())
     }
 }
 
-impl<T> ExaResultExt<T> for Result<T, JsonError> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Protocol(e.to_string()))
+impl ToSqlxError for JsonError {
+    fn to_sqlx_err(self) -> SqlxError {
+        SqlxError::Protocol(self.to_string())
     }
 }

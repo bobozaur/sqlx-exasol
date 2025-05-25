@@ -1,12 +1,12 @@
 use async_compression::futures::{bufread::ZlibDecoder, write::ZlibEncoder};
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
-use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt, StreamExt};
+use futures_util::{io::BufReader, AsyncReadExt, AsyncWriteExt, SinkExt, StreamExt, TryFutureExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
     connection::websocket::socket::ExaSocket,
-    error::{ExaProtocolError, ExaResultExt},
+    error::{ExaProtocolError, ToSqlxError},
     responses::Response,
 };
 
@@ -23,10 +23,9 @@ impl CompressedWebSocket {
         enc.write_all(byte_cmd).await?;
         enc.close().await?;
 
-        self.0
-            .send(Message::Binary(compressed_cmd.into()))
+        SinkExt::send(&mut self.0, Message::Binary(compressed_cmd.into()))
+            .map_err(ToSqlxError::to_sqlx_err)
             .await
-            .to_sqlx_err()
     }
 
     /// Receives a compressed [`Response<T>`] and decompresses it.
@@ -35,7 +34,7 @@ impl CompressedWebSocket {
         T: DeserializeOwned,
     {
         while let Some(response) = self.0.next().await {
-            let bytes = match response.to_sqlx_err()? {
+            let bytes = match response.map_err(ToSqlxError::to_sqlx_err)? {
                 Message::Text(s) => s.into(),
                 Message::Binary(v) => v,
                 Message::Close(c) => {
@@ -45,21 +44,21 @@ impl CompressedWebSocket {
                 _ => continue,
             };
 
-            // The whole point of compression is to end up with have smaller data
+            // The whole point of compression is to end up with smaller data so
             // we might as well allocate the length we know from the encoded one in advance.
             let mut decoded = Vec::with_capacity(bytes.len());
             ZlibDecoder::new(bytes.as_ref())
                 .read_to_end(&mut decoded)
                 .await?;
 
-            return serde_json::from_slice(&decoded).to_sqlx_err();
+            return serde_json::from_slice(&decoded).map_err(ToSqlxError::to_sqlx_err);
         }
 
         Err(ExaProtocolError::MissingMessage)?
     }
 
     pub async fn close(&mut self) -> Result<(), SqlxError> {
-        self.0.close(None).await.to_sqlx_err()?;
+        self.0.close(None).await.map_err(ToSqlxError::to_sqlx_err)?;
         Ok(())
     }
 }

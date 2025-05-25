@@ -9,9 +9,9 @@ use crate::{column::ExaColumn, ExaTypeInfo};
 #[derive(Clone, Debug, Deserialize)]
 #[serde(from = "PreparedStatementDe")]
 pub struct PreparedStatement {
-    pub(crate) statement_handle: u16,
-    pub(crate) columns: Arc<[ExaColumn]>,
-    pub(crate) parameters: Arc<[ExaTypeInfo]>,
+    pub statement_handle: u16,
+    pub columns: Arc<[ExaColumn]>,
+    pub parameters: Arc<[ExaTypeInfo]>,
 }
 
 #[derive(Debug, Deserialize)]

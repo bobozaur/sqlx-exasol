@@ -37,7 +37,7 @@ impl RustlsSocketSpawner {
                 ServerConfig::builder()
                     .with_no_client_auth()
                     .with_single_cert(vec![tls_cert], key)
-                    .to_sqlx_err()?,
+                    .map_err(ToSqlxError::to_sqlx_err)?,
             )
         };
 
@@ -167,8 +167,8 @@ where
     }
 }
 
-impl<T> ExaResultExt<T> for Result<T, rustls::Error> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
+impl ToSqlxError for rustls::Error {
+    fn to_sqlx_err(self) -> SqlxError {
+        SqlxError::Tls(self.into())
     }
 }

@@ -18,7 +18,7 @@ use sqlx_core::{
 use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
-    error::ExaResultExt,
+    error::ToSqlxError,
     etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
 };
 
@@ -32,8 +32,9 @@ impl NativeTlsSocketSpawner {
         let tls_cert = cert.pem();
         let key = key_pair.serialize_pem();
 
-        let ident = Identity::from_pkcs8(tls_cert.as_bytes(), key.as_bytes()).to_sqlx_err()?;
-        let acceptor = TlsAcceptor::new(ident).to_sqlx_err()?;
+        let ident = Identity::from_pkcs8(tls_cert.as_bytes(), key.as_bytes())
+            .map_err(ToSqlxError::to_sqlx_err)?;
+        let acceptor = TlsAcceptor::new(ident).map_err(ToSqlxError::to_sqlx_err)?;
         let acceptor = Arc::new(acceptor);
 
         Ok(Self(acceptor))
@@ -128,14 +129,14 @@ where
     }
 }
 
-impl<T> ExaResultExt<T> for Result<T, native_tls::Error> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
+impl ToSqlxError for native_tls::Error {
+    fn to_sqlx_err(self) -> SqlxError {
+        SqlxError::Tls(self.into())
     }
 }
 
-impl<T, S> ExaResultExt<T> for Result<T, HandshakeError<S>> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|_| SqlxError::Tls("native_tls handshake error".into()))
+impl<S> ToSqlxError for HandshakeError<S> {
+    fn to_sqlx_err(self) -> SqlxError {
+        SqlxError::Tls("native_tls handshake error".into())
     }
 }
