@@ -90,6 +90,7 @@ use arrayvec::ArrayString;
 pub use export::{ExaExport, ExportBuilder, ExportSource};
 use futures_core::future::BoxFuture;
 use futures_io::{AsyncRead, AsyncWrite};
+use futures_util::SinkExt;
 use hyper::rt;
 pub use import::{ExaImport, ImportBuilder, Trim};
 pub use row_separator::RowSeparator;

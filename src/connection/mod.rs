@@ -7,7 +7,7 @@ mod websocket;
 
 use std::{iter, net::SocketAddr};
 
-use futures_util::Future;
+use futures_util::{Future, SinkExt};
 use lru::LruCache;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
@@ -166,10 +166,7 @@ impl ExaConnection {
         // and the ones expected by the database.
         for (expected, provided) in iter::zip(prepared.parameters.as_ref(), &args.types) {
             if !expected.compatible(provided) {
-                Err(ExaProtocolError::DatatypeMismatch(
-                    expected.to_string(),
-                    provided.to_string(),
-                ))?;
+                Err(ExaProtocolError::DatatypeMismatch(*expected, *provided))?;
             }
         }
 
@@ -241,11 +238,11 @@ impl Connection for ExaConnection {
     fn shrink_buffers(&mut self) {}
 
     fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(self.ws.rollback())
+        Box::pin(std::future::ready(Ok(())))
     }
 
     fn should_flush(&self) -> bool {
-        self.ws.pending_rollback
+        false
     }
 
     fn cached_statements_size(&self) -> usize
@@ -477,13 +474,15 @@ mod tests {
                     .await?;
             }
 
-            assert!(conn.ws.pending_rollback);
+            // assert!(conn.ws.pending_rollback);
+            todo!();
         }
 
         // Should be plenty of time to execute the flush
         // after the connection is dropped.
         tokio::time::sleep(Duration::from_secs(5)).await;
-        assert!(!pool.acquire().await?.ws.pending_rollback);
+        // assert!(!pool.acquire().await?.ws.pending_rollback);
+        todo!();
 
         Ok(())
     }

@@ -1,25 +1,26 @@
-mod transport;
 pub mod socket;
 mod tls;
+mod transport;
 
 #[cfg(feature = "etl")]
 use std::net::IpAddr;
 use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
 
-use transport::WebSocket;
-use futures_util::{io::BufReader, Future};
+use bytes::Bytes;
+use futures_core::Stream;
+use futures_util::{io::BufReader, Future, Sink, SinkExt, StreamExt};
 use lru::LruCache;
 use serde::de::{DeserializeOwned, IgnoredAny};
 use socket::ExaSocket;
 use sqlx_core::Error as SqlxError;
 pub use tls::WithMaybeTlsExaSocket;
+use transport::MaybeCompressedWebSocket;
 
-use self::transport::PlainWebSocket;
-use super::stream::QueryResultStream;
 #[cfg(feature = "etl")]
 use crate::responses::Hosts;
 use crate::{
     command::ExaCommand,
+    connection::stream::QueryResultStream,
     error::{ExaProtocolError, ToSqlxError},
     options::ExaConnectOptionsRef,
     responses::{
@@ -32,9 +33,8 @@ use crate::{
 /// interaction with the database.
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub ws: WebSocket,
+    pub ws: MaybeCompressedWebSocket,
     pub attributes: ExaAttributes,
-    pub pending_rollback: bool,
 }
 
 impl ExaWebSocket {
@@ -67,17 +67,10 @@ impl ExaWebSocket {
             options.statement_cache_capacity,
         );
 
-        // Login is always uncompressed
-        let mut plain_ws = PlainWebSocket(ws);
-        let session_info = plain_ws.login(options).await?;
-        let ws = WebSocket::new(plain_ws.0, attributes.compression_enabled());
+        let (ws, session_info) =
+            MaybeCompressedWebSocket::new(ws, attributes.compression_enabled(), options).await?;
 
-        let mut this = Self {
-            ws,
-            attributes,
-            pending_rollback: false,
-        };
-
+        let mut this = Self { ws, attributes };
         this.get_attributes().await?;
 
         Ok((this, session_info))
@@ -111,7 +104,7 @@ impl ExaWebSocket {
 
     pub async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_close_result(handle).try_into()?;
-        self.send_cmd_ignore_response(cmd).await?;
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
         Ok(())
     }
 
@@ -125,7 +118,8 @@ impl ExaWebSocket {
 
     pub async fn close_prepared(&mut self, handle: u16) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_close_prepared(handle).try_into()?;
-        self.send_cmd_ignore_response(cmd).await
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
     }
 
     pub async fn fetch_chunk(&mut self, cmd: String) -> Result<DataChunk, SqlxError> {
@@ -134,7 +128,8 @@ impl ExaWebSocket {
 
     pub async fn set_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_set_attributes(&self.attributes).try_into()?;
-        self.send_cmd_ignore_response(cmd).await
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
     }
 
     #[cfg(feature = "etl")]
@@ -146,7 +141,8 @@ impl ExaWebSocket {
 
     pub async fn get_attributes(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::GetAttributes.try_into()?;
-        self.send_cmd_ignore_response(cmd).await
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
     }
 
     pub fn begin(&mut self) -> Result<(), SqlxError> {
@@ -164,31 +160,26 @@ impl ExaWebSocket {
     }
 
     pub async fn commit(&mut self) -> Result<(), SqlxError> {
-        // It's fine to set this before executing the command
-        // since we want to commit anyway.
         self.attributes.set_autocommit(true);
+        self.attributes.set_open_transaction(false);
 
         // Just changing `autocommit` attribute implies a COMMIT,
         // but we would still have to send a command to the server
         // to update it, so we might as well be explicit.
         let cmd = ExaCommand::new_execute("COMMIT;", &self.attributes).try_into()?;
-        self.send_cmd_ignore_response(cmd).await?;
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
 
-        self.attributes.set_open_transaction(false);
         Ok(())
     }
 
     /// Sends a rollback to the database and awaits the response.
     pub async fn rollback(&mut self) -> Result<(), SqlxError> {
-        let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
-        self.raw_send(cmd).await?;
-        self.recv::<Option<IgnoredAny>>().await?;
-
-        // We explicitly set the attribute after
-        // we know the rollback was successful.
         self.attributes.set_autocommit(true);
         self.attributes.set_open_transaction(false);
-        self.pending_rollback = false;
+
+        let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
+
         Ok(())
     }
 
@@ -198,11 +189,8 @@ impl ExaWebSocket {
 
     pub async fn disconnect(&mut self) -> Result<(), SqlxError> {
         let cmd = ExaCommand::Disconnect.try_into()?;
-        self.send_cmd_ignore_response(cmd).await
-    }
-
-    pub async fn close(&mut self) -> Result<(), SqlxError> {
-        self.ws.close().await
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
     }
 
     /// Returns the metadata related to a [`PreparedStatement`].
@@ -245,20 +233,30 @@ impl ExaWebSocket {
     /// one by one.
     pub async fn execute_batch(&mut self, sql_texts: &[&str]) -> Result<(), SqlxError> {
         let cmd = ExaCommand::new_execute_batch(sql_texts, &self.attributes).try_into()?;
+        self.transfer::<Option<IgnoredAny>>(cmd).await?;
+        Ok(())
+    }
 
-        // Run batch SQL command
-        self.send_cmd_ignore_response(cmd).await
+    /// Receives a database response containing attributes,
+    /// processes the attributes and returns the inner data.
+    pub async fn recv<T>(&mut self) -> Result<T, SqlxError>
+    where
+        T: DeserializeOwned + Debug,
+    {
+        let (response_data, attributes) = self.ws.recv().await?;
+
+        if let Some(attributes) = attributes {
+            tracing::debug!("updating connection attributes using:\n{attributes:#?}");
+            self.attributes.update(attributes);
+        }
+
+        tracing::trace!("database response:\n{response_data:#?}");
+
+        Ok(response_data)
     }
 
     pub fn socket_addr(&self) -> SocketAddr {
         self.ws.socket_addr()
-    }
-
-    /// Utility method for when the `response_data` field of the [`Response`] is not of any
-    /// interest. Note that attributes will still get updated.
-    async fn send_cmd_ignore_response(&mut self, cmd: String) -> Result<(), SqlxError> {
-        self.transfer::<Option<IgnoredAny>>(cmd).await?;
-        Ok(())
     }
 
     /// Sends a command to the database and returns the `response_data` field of the
@@ -271,40 +269,44 @@ impl ExaWebSocket {
         self.send(cmd).await?;
         self.recv().await
     }
+}
 
-    /// Sends a command to the database, also ensuring a rollback is issued if pending.
-    pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
-        // If a rollback is pending, which really only happens when a transaction is dropped
-        // then we need to send that first before the actual command.
-        if self.pending_rollback {
-            self.rollback().await?;
-            self.pending_rollback = false;
-        }
+impl Stream for ExaWebSocket {
+    type Item = Result<Bytes, SqlxError>;
 
-        self.raw_send(cmd).await
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.get_mut().ws.poll_next_unpin(cx)
+    }
+}
+
+impl Sink<String> for ExaWebSocket {
+    type Error = SqlxError;
+
+    fn poll_ready(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.get_mut().poll_ready_unpin(cx)
     }
 
-    /// Sends a command to the database.
-    async fn raw_send(&mut self, cmd: String) -> Result<(), SqlxError> {
-        tracing::debug!("sending command to database: {cmd}");
-        self.ws.send(cmd).await
+    fn start_send(self: std::pin::Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
+        self.get_mut().start_send_unpin(item)
     }
 
-    /// Receives a database response containing attributes,
-    /// processes the attributes and returns the inner data.
-    pub async fn recv<T>(&mut self) -> Result<T, SqlxError>
-    where
-        T: DeserializeOwned + Debug,
-    {
-        let (response_data, attributes) = Result::from(self.ws.recv().await?)?;
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.get_mut().poll_flush_unpin(cx)
+    }
 
-        if let Some(attributes) = attributes {
-            tracing::debug!("updating connection attributes using:\n{attributes:#?}");
-            self.attributes.update(attributes);
-        }
-
-        tracing::trace!("database response:\n{response_data:#?}");
-
-        Ok(response_data)
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.get_mut().poll_close_unpin(cx)
     }
 }

@@ -9,7 +9,7 @@ use sqlx_core::type_info::TypeInfo;
 
 /// Information about an Exasol data type.
 // Note that the [`DataTypeName`] is automatically constructed from the provided [`ExaDataType`].
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(from = "ExaDataType")]
 pub struct ExaTypeInfo {
     name: DataTypeName,
@@ -57,7 +57,7 @@ impl Display for ExaTypeInfo {
 
 impl TypeInfo for ExaTypeInfo {
     fn is_null(&self) -> bool {
-        false
+        matches!(self.datatype, ExaDataType::Null)
     }
 
     /// We're going against `sqlx` here, but knowing the full data type definition
@@ -214,7 +214,7 @@ impl AsRef<str> for ExaDataType {
 ///
 /// *IMPORTANT*: Creating absurd [`ExaDataType`] can result in panics
 /// if the name exceeds the inlined strings max capacity. Valid values always fit.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum DataTypeName {
     Static(&'static str),
     Inline(ArrayString<30>),

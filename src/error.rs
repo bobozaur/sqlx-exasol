@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use async_tungstenite::tungstenite::{protocol::CloseFrame, Error as WsError};
 use rsa::errors::Error as RsaError;
@@ -6,31 +6,40 @@ use serde_json::error::Error as JsonError;
 use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
+use crate::ExaTypeInfo;
+
 /// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]
 pub enum ExaProtocolError {
     #[error("expected {0} parameter sets; found a mismatch of length {1}")]
     ParameterLengthMismatch(usize, usize),
-    #[error("invalid response from database, expecting {0}")]
-    UnexpectedResponse(&'static str),
     #[error("transaction already open")]
     TransactionAlreadyOpen,
-    #[error("no response data received")]
-    MissingResponseData,
-    #[error("no message received")]
-    MissingMessage,
+    #[error("not ready to send data")]
+    SendNotReady,
     #[error("type mismatch: expected SQL type `{0}` but was provided `{1}`")]
-    DatatypeMismatch(String, String),
-    #[error("server closed connection due to: {0}")]
-    WebsocketClosed(String),
+    DatatypeMismatch(ExaTypeInfo, ExaTypeInfo),
+    #[error("server closed connection; info: {0}")]
+    WebSocketClosed(CloseError),
     #[error("feature 'compression' must be enabled to use compression")]
     CompressionDisabled,
 }
 
+#[derive(Debug)]
+struct CloseError(Option<CloseFrame>);
+
+impl Display for CloseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Some(c) => write!(f, "{c}"),
+            None => write!(f, "unknown reason"),
+        }
+    }
+}
+
 impl From<Option<CloseFrame>> for ExaProtocolError {
     fn from(value: Option<CloseFrame>) -> Self {
-        let msg = value.map_or("unknown reason".to_owned(), |c| c.to_string());
-        Self::WebsocketClosed(msg)
+        Self::WebSocketClosed(CloseError(value))
     }
 }
 

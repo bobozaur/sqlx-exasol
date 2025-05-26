@@ -2,82 +2,130 @@
 mod compressed;
 mod uncompressed;
 
-use std::net::SocketAddr;
+use std::{
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 #[cfg(feature = "compression")]
 use compressed::CompressedWebSocket;
-use futures_util::io::BufReader;
+use futures_core::Stream;
+use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use sqlx_core::{bytes::Bytes, Error as SqlxError};
 pub use uncompressed::PlainWebSocket;
 
 use super::socket::ExaSocket;
-use crate::{error::ToSqlxError, responses::Response};
+use crate::{
+    error::ToSqlxError, options::ExaConnectOptionsRef, responses::Attributes, SessionInfo,
+};
 
 /// Websocket extension enum that wraps the plain and compressed variants
 /// of the websocket used for a connection.
 #[derive(Debug)]
-pub enum WebSocket {
+pub enum MaybeCompressedWebSocket {
     Plain(PlainWebSocket),
     #[cfg(feature = "compression")]
     Compressed(CompressedWebSocket),
 }
 
-impl WebSocket {
-    pub fn new(ws: WebSocketStream<BufReader<ExaSocket>>, use_compression: bool) -> Self {
-        match use_compression {
+impl Stream for MaybeCompressedWebSocket {
+    type Item = Result<Bytes, SqlxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.get_mut() {
+            MaybeCompressedWebSocket::Plain(ws) => ws.poll_next_unpin(cx),
             #[cfg(feature = "compression")]
-            true => WebSocket::Compressed(CompressedWebSocket(ws)),
-            _ => WebSocket::Plain(PlainWebSocket(ws)),
+            MaybeCompressedWebSocket::Compressed(ws) => ws.poll_next_unpin(cx),
+        }
+    }
+}
+
+impl Sink<String> for MaybeCompressedWebSocket {
+    type Error = SqlxError;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.get_mut() {
+            MaybeCompressedWebSocket::Plain(ws) => ws.poll_ready_unpin(cx),
+            #[cfg(feature = "compression")]
+            MaybeCompressedWebSocket::Compressed(ws) => ws.poll_ready_unpin(cx),
         }
     }
 
-    pub async fn send(&mut self, cmd: String) -> Result<(), SqlxError> {
-        match self {
-            WebSocket::Plain(ws) => ws.send(cmd).await,
+    fn start_send(self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
+        match self.get_mut() {
+            MaybeCompressedWebSocket::Plain(ws) => ws.start_send_unpin(item),
             #[cfg(feature = "compression")]
-            WebSocket::Compressed(ws) => ws.send(cmd).await,
+            MaybeCompressedWebSocket::Compressed(ws) => ws.start_send_unpin(item),
         }
     }
 
-    pub async fn recv<T>(&mut self) -> Result<Response<T>, SqlxError>
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.get_mut() {
+            MaybeCompressedWebSocket::Plain(ws) => ws.poll_flush_unpin(cx),
+            #[cfg(feature = "compression")]
+            MaybeCompressedWebSocket::Compressed(ws) => ws.poll_flush_unpin(cx),
+        }
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.get_mut() {
+            MaybeCompressedWebSocket::Plain(ws) => ws.poll_close_unpin(cx),
+            #[cfg(feature = "compression")]
+            MaybeCompressedWebSocket::Compressed(ws) => ws.poll_close_unpin(cx),
+        }
+    }
+}
+
+impl MaybeCompressedWebSocket {
+    pub async fn new(
+        ws: WebSocketStream<BufReader<ExaSocket>>,
+        use_compression: bool,
+        opts: ExaConnectOptionsRef<'_>,
+    ) -> Result<(Self, SessionInfo), SqlxError> {
+        // Login in ALWAYS uncompressed!
+        let (plain, session_info) = PlainWebSocket::new(ws, opts).await?;
+
+        let ws = match use_compression {
+            #[cfg(feature = "compression")]
+            true => MaybeCompressedWebSocket::Compressed(plain.into()),
+            _ => MaybeCompressedWebSocket::Plain(plain),
+        };
+
+        Ok((ws, session_info))
+    }
+
+    pub async fn recv<T>(&mut self) -> Result<(T, Option<Attributes>), SqlxError>
     where
         T: DeserializeOwned,
     {
         match self {
-            WebSocket::Plain(ws) => ws.recv().await,
+            MaybeCompressedWebSocket::Plain(ws) => ws.recv().await,
             #[cfg(feature = "compression")]
-            WebSocket::Compressed(ws) => ws.recv().await,
-        }
-    }
-
-    pub async fn close(&mut self) -> Result<(), SqlxError> {
-        match self {
-            WebSocket::Plain(ws) => ws.close().await,
-            #[cfg(feature = "compression")]
-            WebSocket::Compressed(ws) => ws.close().await,
-        }
-    }
-
-    pub fn socket_addr(&self) -> SocketAddr {
-        match self {
-            WebSocket::Plain(ws) => ws.0.get_ref().get_ref().sock_addr,
-            #[cfg(feature = "compression")]
-            WebSocket::Compressed(ws) => ws.0.get_ref().get_ref().sock_addr,
+            MaybeCompressedWebSocket::Compressed(ws) => ws.recv().await,
         }
     }
 
     pub async fn ping(&mut self) -> Result<(), SqlxError> {
         let ws = match self {
-            WebSocket::Plain(ws) => &mut ws.0,
+            MaybeCompressedWebSocket::Plain(ws) => &mut ws.0,
             #[cfg(feature = "compression")]
-            WebSocket::Compressed(ws) => &mut ws.0,
+            MaybeCompressedWebSocket::Compressed(ws) => &mut ws.inner,
         };
 
-        ws.send(Message::Ping(Bytes::new()))
+        SinkExt::send(ws, Message::Ping(Bytes::new()))
             .await
             .map_err(ToSqlxError::to_sqlx_err)?;
         Ok(())
+    }
+
+    pub fn socket_addr(&self) -> SocketAddr {
+        match self {
+            MaybeCompressedWebSocket::Plain(ws) => ws.0.get_ref().get_ref().sock_addr,
+            #[cfg(feature = "compression")]
+            MaybeCompressedWebSocket::Compressed(ws) => ws.inner.get_ref().get_ref().sock_addr,
+        }
     }
 }

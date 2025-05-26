@@ -1,5 +1,5 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
-//! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.  
+//! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.
 //!
 //! ## Crate Features flags
 //! * `etl` - enables the usage ETL jobs without TLS encryption.
@@ -47,7 +47,7 @@
 //! - `query-timeout`: The query timeout amount, in seconds. 0 means no timeout
 //! - `compression`: Boolean representing whether use compression
 //! - `feedback-interval`: Interval at which Exasol sends keep-alive Pong frames
-//!  
+//!
 //! [`ExaConnectOptions`] can also be constructed in code through its builder method,
 //! which returns a [`ExaConnectOptionsBuilder`].
 //!
@@ -283,3 +283,7 @@ impl_into_arguments_for_arguments!(ExaArguments);
 impl_acquire!(Exasol, ExaConnection);
 impl_column_index_for_row!(ExaRow);
 impl_column_index_for_statement!(ExaStatement);
+
+// Look into connection/mod.rs tests
+// Look into Connection::should_flush and Connection::flush as well as Transaction::start_rollback ( do tests)
+// Look into the login flow
