@@ -13,7 +13,6 @@ use sqlx_core::{
 use super::stream::ResultStream;
 use crate::{
     command::ExaCommand,
-    connection::websocket::ExaWebSocket,
     database::Exasol,
     responses::DescribeStatement,
     statement::{ExaStatement, ExaStatementMetadata},
@@ -26,7 +25,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
     fn execute<'e, 'q: 'e, E>(
         self,
-        query: E,
+        _query: E,
     ) -> BoxFuture<'e, Result<<Self::Database as Database>::QueryResult, SqlxError>>
     where
         'c: 'e,
@@ -70,16 +69,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         };
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
-
-        let fetcher_closure = move |ws: &'e mut ExaWebSocket, handle: u16, pos: usize| {
-            let fetch_size = ws.attributes.fetch_size();
-            let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
-            let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
-            Ok(future)
-        };
-
-        let future = self.execute_query(sql, arguments, persistent, fetcher_closure);
-
+        let future = self.execute_query(sql, arguments, persistent);
         Box::pin(
             ResultStream::new(future, logger).try_filter_map(|step| async move {
                 Ok(match step {
@@ -112,15 +102,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         };
 
         let logger = QueryLogger::new(sql, self.log_settings.clone());
-
-        let fetcher_closure = move |ws: &'e mut ExaWebSocket, handle: u16, pos: usize| {
-            let fetch_size = ws.attributes.fetch_size();
-            let cmd = ExaCommand::new_fetch(handle, pos, fetch_size).try_into()?;
-            let future = async { ws.fetch_chunk(cmd).await.map(|d| (d, ws)) };
-            Ok(future)
-        };
-
-        let future = self.execute_query(sql, arguments, persistent, fetcher_closure);
+        let future = self.execute_query(sql, arguments, persistent);
         Box::pin(ResultStream::new(future, logger))
     }
 

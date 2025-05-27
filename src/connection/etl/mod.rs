@@ -104,7 +104,7 @@ use self::{
 use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
     command::ExaCommand,
-    responses::{QueryResult, Results},
+    responses::{QueryResult, SingleResult},
     ExaConnection, ExaQueryResult,
 };
 
@@ -120,18 +120,18 @@ type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
 /// of the ETL query, and an array of workers that perform the IO.
 async fn build_etl<'a, 'c, T>(
     job: &'a T,
-    con: &'c mut ExaConnection,
+    conn: &'c mut ExaConnection,
 ) -> Result<(JobFuture<'c>, Vec<T::Worker>), SqlxError>
 where
     T: EtlJob,
     'c: 'a,
 {
-    let ips = con.ws.get_hosts().await?;
-    let port = con.ws.socket_addr().port();
-    let with_tls = con.attributes().encryption_enabled();
+    let ips = conn.ws.get_hosts().await?;
+    let port = conn.ws.socket_addr().port();
+    let with_tls = conn.attributes().encryption_enabled();
     let with_compression = job
         .use_compression()
-        .unwrap_or(con.attributes().compression_enabled());
+        .unwrap_or(conn.attributes().compression_enabled());
 
     // Get the internal Exasol node addresses and the socket spawning futures
     let (addrs, futures): (Vec<_>, Vec<_>) =
@@ -142,8 +142,8 @@ where
 
     // Construct and send query
     let query = job.query(addrs, with_tls, with_compression);
-    let cmd = ExaCommand::new_execute(&query, &con.ws.attributes).try_into()?;
-    con.ws.send(cmd).await?;
+    let cmd = ExaCommand::new_execute(&query, &conn.ws.attributes).try_into()?;
+    conn.ws.send(cmd).await?;
 
     // Create the ETL workers
     let sockets = job.create_workers(futures, with_compression);
@@ -151,7 +151,7 @@ where
     // Query execution driving future to be returned and awaited
     // alongside the worker IO operations
     let future = Box::pin(async move {
-        let query_res: QueryResult = con.ws.recv::<Results>().await?.into();
+        let query_res: QueryResult = conn.ws.recv::<SingleResult>().await?.into();
         match query_res {
             QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),

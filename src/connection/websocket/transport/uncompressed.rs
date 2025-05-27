@@ -16,7 +16,7 @@ use crate::{
     connection::websocket::socket::ExaSocket,
     error::{ExaProtocolError, ToSqlxError},
     options::{CredentialsRef, ExaConnectOptionsRef, LoginRef},
-    responses::{Attributes, PublicKey, Response, SessionInfo},
+    responses::{Attributes, ExaResult, PublicKey, SessionInfo},
     ProtocolVersion,
 };
 
@@ -42,9 +42,7 @@ impl PlainWebSocket {
             return Err(ExaProtocolError::from(None))?;
         };
 
-        let res: Result<Response<_>, _> = serde_json::from_slice(&bytes);
-        let response = res.map_err(ToSqlxError::to_sqlx_err)?;
-        Result::from(response).map_err(From::from)
+        Result::from(ExaResult::try_from(bytes)?).map_err(From::from)
     }
 
     /// The login process consists of sending the desired login command,

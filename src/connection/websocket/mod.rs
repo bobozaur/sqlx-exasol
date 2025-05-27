@@ -1,14 +1,21 @@
+pub mod futures;
 pub mod socket;
 mod tls;
 mod transport;
 
 #[cfg(feature = "etl")]
 use std::net::IpAddr;
-use std::{borrow::Cow, fmt::Debug, net::SocketAddr};
+use std::{
+    borrow::Cow,
+    fmt::Debug,
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use bytes::Bytes;
 use futures_core::Stream;
-use futures_util::{io::BufReader, Future, Sink, SinkExt, StreamExt};
+use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
 use lru::LruCache;
 use serde::de::{DeserializeOwned, IgnoredAny};
 use socket::ExaSocket;
@@ -24,8 +31,8 @@ use crate::{
     error::{ExaProtocolError, ToSqlxError},
     options::ExaConnectOptionsRef,
     responses::{
-        DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, QueryResult, Results,
-        SessionInfo,
+        DataChunk, DescribeStatement, ExaAttributes, PreparedStatement, QueryResult, SessionInfo,
+        SingleResult,
     },
 };
 
@@ -35,6 +42,7 @@ use crate::{
 pub struct ExaWebSocket {
     pub ws: MaybeCompressedWebSocket,
     pub attributes: ExaAttributes,
+    pub last_rs_handle: Option<u16>,
 }
 
 impl ExaWebSocket {
@@ -70,23 +78,22 @@ impl ExaWebSocket {
         let (ws, session_info) =
             MaybeCompressedWebSocket::new(ws, attributes.compression_enabled(), options).await?;
 
-        let mut this = Self { ws, attributes };
+        let mut this = Self {
+            ws,
+            attributes,
+            last_rs_handle: None,
+        };
         this.get_attributes().await?;
 
         Ok((this, session_info))
     }
 
     /// Executes a command and returns a [`QueryResultStream`].
-    pub async fn get_result_stream<'a, C, F>(
+    pub async fn get_result_stream<'a>(
         &'a mut self,
         cmd: String,
         rs_handle: &mut Option<u16>,
-        future_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
-    where
-        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
-    {
+    ) -> Result<QueryResultStream<'a>, SqlxError> {
         // Close the previously opened result set, if any.
         if let Some(handle) = rs_handle.take() {
             self.close_result_set(handle).await?;
@@ -95,11 +102,11 @@ impl ExaWebSocket {
         let query_result = self.get_query_result(cmd).await?;
         *rs_handle = query_result.handle();
 
-        QueryResultStream::new(self, query_result, future_maker)
+        QueryResultStream::new(self, query_result)
     }
 
     pub async fn get_query_result(&mut self, cmd: String) -> Result<QueryResult, SqlxError> {
-        self.transfer::<Results>(cmd).await.map(From::from)
+        self.transfer::<SingleResult>(cmd).await.map(From::from)
     }
 
     pub async fn close_result_set(&mut self, handle: u16) -> Result<(), SqlxError> {
@@ -174,12 +181,14 @@ impl ExaWebSocket {
 
     /// Sends a rollback to the database and awaits the response.
     pub async fn rollback(&mut self) -> Result<(), SqlxError> {
+        let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
+        self.send(cmd).await?;
+        self.recv::<Option<IgnoredAny>>().await?;
+
+        // We explicitly set the attribute after
+        // we know the rollback was successful.
         self.attributes.set_autocommit(true);
         self.attributes.set_open_transaction(false);
-
-        let cmd = ExaCommand::new_execute("ROLLBACK;", &self.attributes).try_into()?;
-        self.transfer::<Option<IgnoredAny>>(cmd).await?;
-
         Ok(())
     }
 
@@ -274,10 +283,7 @@ impl ExaWebSocket {
 impl Stream for ExaWebSocket {
     type Item = Result<Bytes, SqlxError>;
 
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.get_mut().ws.poll_next_unpin(cx)
     }
 }
@@ -285,28 +291,19 @@ impl Stream for ExaWebSocket {
 impl Sink<String> for ExaWebSocket {
     type Error = SqlxError;
 
-    fn poll_ready(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.get_mut().poll_ready_unpin(cx)
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
         self.get_mut().start_send_unpin(item)
     }
 
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.get_mut().poll_flush_unpin(cx)
     }
 
-    fn poll_close(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.get_mut().poll_close_unpin(cx)
     }
 }

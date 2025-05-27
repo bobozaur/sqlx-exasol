@@ -6,17 +6,32 @@ use serde_json::Value;
 use super::{columns::ExaColumns, to_row_major};
 use crate::{column::ExaColumn, error::ExaProtocolError};
 
-/// The `results` field returned by Exasol after executing a query.
-/// We only work with one statement at a time, so we only ever expect a single
-/// result in the array.
+/// The `results` field returned by Exasol after executing queries.
+/// This type is meant to accommodate the circumstance where we're batch
+/// executing SQL queries.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Results {
+pub struct MultiResults {
+    results: Vec<QueryResult>,
+}
+
+impl From<MultiResults> for Vec<QueryResult> {
+    fn from(value: MultiResults) -> Self {
+        value.results
+    }
+}
+
+/// The `results` field returned by Exasol after executing a query.
+/// This type represents a single result originating from a single query, so we only ever expect a
+/// single item in the array.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleResult {
     results: [QueryResult; 1],
 }
 
-impl From<Results> for QueryResult {
-    fn from(value: Results) -> Self {
+impl From<SingleResult> for QueryResult {
+    fn from(value: SingleResult) -> Self {
         value
             .results
             .into_iter()

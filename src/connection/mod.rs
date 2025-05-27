@@ -7,7 +7,7 @@ mod websocket;
 
 use std::{iter, net::SocketAddr};
 
-use futures_util::{Future, SinkExt};
+use futures_util::SinkExt;
 use lru::LruCache;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
@@ -25,14 +25,13 @@ use crate::{
     database::Exasol,
     error::ExaProtocolError,
     options::ExaConnectOptions,
-    responses::{DataChunk, ExaAttributes, PreparedStatement, SessionInfo},
+    responses::{ExaAttributes, PreparedStatement, SessionInfo},
 };
 
 /// A connection to the Exasol database.
 #[derive(Debug)]
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
-    pub(crate) last_rs_handle: Option<u16>,
     session_info: SessionInfo,
     statement_cache: LruCache<String, PreparedStatement>,
     log_settings: LogSettings,
@@ -117,7 +116,6 @@ impl ExaConnection {
         let (ws, session_info) = ws_result?;
         let con = Self {
             ws,
-            last_rs_handle: None,
             statement_cache: LruCache::new(opts.statement_cache_capacity),
             log_settings: LogSettings::default(),
             session_info,
@@ -126,37 +124,24 @@ impl ExaConnection {
         Ok(con)
     }
 
-    async fn execute_query<'a, C, F>(
+    async fn execute_query<'a>(
         &'a mut self,
         sql: &str,
         arguments: Option<ExaArguments>,
         persist: bool,
-        future_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
-    where
-        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
-    {
+    ) -> Result<QueryResultStream<'a>, SqlxError> {
         match arguments {
-            Some(args) => {
-                self.execute_prepared(sql, args, persist, future_maker)
-                    .await
-            }
-            None => self.execute_plain(sql, future_maker).await,
+            Some(args) => self.execute_prepared(sql, args, persist).await,
+            None => self.execute_plain(sql).await,
         }
     }
 
-    async fn execute_prepared<'a, C, F>(
+    async fn execute_prepared<'a>(
         &'a mut self,
         sql: &str,
         args: ExaArguments,
         persist: bool,
-        future_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
-    where
-        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
-    {
+    ) -> Result<QueryResultStream<'a>, SqlxError> {
         let prepared = self
             .ws
             .get_or_prepare(&mut self.statement_cache, sql, persist)
@@ -179,22 +164,17 @@ impl ExaConnection {
         .try_into()?;
 
         self.ws
-            .get_result_stream(cmd, &mut self.last_rs_handle, future_maker)
+            .get_result_stream(cmd, &mut self.last_rs_handle)
             .await
     }
 
-    async fn execute_plain<'a, C, F>(
+    async fn execute_plain<'a>(
         &'a mut self,
         sql: &str,
-        future_maker: C,
-    ) -> Result<QueryResultStream<'a, C, F>, SqlxError>
-    where
-        C: Fn(&'a mut ExaWebSocket, u16, usize) -> Result<F, SqlxError>,
-        F: Future<Output = Result<(DataChunk, &'a mut ExaWebSocket), SqlxError>> + 'a,
-    {
+    ) -> Result<QueryResultStream<'a>, SqlxError> {
         let cmd = ExaCommand::new_execute(sql, &self.ws.attributes).try_into()?;
         self.ws
-            .get_result_stream(cmd, &mut self.last_rs_handle, future_maker)
+            .get_result_stream(cmd, &mut self.last_rs_handle)
             .await
     }
 }

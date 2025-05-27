@@ -16,15 +16,15 @@ impl TransactionManager for ExaTransactionManager {
         conn: &'conn mut ExaConnection,
         _: Option<Cow<'static, str>>,
     ) -> BoxFuture<'conn, Result<(), SqlxError>> {
-        Box::pin(async move { conn.ws.begin() })
+        Box::pin(std::future::ready(conn.ws.begin()))
     }
 
     fn commit(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(async move { conn.ws.commit().await })
+        Box::pin(conn.ws.commit())
     }
 
     fn rollback(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(async move { conn.ws.rollback().await })
+        Box::pin(conn.ws.rollback())
     }
 
     fn start_rollback(conn: &mut ExaConnection) {
@@ -35,7 +35,7 @@ impl TransactionManager for ExaTransactionManager {
 
             let cmd = ExaCommand::new_execute("ROLLBACK;", conn.attributes())
                 .try_into()
-                .expect("rollback command should never fail");
+                .expect("constructing ROLLBACK should never fail");
             conn.ws.start_send_unpin(cmd).ok();
         }
     }

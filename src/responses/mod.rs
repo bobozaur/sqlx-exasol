@@ -14,6 +14,7 @@ mod session_info;
 use std::fmt;
 
 pub use attributes::{Attributes, ExaAttributes};
+use bytes::Bytes;
 pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
 pub use fetch::DataChunk;
@@ -21,21 +22,21 @@ pub use fetch::DataChunk;
 pub use hosts::Hosts;
 pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;
-pub use result::{QueryResult, ResultSet, ResultSetOutput, Results};
+pub use result::{MultiResults, QueryResult, ResultSet, ResultSetOutput, SingleResult};
 use serde::{
-    de::{DeserializeSeed, SeqAccess, Visitor},
+    de::{DeserializeOwned, DeserializeSeed, SeqAccess, Visitor},
     Deserialize, Deserializer,
 };
 use serde_json::Value;
 pub use session_info::SessionInfo;
 
 use self::columns::ExaColumns;
-use crate::ExaTypeInfo;
+use crate::{error::ExaProtocolError, ExaTypeInfo};
 
 /// A response from the Exasol server.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
-pub enum Response<T> {
+pub enum ExaResult<T> {
     #[serde(rename_all = "camelCase")]
     Ok {
         response_data: T,
@@ -46,14 +47,25 @@ pub enum Response<T> {
     },
 }
 
-impl<T> From<Response<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> {
-    fn from(value: Response<T>) -> Self {
+impl<T> TryFrom<Bytes> for ExaResult<T>
+where
+    T: DeserializeOwned,
+{
+    type Error = ExaProtocolError;
+
+    fn try_from(value: Bytes) -> Result<Self, ExaProtocolError> {
+        serde_json::from_slice::<ExaResult<T>>(&value).map_err(From::from)
+    }
+}
+
+impl<T> From<ExaResult<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> {
+    fn from(value: ExaResult<T>) -> Self {
         match value {
-            Response::Ok {
+            ExaResult::Ok {
                 response_data,
                 attributes,
             } => Ok((response_data, attributes)),
-            Response::Error { exception } => Err(exception),
+            ExaResult::Error { exception } => Err(exception),
         }
     }
 }

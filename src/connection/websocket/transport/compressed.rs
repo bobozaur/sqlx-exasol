@@ -19,7 +19,7 @@ use sqlx_core::Error as SqlxError;
 use crate::{
     connection::websocket::{socket::ExaSocket, transport::PlainWebSocket},
     error::{ExaProtocolError, ToSqlxError},
-    responses::{Attributes, Response},
+    responses::{Attributes, ExaResult},
 };
 
 #[derive(Debug)]
@@ -39,9 +39,7 @@ impl CompressedWebSocket {
             return Err(ExaProtocolError::from(None))?;
         };
 
-        let res: Result<Response<_>, _> = serde_json::from_slice(&bytes);
-        let response = res.map_err(ToSqlxError::to_sqlx_err)?;
-        Result::from(response).map_err(From::from)
+        Result::from(ExaResult::try_from(bytes)?).map_err(From::from)
     }
 }
 

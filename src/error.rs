@@ -11,6 +11,8 @@ use crate::ExaTypeInfo;
 /// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]
 pub enum ExaProtocolError {
+    #[error("JSON error: {0}")]
+    Json(#[from] JsonError),
     #[error("expected {0} parameter sets; found a mismatch of length {1}")]
     ParameterLengthMismatch(usize, usize),
     #[error("transaction already open")]
@@ -74,12 +76,6 @@ impl ToSqlxError for WsError {
 }
 
 impl ToSqlxError for RsaError {
-    fn to_sqlx_err(self) -> SqlxError {
-        SqlxError::Protocol(self.to_string())
-    }
-}
-
-impl ToSqlxError for JsonError {
     fn to_sqlx_err(self) -> SqlxError {
         SqlxError::Protocol(self.to_string())
     }
