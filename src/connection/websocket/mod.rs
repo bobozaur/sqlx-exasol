@@ -19,7 +19,10 @@ pub use tls::WithMaybeTlsExaSocket;
 use transport::MaybeCompressedWebSocket;
 
 use crate::{
-    connection::futures::{GetAttributes, WebSocketFuture},
+    connection::{
+        futures::{GetAttributes, Login, WebSocketFuture},
+        websocket::transport::PlainWebSocket,
+    },
     error::ToSqlxError,
     options::ExaConnectOptionsRef,
     responses::{ExaAttributes, PreparedStatement, SessionInfo},
@@ -29,7 +32,7 @@ use crate::{
 /// interaction with the database.
 #[derive(Debug)]
 pub struct ExaWebSocket {
-    pub ws: MaybeCompressedWebSocket,
+    pub inner: MaybeCompressedWebSocket,
     pub attributes: ExaAttributes,
     pub last_rs_handle: Option<u16>,
     pub statement_cache: LruCache<String, PreparedStatement>,
@@ -66,27 +69,34 @@ impl ExaWebSocket {
         );
 
         let statement_cache = LruCache::new(options.statement_cache_capacity);
-        let (ws, session_info) =
-            MaybeCompressedWebSocket::new(ws, attributes.compression_enabled(), options).await?;
 
+        // Regardless of the compression choice, we always start uncompressed, login, then enable
+        // compression, if necessary.
+        let inner = MaybeCompressedWebSocket::Plain(PlainWebSocket(ws));
+        let use_compression = options.compression;
         let mut this = Self {
-            ws,
+            inner,
             attributes,
             last_rs_handle: None,
             statement_cache,
         };
 
-        GetAttributes::default().future(&mut this).await?;
+        // Login is always uncompressed!
+        let session_info = Login::new(options).future(&mut this).await?;
 
+        // Use compression if indicated to do so and it's enabled through the feature flagged.
+        this.inner = this.inner.maybe_compress(use_compression);
+
+        GetAttributes::default().future(&mut this).await?;
         Ok((this, session_info))
     }
 
     pub async fn ping(&mut self) -> Result<(), SqlxError> {
-        self.ws.ping().await
+        self.inner.ping().await
     }
 
     pub fn socket_addr(&self) -> SocketAddr {
-        self.ws.socket_addr()
+        self.inner.socket_addr()
     }
 }
 
@@ -94,7 +104,7 @@ impl Stream for ExaWebSocket {
     type Item = Result<Bytes, SqlxError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.get_mut().ws.poll_next_unpin(cx)
+        self.get_mut().inner.poll_next_unpin(cx)
     }
 }
 
@@ -102,18 +112,18 @@ impl Sink<String> for ExaWebSocket {
     type Error = SqlxError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.get_mut().poll_ready_unpin(cx)
+        self.get_mut().inner.poll_ready_unpin(cx)
     }
 
     fn start_send(self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
-        self.get_mut().start_send_unpin(item)
+        self.get_mut().inner.start_send_unpin(item)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.get_mut().poll_flush_unpin(cx)
+        self.get_mut().inner.poll_flush_unpin(cx)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.get_mut().poll_close_unpin(cx)
+        self.get_mut().inner.poll_close_unpin(cx)
     }
 }

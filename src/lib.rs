@@ -285,7 +285,6 @@ impl_column_index_for_row!(ExaRow);
 impl_column_index_for_statement!(ExaStatement);
 
 // Look into connection/mod.rs tests
-// Look into Connection::should_flush and Connection::flush as well as
 // Transaction::start_rollback (do tests)
 // Look into the login flow
 // Added protocolVersion V4
@@ -294,3 +293,6 @@ impl_column_index_for_statement!(ExaStatement);
 // do Changelog
 // check version bump
 // make ExaCommand private
+// clear clutter around login and credentials
+// look into Describe future being composed of CreatePrepared and ClosePrepared
+// look into src/options/mod constants

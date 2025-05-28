@@ -8,16 +8,15 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_tungstenite::{tungstenite::Message, WebSocketStream};
+use async_tungstenite::tungstenite::Message;
 #[cfg(feature = "compression")]
 use compressed::CompressedWebSocket;
 use futures_core::Stream;
-use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use sqlx_core::{bytes::Bytes, Error as SqlxError};
 pub use uncompressed::PlainWebSocket;
 
-use super::socket::ExaSocket;
-use crate::{error::ToSqlxError, options::ExaConnectOptionsRef, SessionInfo};
+use crate::error::ToSqlxError;
 
 /// Websocket extension enum that wraps the plain and compressed variants
 /// of the websocket used for a connection.
@@ -77,21 +76,12 @@ impl Sink<String> for MaybeCompressedWebSocket {
 }
 
 impl MaybeCompressedWebSocket {
-    pub async fn new(
-        ws: WebSocketStream<BufReader<ExaSocket>>,
-        use_compression: bool,
-        opts: ExaConnectOptionsRef<'_>,
-    ) -> Result<(Self, SessionInfo), SqlxError> {
-        // Login in ALWAYS uncompressed!
-        let (plain, session_info) = PlainWebSocket::new(ws, opts).await?;
-
-        let ws = match use_compression {
+    pub fn maybe_compress(self, use_compression: bool) -> Self {
+        match (self, use_compression) {
             #[cfg(feature = "compression")]
-            true => MaybeCompressedWebSocket::Compressed(plain.into()),
-            _ => MaybeCompressedWebSocket::Plain(plain),
-        };
-
-        Ok((ws, session_info))
+            (Self::Plain(plain), true) => MaybeCompressedWebSocket::Compressed(plain.into()),
+            (ws, _) => ws,
+        }
     }
 
     pub async fn ping(&mut self) -> Result<(), SqlxError> {

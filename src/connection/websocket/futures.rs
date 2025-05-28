@@ -7,8 +7,9 @@ use std::{
 };
 
 use futures_util::{SinkExt, StreamExt};
-use serde::de::IgnoredAny;
-use sqlx_core::{bytes::Bytes, Error as SqlxError};
+use rsa::RsaPublicKey;
+use serde::de::{DeserializeOwned, IgnoredAny};
+use sqlx_core::Error as SqlxError;
 
 use crate::{
     command::ExaCommand,
@@ -16,11 +17,12 @@ use crate::{
         query_splitter::split_queries, stream::MultiResultStream, websocket::ExaWebSocket,
     },
     error::ExaProtocolError,
+    options::{ExaConnectOptionsRef, LoginRef},
     responses::{
-        DataChunk, DescribeStatement, ExaResult, MultiResults, PreparedStatement, QueryResult,
-        SingleResult,
+        DataChunk, DescribeStatement, ExaResult, MultiResults, PreparedStatement, PublicKey,
+        QueryResult, SingleResult,
     },
-    ExaArguments,
+    ExaArguments, ProtocolVersion, SessionInfo,
 };
 
 /// Adapter that wraps a type implementing [`WebSocketFuture`] to
@@ -677,6 +679,165 @@ impl WebSocketFuture for Disconnect {
     }
 }
 
+/// The login process consists of sending the desired login command,
+/// optionally receiving some response data from it, and then
+/// finishing the login by sending the connection options.
+///
+/// It is ALWAYS uncompressed.
+pub struct Login<'a> {
+    // TODO: FIXME!!!!
+    opts: Option<ExaConnectOptionsRef<'a>>,
+    state: LoginState<'a>,
+}
+
+impl<'a> Login<'a> {
+    pub fn new(opts: ExaConnectOptionsRef<'a>) -> Self {
+        let state = match opts.login {
+            LoginRef::Credentials { .. } => {
+                LoginState::Credentials(LoginCredentials::new(opts.protocol_version))
+            }
+            LoginRef::AccessToken { .. } | LoginRef::RefreshToken { .. } => {
+                LoginState::Token(LoginToken::new(opts.protocol_version))
+            }
+        };
+
+        Self {
+            opts: Some(opts),
+            state,
+        }
+    }
+}
+
+impl<'a> WebSocketFuture for Login<'a> {
+    type Output = SessionInfo;
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        loop {
+            match &mut self.state {
+                LoginState::Token(future) => {
+                    ready!(future.poll_unpin(cx, ws))?;
+                    let future = CompleteLogin::new(self.opts.take().unwrap());
+                    self.state = LoginState::Complete(future);
+                }
+                LoginState::Credentials(future) => {
+                    let public_key = ready!(future.poll_unpin(cx, ws))?;
+                    let mut opts = self.opts.take().unwrap();
+                    opts.login.encrypt_password(&public_key)?;
+                    let future = CompleteLogin::new(opts);
+                    self.state = LoginState::Complete(future);
+                }
+                LoginState::Complete(future) => return future.poll_unpin(cx, ws),
+            }
+        }
+    }
+}
+
+enum LoginState<'a> {
+    Token(LoginToken),
+    Credentials(LoginCredentials),
+    Complete(CompleteLogin<'a>),
+}
+
+pub struct CompleteLogin<'a> {
+    opts: ExaConnectOptionsRef<'a>,
+    future: Option<ExaTransport<SessionInfo>>,
+}
+
+impl<'a> CompleteLogin<'a> {
+    pub fn new(opts: ExaConnectOptionsRef<'a>) -> Self {
+        Self { opts, future: None }
+    }
+}
+
+impl<'a> WebSocketFuture for CompleteLogin<'a> {
+    type Output = SessionInfo;
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        loop {
+            if let Some(future) = self.future.as_mut() {
+                return future.poll_unpin(cx, ws);
+            }
+
+            let command = (&self.opts).try_into()?;
+            self.future = Some(ExaTransport::from_command(command));
+        }
+    }
+}
+
+pub struct LoginToken {
+    protocol_version: ProtocolVersion,
+    future: Option<ExaTransport<Option<IgnoredAny>>>,
+}
+
+impl LoginToken {
+    pub fn new(protocol_version: ProtocolVersion) -> Self {
+        Self {
+            protocol_version,
+            future: None,
+        }
+    }
+}
+
+impl WebSocketFuture for LoginToken {
+    type Output = ();
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        loop {
+            if let Some(future) = self.future.as_mut() {
+                return future.poll_unpin(cx, ws).map_ok(|_| ());
+            }
+
+            let command = ExaCommand::new_login_token(self.protocol_version).try_into()?;
+            self.future = Some(ExaTransport::from_command(command));
+        }
+    }
+}
+
+pub struct LoginCredentials {
+    protocol_version: ProtocolVersion,
+    future: Option<ExaTransport<PublicKey>>,
+}
+
+impl LoginCredentials {
+    pub fn new(protocol_version: ProtocolVersion) -> Self {
+        Self {
+            protocol_version,
+            future: None,
+        }
+    }
+}
+
+impl WebSocketFuture for LoginCredentials {
+    type Output = RsaPublicKey;
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        loop {
+            if let Some(future) = self.future.as_mut() {
+                return future.poll_unpin(cx, ws).map_ok(From::from);
+            }
+
+            let command = ExaCommand::new_login(self.protocol_version).try_into()?;
+            self.future = Some(ExaTransport::from_command(command));
+        }
+    }
+}
+
 #[derive(Debug)]
 enum ExaTransport<T> {
     Sending(ExaSend),
@@ -697,8 +858,7 @@ impl<T> ExaTransport<T> {
 impl<T> WebSocketFuture for ExaTransport<T>
 where
     T: Debug,
-    ExaResult<T>: TryFrom<Bytes>,
-    SqlxError: From<<ExaResult<T> as TryFrom<Bytes>>::Error>,
+    ExaResult<T>: DeserializeOwned,
 {
     type Output = T;
 
@@ -762,8 +922,7 @@ impl<T> Default for ExaRecv<T> {
 impl<T> WebSocketFuture for ExaRecv<T>
 where
     T: Debug,
-    ExaResult<T>: TryFrom<Bytes>,
-    SqlxError: From<<ExaResult<T> as TryFrom<Bytes>>::Error>,
+    ExaResult<T>: DeserializeOwned,
 {
     type Output = T;
 
@@ -772,11 +931,18 @@ where
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        let Some(bytes_res) = ready!(ws.poll_next_unpin(cx)) else {
+        let Some(bytes) = ready!(ws.poll_next_unpin(cx)).transpose()? else {
             return Err(ExaProtocolError::from(None))?;
         };
 
-        let (out, attr_opt) = Result::from(ExaResult::try_from(bytes_res?)?)?;
+        let (out, attr_opt) =
+            match serde_json::from_slice(&bytes).map_err(ExaProtocolError::from)? {
+                ExaResult::Ok {
+                    response_data,
+                    attributes,
+                } => (response_data, attributes),
+                ExaResult::Error { exception } => Err(exception)?,
+            };
 
         if let Some(attributes) = attr_opt {
             tracing::debug!("updating connection attributes using:\n{attributes:#?}");

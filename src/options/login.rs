@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rand::rngs::OsRng;
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
@@ -6,107 +8,59 @@ use sqlx_core::Error as SqlxError;
 
 /// Enum representing the possible ways of authenticating a connection.
 /// The variant chosen dictates which login process is called.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub enum Login {
-    Credentials(Credentials),
-    AccessToken(AccessToken),
-    RefreshToken(RefreshToken),
+    Credentials { username: String, password: String },
+    AccessToken { access_token: String },
+    RefreshToken { refresh_token: String },
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Credentials {
-    username: String,
-    password: String,
-}
-
-impl Credentials {
-    pub fn new(username: String, password: String) -> Self {
-        Self { username, password }
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AccessToken {
-    access_token: String,
-}
-
-impl AccessToken {
-    pub fn new(access_token: String) -> Self {
-        Self { access_token }
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RefreshToken {
-    refresh_token: String,
-}
-
-impl RefreshToken {
-    pub fn new(refresh_token: String) -> Self {
-        Self { refresh_token }
-    }
-}
-
-/// Serialization helper used particularly in the event
-/// that we need to encrypt the password in a [`Login::Credentials`] login.
-///
-/// Because of that, the passowrd cannot be borrowed (since we'll mutate it),
-/// hence no [`Copy`] derive.
+/// Serialization helper used particularly in the event that we need to encrypt the password in a
+/// [`Login::Credentials`] login.
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
 pub enum LoginRef<'a> {
-    Credentials(CredentialsRef<'a>),
-    AccessToken(&'a AccessToken),
-    RefreshToken(&'a RefreshToken),
+    #[serde(rename_all = "camelCase")]
+    Credentials {
+        username: &'a str,
+        password: Cow<'a, str>,
+    },
+    #[serde(rename_all = "camelCase")]
+    AccessToken { access_token: &'a str },
+    #[serde(rename_all = "camelCase")]
+    RefreshToken { refresh_token: &'a str },
 }
 
-impl<'a> From<&'a Login> for LoginRef<'a> {
-    fn from(value: &'a Login) -> Self {
-        match value {
-            Login::Credentials(c) => LoginRef::Credentials(c.into()),
-            Login::AccessToken(a) => LoginRef::AccessToken(a),
-            Login::RefreshToken(r) => LoginRef::RefreshToken(r),
-        }
-    }
-}
-
-/// Serialization helper. We need to encrypt the password,
-/// hence mutate it, but the rest can be borrowed.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CredentialsRef<'a> {
-    username: &'a str,
-    password: String,
-}
-
-impl<'a> From<&'a Credentials> for CredentialsRef<'a> {
-    fn from(value: &'a Credentials) -> Self {
-        Self {
-            username: &value.username,
-            password: value.password.clone(),
-        }
-    }
-}
-
-impl CredentialsRef<'_> {
+impl<'a> LoginRef<'a> {
     /// Encrypts the password with the provided key.
     ///
     /// When connecting using [`Login::Credentials`], Exasol first sends out
     /// a public key to encrypt the password with.
     pub fn encrypt_password(&mut self, key: &RsaPublicKey) -> Result<(), SqlxError> {
-        let mut rng = OsRng;
-
-        let padding = Pkcs1v15Encrypt;
-        let pass_bytes = self.password.as_bytes();
+        let Self::Credentials { password, .. } = self else {
+            return Ok(());
+        };
 
         let enc_pass = key
-            .encrypt(&mut rng, padding, pass_bytes)
+            .encrypt(&mut OsRng, Pkcs1v15Encrypt, password.as_bytes())
+            .map(|pass| STD_BASE64_ENGINE.encode(pass))
+            .map(Cow::Owned)
             .map_err(|e| SqlxError::Protocol(e.to_string()))?;
 
-        self.password = STD_BASE64_ENGINE.encode(enc_pass);
+        let _ = std::mem::replace(password, enc_pass);
         Ok(())
+    }
+}
+
+impl<'a> From<&'a Login> for LoginRef<'a> {
+    fn from(value: &'a Login) -> Self {
+        match value {
+            Login::Credentials { username, password } => LoginRef::Credentials {
+                username,
+                password: Cow::Borrowed(password),
+            },
+            Login::AccessToken { access_token } => LoginRef::AccessToken { access_token },
+            Login::RefreshToken { refresh_token } => LoginRef::RefreshToken { refresh_token },
+        }
     }
 }

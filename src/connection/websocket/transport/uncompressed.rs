@@ -8,96 +8,16 @@ use async_tungstenite::{
     WebSocketStream,
 };
 use futures_core::Stream;
-use futures_util::{io::BufReader, Sink, SinkExt, StreamExt, TryStreamExt};
-use rsa::RsaPublicKey;
-use serde::de::{DeserializeOwned, IgnoredAny};
+use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    command::ExaCommand,
     connection::websocket::socket::ExaSocket,
     error::{ExaProtocolError, ToSqlxError},
-    options::{CredentialsRef, ExaConnectOptionsRef, LoginRef},
-    responses::{Attributes, ExaResult, PublicKey, SessionInfo},
-    ProtocolVersion,
 };
 
 #[derive(Debug)]
 pub struct PlainWebSocket(pub WebSocketStream<BufReader<ExaSocket>>);
-
-impl PlainWebSocket {
-    pub async fn new(
-        ws: WebSocketStream<BufReader<ExaSocket>>,
-        opts: ExaConnectOptionsRef<'_>,
-    ) -> Result<(Self, SessionInfo), SqlxError> {
-        let mut this = Self(ws);
-        let session_info = this.login(opts).await?;
-        Ok((this, session_info))
-    }
-
-    /// Receives an uncompressed [`Response<T>`].
-    pub async fn recv<T>(&mut self) -> Result<(T, Option<Attributes>), SqlxError>
-    where
-        T: DeserializeOwned,
-    {
-        let Some(bytes) = self.try_next().await? else {
-            return Err(ExaProtocolError::from(None))?;
-        };
-
-        Result::from(ExaResult::try_from(bytes)?).map_err(From::from)
-    }
-
-    /// The login process consists of sending the desired login command,
-    /// optionally receiving some response data from it, and then
-    /// finishing the login by sending the connection options.
-    ///
-    /// It is ALWAYS uncompressed.
-    async fn login(
-        &mut self,
-        mut opts: ExaConnectOptionsRef<'_>,
-    ) -> Result<SessionInfo, SqlxError> {
-        match &mut opts.login {
-            LoginRef::Credentials(creds) => self.login_creds(creds, opts.protocol_version).await?,
-            _ => self.login_token(opts.protocol_version).await?,
-        }
-
-        let cmd = (&opts).try_into()?;
-        self.get_session_info(cmd).await
-    }
-
-    /// Starts the login flow using a username and password.
-    async fn login_creds(
-        &mut self,
-        credentials: &mut CredentialsRef<'_>,
-        protocol_version: ProtocolVersion,
-    ) -> Result<(), SqlxError> {
-        let key = self.get_public_key(protocol_version).await?;
-        credentials.encrypt_password(&key)?;
-        Ok(())
-    }
-
-    /// Starts the login flow using a token.
-    async fn login_token(&mut self, protocol_version: ProtocolVersion) -> Result<(), SqlxError> {
-        let cmd = ExaCommand::new_login_token(protocol_version).try_into()?;
-        self.send(cmd).await?;
-        self.recv::<Option<IgnoredAny>>().await?;
-        Ok(())
-    }
-
-    async fn get_public_key(
-        &mut self,
-        protocol_version: ProtocolVersion,
-    ) -> Result<RsaPublicKey, SqlxError> {
-        let cmd = ExaCommand::new_login(protocol_version).try_into()?;
-        self.send(cmd).await?;
-        self.recv::<PublicKey>().await.map(|(key, _)| key.into())
-    }
-
-    async fn get_session_info(&mut self, cmd: String) -> Result<SessionInfo, SqlxError> {
-        self.send(cmd).await?;
-        self.recv().await.map(|(k, _)| k)
-    }
-}
 
 impl Stream for PlainWebSocket {
     type Item = Result<Bytes, SqlxError>;

@@ -23,15 +23,14 @@ pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;
 pub use result::{MultiResults, QueryResult, ResultSet, ResultSetOutput, SingleResult};
 use serde::{
-    de::{DeserializeOwned, DeserializeSeed, SeqAccess, Visitor},
+    de::{DeserializeSeed, SeqAccess, Visitor},
     Deserialize, Deserializer,
 };
 use serde_json::Value;
 pub use session_info::SessionInfo;
-use sqlx_core::bytes::Bytes;
 
 use self::columns::ExaColumns;
-use crate::{error::ExaProtocolError, ExaTypeInfo};
+use crate::ExaTypeInfo;
 
 /// A response from the Exasol server.
 #[derive(Debug, Deserialize)]
@@ -45,29 +44,6 @@ pub enum ExaResult<T> {
     Error {
         exception: ExaDatabaseError,
     },
-}
-
-impl<T> TryFrom<Bytes> for ExaResult<T>
-where
-    T: DeserializeOwned,
-{
-    type Error = ExaProtocolError;
-
-    fn try_from(value: Bytes) -> Result<Self, ExaProtocolError> {
-        serde_json::from_slice::<ExaResult<T>>(&value).map_err(From::from)
-    }
-}
-
-impl<T> From<ExaResult<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> {
-    fn from(value: ExaResult<T>) -> Self {
-        match value {
-            ExaResult::Ok {
-                response_data,
-                attributes,
-            } => Ok((response_data, attributes)),
-            ExaResult::Error { exception } => Err(exception),
-        }
-    }
 }
 
 /// Enum representing the columns output of a [`PreparedStatement`].

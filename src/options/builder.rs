@@ -3,11 +3,8 @@ use std::{net::ToSocketAddrs, num::NonZeroUsize};
 use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
 
 use super::{
-    error::ExaConfigError,
-    login::{AccessToken, RefreshToken},
-    ssl_mode::ExaSslMode,
-    Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
-    DEFAULT_FETCH_SIZE, DEFAULT_PORT,
+    error::ExaConfigError, ssl_mode::ExaSslMode, ExaConnectOptions, Login, ProtocolVersion,
+    DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
 
 /// Builder for [`ExaConnectOptions`].
@@ -68,9 +65,9 @@ impl ExaConnectOptionsBuilder {
 
         // Only one authentication method can be used at once
         let login = match (self.username, self.access_token, self.refresh_token) {
-            (Some(user), None, None) => Login::Credentials(Credentials::new(user, password)),
-            (None, Some(token), None) => Login::AccessToken(AccessToken::new(token)),
-            (None, None, Some(token)) => Login::RefreshToken(RefreshToken::new(token)),
+            (Some(username), None, None) => Login::Credentials { username, password },
+            (None, Some(access_token), None) => Login::AccessToken { access_token },
+            (None, None, Some(refresh_token)) => Login::RefreshToken { refresh_token },
             _ => return Err(ExaConfigError::MultipleAuthMethods.into()),
         };
 

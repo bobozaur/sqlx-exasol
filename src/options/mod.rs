@@ -9,7 +9,7 @@ use std::{net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
 pub use builder::ExaConnectOptionsBuilder;
 use error::ExaConfigError;
-pub use login::{Credentials, CredentialsRef, Login, LoginRef};
+pub use login::{Login, LoginRef};
 pub use protocol_version::ProtocolVersion;
 use serde::Serialize;
 use serializable::SerializableConOpts;
