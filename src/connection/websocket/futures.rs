@@ -7,10 +7,9 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use sqlx_core::bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
 use serde::de::IgnoredAny;
-use sqlx_core::Error as SqlxError;
+use sqlx_core::{bytes::Bytes, Error as SqlxError};
 
 use crate::{
     command::ExaCommand,
