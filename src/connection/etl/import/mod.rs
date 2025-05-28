@@ -14,7 +14,6 @@ use compression::ExaImportWriter;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
 pub use options::ImportBuilder;
-use pin_project::pin_project;
 pub use trim::Trim;
 
 use super::SocketFuture;
@@ -74,10 +73,9 @@ use super::SocketFuture;
 ///
 /// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[allow(clippy::large_enum_variant)]
-#[pin_project(project = ExaImportProj)]
 pub enum ExaImport {
     Setup(SocketFuture, usize, bool),
-    Writing(#[pin] ExaImportWriter),
+    Writing(ExaImportWriter),
 }
 
 impl Debug for ExaImport {
@@ -96,9 +94,9 @@ impl AsyncWrite for ExaImport {
         buf: &[u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_write(cx, buf),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
+                Self::Writing(s) => return Pin::new(s).poll_write(cx, buf),
+                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -108,9 +106,9 @@ impl AsyncWrite for ExaImport {
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_flush(cx),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
+                Self::Writing(s) => return Pin::new(s).poll_flush(cx),
+                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -120,9 +118,9 @@ impl AsyncWrite for ExaImport {
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_close(cx),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
+                Self::Writing(s) => return Pin::new(s).poll_close(cx),
+                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);

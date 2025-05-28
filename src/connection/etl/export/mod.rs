@@ -15,7 +15,6 @@ pub use export_source::ExportSource;
 use futures_io::AsyncRead;
 use futures_util::FutureExt;
 pub use options::ExportBuilder;
-use pin_project::pin_project;
 
 use super::SocketFuture;
 
@@ -30,10 +29,9 @@ use super::SocketFuture;
 /// While not necessarily a problem if you're not interested in the whole export, there's no way to
 /// circumvent that other than handling the error in code.
 #[allow(clippy::large_enum_variant)]
-#[pin_project(project = ExaExportProj)]
 pub enum ExaExport {
     Setup(SocketFuture, bool),
-    Reading(#[pin] ExaExportReader),
+    Reading(ExaExportReader),
 }
 
 impl Debug for ExaExport {
@@ -52,9 +50,9 @@ impl AsyncRead for ExaExport {
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
         loop {
-            let (socket, with_compression) = match self.as_mut().project() {
-                ExaExportProj::Reading(r) => return r.poll_read(cx, buf),
-                ExaExportProj::Setup(f, c) => (ready!(f.poll_unpin(cx))?, *c),
+            let (socket, with_compression) = match self.as_mut().get_mut() {
+                Self::Reading(r) => return Pin::new(r).poll_read(cx, buf),
+                Self::Setup(f, c) => (ready!(f.poll_unpin(cx))?, *c),
             };
 
             let reader = ExaExportReader::new(socket, with_compression);
