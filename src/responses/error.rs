@@ -19,7 +19,6 @@ impl Display for ExaDatabaseError {
 }
 
 impl Error for ExaDatabaseError {}
-impl Error for &mut ExaDatabaseError {}
 
 impl error::DatabaseError for ExaDatabaseError {
     fn message(&self) -> &str {

@@ -296,3 +296,5 @@ impl_column_index_for_statement!(ExaStatement);
 // clear clutter around login and credentials
 // look into Describe future being composed of CreatePrepared and ClosePrepared
 // look into src/options/mod constants
+// Fix README and lib.rs with footnote about execute_many
+// Link the issue in the changelog
