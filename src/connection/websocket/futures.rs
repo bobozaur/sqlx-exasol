@@ -886,11 +886,17 @@ where
 }
 
 #[derive(Debug)]
-pub struct ExaSend(String);
+pub struct ExaSend {
+    command: String,
+    state: ExaSendState,
+}
 
 impl ExaSend {
     pub fn new(command: String) -> Self {
-        Self(command)
+        Self {
+            command,
+            state: ExaSendState::WaitReady,
+        }
     }
 }
 
@@ -902,12 +908,25 @@ impl WebSocketFuture for ExaSend {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        ready!(ws.poll_ready_unpin(cx))?;
-        let command = std::mem::take(&mut self.0);
-        tracing::trace!("sending command:\n{command}");
-        ws.start_send_unpin(command)?;
-        Poll::Ready(Ok(()))
+        loop {
+            match self.state {
+                ExaSendState::WaitReady => {
+                    ready!(ws.poll_ready_unpin(cx))?;
+                    let command = std::mem::take(&mut self.command);
+                    tracing::trace!("sending command:\n{command}");
+                    ws.start_send_unpin(command)?;
+                    self.state = ExaSendState::WaitFlush;
+                }
+                ExaSendState::WaitFlush => return ws.poll_flush_unpin(cx),
+            }
+        }
     }
+}
+
+#[derive(Debug)]
+enum ExaSendState {
+    WaitReady,
+    WaitFlush,
 }
 
 #[derive(Debug)]

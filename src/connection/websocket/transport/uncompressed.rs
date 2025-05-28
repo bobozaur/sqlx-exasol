@@ -24,19 +24,17 @@ impl Stream for PlainWebSocket {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            let Some(msg) = ready!(self.0.poll_next_unpin(cx)) else {
-                return Poll::Ready(None);
-            };
-
-            let bytes = match msg.map_err(ToSqlxError::to_sqlx_err)? {
-                Message::Text(s) => s.into(),
-                Message::Binary(v) => v,
-                Message::Close(c) => Err(ExaProtocolError::from(c))?,
+            return match ready!(self.0.poll_next_unpin(cx))
+                .transpose()
+                .map_err(ToSqlxError::to_sqlx_err)?
+            {
+                Some(Message::Text(t)) => Poll::Ready(Some(Ok(t.into()))),
+                Some(Message::Binary(b)) => Poll::Ready(Some(Ok(b))),
+                Some(Message::Close(c)) => Err(ExaProtocolError::from(c))?,
+                None => Poll::Ready(None),
                 // Ignore other messages and wait for the next
                 _ => continue,
             };
-
-            return Poll::Ready(Some(Ok(bytes)));
         }
     }
 }
