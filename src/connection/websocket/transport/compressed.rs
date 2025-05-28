@@ -48,8 +48,8 @@ impl Stream for CompressedWebSocket {
                 Message::Text(s) => s.into(),
                 Message::Binary(v) => v,
                 Message::Close(c) => Err(ExaProtocolError::from(c))?,
-                // Ignore other messages and pend for the next
-                _ => return Poll::Pending,
+                // Ignore other messages and wait for the next
+                _ => continue,
             };
 
             self.decoding = Some(Compression::new(bytes));

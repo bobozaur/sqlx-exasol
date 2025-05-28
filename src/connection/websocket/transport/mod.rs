@@ -27,6 +27,37 @@ pub enum MaybeCompressedWebSocket {
     Compressed(CompressedWebSocket),
 }
 
+impl MaybeCompressedWebSocket {
+    pub fn maybe_compress(self, use_compression: bool) -> Self {
+        match (self, use_compression) {
+            #[cfg(feature = "compression")]
+            (Self::Plain(plain), true) => MaybeCompressedWebSocket::Compressed(plain.into()),
+            (ws, _) => ws,
+        }
+    }
+
+    pub async fn ping(&mut self) -> Result<(), SqlxError> {
+        let ws = match self {
+            MaybeCompressedWebSocket::Plain(ws) => &mut ws.0,
+            #[cfg(feature = "compression")]
+            MaybeCompressedWebSocket::Compressed(ws) => &mut ws.inner,
+        };
+
+        SinkExt::send(ws, Message::Ping(Bytes::new()))
+            .await
+            .map_err(ToSqlxError::to_sqlx_err)?;
+        Ok(())
+    }
+
+    pub fn socket_addr(&self) -> SocketAddr {
+        match self {
+            MaybeCompressedWebSocket::Plain(ws) => ws.0.get_ref().get_ref().sock_addr,
+            #[cfg(feature = "compression")]
+            MaybeCompressedWebSocket::Compressed(ws) => ws.inner.get_ref().get_ref().sock_addr,
+        }
+    }
+}
+
 impl Stream for MaybeCompressedWebSocket {
     type Item = Result<Bytes, SqlxError>;
 
@@ -71,37 +102,6 @@ impl Sink<String> for MaybeCompressedWebSocket {
             MaybeCompressedWebSocket::Plain(ws) => ws.poll_close_unpin(cx),
             #[cfg(feature = "compression")]
             MaybeCompressedWebSocket::Compressed(ws) => ws.poll_close_unpin(cx),
-        }
-    }
-}
-
-impl MaybeCompressedWebSocket {
-    pub fn maybe_compress(self, use_compression: bool) -> Self {
-        match (self, use_compression) {
-            #[cfg(feature = "compression")]
-            (Self::Plain(plain), true) => MaybeCompressedWebSocket::Compressed(plain.into()),
-            (ws, _) => ws,
-        }
-    }
-
-    pub async fn ping(&mut self) -> Result<(), SqlxError> {
-        let ws = match self {
-            MaybeCompressedWebSocket::Plain(ws) => &mut ws.0,
-            #[cfg(feature = "compression")]
-            MaybeCompressedWebSocket::Compressed(ws) => &mut ws.inner,
-        };
-
-        SinkExt::send(ws, Message::Ping(Bytes::new()))
-            .await
-            .map_err(ToSqlxError::to_sqlx_err)?;
-        Ok(())
-    }
-
-    pub fn socket_addr(&self) -> SocketAddr {
-        match self {
-            MaybeCompressedWebSocket::Plain(ws) => ws.0.get_ref().get_ref().sock_addr,
-            #[cfg(feature = "compression")]
-            MaybeCompressedWebSocket::Compressed(ws) => ws.inner.get_ref().get_ref().sock_addr,
         }
     }
 }
