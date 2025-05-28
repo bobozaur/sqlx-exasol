@@ -203,7 +203,7 @@ impl ConnectOptions for ExaConnectOptions {
     where
         Self::Connection: Sized,
     {
-        Box::pin(async move { ExaConnection::establish(self).await })
+        Box::pin(ExaConnection::establish(self))
     }
 
     fn log_statements(mut self, level: log::LevelFilter) -> Self {
