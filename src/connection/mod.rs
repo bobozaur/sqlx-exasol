@@ -5,27 +5,24 @@ mod query_splitter;
 mod stream;
 mod websocket;
 
-use std::{iter, net::SocketAddr};
+use std::net::SocketAddr;
 
 use futures_util::SinkExt;
-use lru::LruCache;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
     transaction::Transaction,
     Error as SqlxError,
 };
-use stream::QueryResultStream;
+pub use websocket::futures;
 use websocket::{socket::WithExaSocket, ExaWebSocket};
 
 use self::websocket::WithMaybeTlsExaSocket;
 use crate::{
-    arguments::ExaArguments,
-    command::ExaCommand,
+    connection::futures::{ClosePrepared, Disconnect, SetAttributes, WebSocketFuture},
     database::Exasol,
-    error::ExaProtocolError,
     options::ExaConnectOptions,
-    responses::{ExaAttributes, PreparedStatement, SessionInfo},
+    responses::{ExaAttributes, SessionInfo},
 };
 
 /// A connection to the Exasol database.
@@ -33,7 +30,6 @@ use crate::{
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
     session_info: SessionInfo,
-    statement_cache: LruCache<String, PreparedStatement>,
     log_settings: LogSettings,
 }
 
@@ -62,7 +58,7 @@ impl ExaConnection {
     ///
     /// Will return an error if sending the attributes fails.
     pub async fn flush_attributes(&mut self) -> Result<(), SqlxError> {
-        self.ws.set_attributes().await
+        SetAttributes::default().future(&mut self.ws).await
     }
 
     /// Returns a reference to the [`SessionInfo`] related to this connection.
@@ -116,66 +112,11 @@ impl ExaConnection {
         let (ws, session_info) = ws_result?;
         let con = Self {
             ws,
-            statement_cache: LruCache::new(opts.statement_cache_capacity),
             log_settings: LogSettings::default(),
             session_info,
         };
 
         Ok(con)
-    }
-
-    async fn execute_query<'a>(
-        &'a mut self,
-        sql: &str,
-        arguments: Option<ExaArguments>,
-        persist: bool,
-    ) -> Result<QueryResultStream<'a>, SqlxError> {
-        match arguments {
-            Some(args) => self.execute_prepared(sql, args, persist).await,
-            None => self.execute_plain(sql).await,
-        }
-    }
-
-    async fn execute_prepared<'a>(
-        &'a mut self,
-        sql: &str,
-        args: ExaArguments,
-        persist: bool,
-    ) -> Result<QueryResultStream<'a>, SqlxError> {
-        let prepared = self
-            .ws
-            .get_or_prepare(&mut self.statement_cache, sql, persist)
-            .await?;
-
-        // Check the compatibility between provided parameter data types
-        // and the ones expected by the database.
-        for (expected, provided) in iter::zip(prepared.parameters.as_ref(), &args.types) {
-            if !expected.compatible(provided) {
-                Err(ExaProtocolError::DatatypeMismatch(*expected, *provided))?;
-            }
-        }
-
-        let cmd = ExaCommand::new_execute_prepared(
-            prepared.statement_handle,
-            &prepared.parameters,
-            args.buf,
-            &self.ws.attributes,
-        )
-        .try_into()?;
-
-        self.ws
-            .get_result_stream(cmd, &mut self.last_rs_handle)
-            .await
-    }
-
-    async fn execute_plain<'a>(
-        &'a mut self,
-        sql: &str,
-    ) -> Result<QueryResultStream<'a>, SqlxError> {
-        let cmd = ExaCommand::new_execute(sql, &self.ws.attributes).try_into()?;
-        self.ws
-            .get_result_stream(cmd, &mut self.last_rs_handle)
-            .await
     }
 }
 
@@ -186,7 +127,7 @@ impl Connection for ExaConnection {
 
     fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
         Box::pin(async move {
-            self.ws.disconnect().await?;
+            Disconnect::default().future(&mut self.ws).await?;
             self.ws.close().await?;
             Ok(())
         })
@@ -200,10 +141,7 @@ impl Connection for ExaConnection {
     }
 
     fn ping(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(async move {
-            self.ws.ping().await?;
-            Ok(())
-        })
+        Box::pin(self.ws.ping())
     }
 
     fn begin(
@@ -229,7 +167,7 @@ impl Connection for ExaConnection {
     where
         Self::Database: sqlx_core::database::HasStatementCache,
     {
-        self.statement_cache.len()
+        self.ws.statement_cache.len()
     }
 
     fn clear_cached_statements(
@@ -239,8 +177,10 @@ impl Connection for ExaConnection {
         Self::Database: sqlx_core::database::HasStatementCache,
     {
         Box::pin(async {
-            while let Some((_, prep)) = self.statement_cache.pop_lru() {
-                self.ws.close_prepared(prep.statement_handle).await?;
+            while let Some((_, prep)) = self.ws.statement_cache.pop_lru() {
+                ClosePrepared::new(prep.statement_handle)
+                    .future(&mut self.ws)
+                    .await?;
             }
 
             Ok(())
@@ -251,7 +191,7 @@ impl Connection for ExaConnection {
 #[cfg(test)]
 #[cfg(feature = "migrate")]
 mod tests {
-    use std::{num::NonZeroUsize, time::Duration};
+    use std::num::NonZeroUsize;
 
     use sqlx::{query, Connection, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
@@ -261,7 +201,7 @@ mod tests {
     #[cfg(feature = "compression")]
     #[ignore]
     #[sqlx::test]
-    async fn test_compression_works(
+    async fn test_compression_feature(
         pool_opts: PoolOptions<Exasol>,
         mut exa_opts: ExaConnectOptions,
     ) -> Result<(), BoxDynError> {
@@ -288,7 +228,7 @@ mod tests {
 
     #[cfg(not(feature = "compression"))]
     #[sqlx::test]
-    async fn test_compression_no_flag(
+    async fn test_compression_no_feature(
         pool_opts: PoolOptions<Exasol>,
         mut exa_opts: ExaConnectOptions,
     ) {
@@ -310,16 +250,16 @@ mod tests {
         let sql1 = "SELECT 1 FROM dual";
         let sql2 = "SELECT 2 FROM dual";
 
-        assert!(!con.as_ref().statement_cache.contains(sql1));
-        assert!(!con.as_ref().statement_cache.contains(sql2));
+        assert!(!con.as_ref().ws.statement_cache.contains(sql1));
+        assert!(!con.as_ref().ws.statement_cache.contains(sql2));
 
         query(sql1).execute(&mut *con).await?;
-        assert!(con.as_ref().statement_cache.contains(sql1));
-        assert!(!con.as_ref().statement_cache.contains(sql2));
+        assert!(con.as_ref().ws.statement_cache.contains(sql1));
+        assert!(!con.as_ref().ws.statement_cache.contains(sql2));
 
         query(sql2).execute(&mut *con).await?;
-        assert!(!con.as_ref().statement_cache.contains(sql1));
-        assert!(con.as_ref().statement_cache.contains(sql2));
+        assert!(!con.as_ref().ws.statement_cache.contains(sql1));
+        assert!(con.as_ref().ws.statement_cache.contains(sql2));
 
         Ok(())
     }
@@ -438,32 +378,41 @@ mod tests {
     #[sqlx::test]
     async fn test_connection_flush_on_drop(
         pool_opts: PoolOptions<Exasol>,
-        mut exa_opts: ExaConnectOptions,
+        exa_opts: ExaConnectOptions,
     ) -> Result<(), BoxDynError> {
-        // Set a low cache size
-        exa_opts.statement_cache_capacity = NonZeroUsize::new(1).unwrap();
-
-        let pool = pool_opts.connect_with(exa_opts).await?;
+        // Only allow one connection
+        let pool = pool_opts.max_connections(1).connect_with(exa_opts).await?;
+        pool.execute("CREATE TABLE TRANSACTIONS_TEST ( col DECIMAL(1, 0) );")
+            .await?;
 
         {
             let mut conn = pool.acquire().await?;
-
-            {
-                let mut tx = conn.begin().await?;
-                tx.execute("select * from EXA_TIME_ZONES limit 1800")
-                    .await?;
-            }
-
-            // assert!(conn.ws.pending_rollback);
-            todo!();
+            let mut tx = conn.begin().await?;
+            tx.execute("INSERT INTO TRANSACTIONS_TEST VALUES(1)")
+                .await?;
         }
 
-        // Should be plenty of time to execute the flush
-        // after the connection is dropped.
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        // assert!(!pool.acquire().await?.ws.pending_rollback);
-        todo!();
+        let mut conn = pool.acquire().await?;
+        {
+            let mut tx = conn.begin().await?;
+            tx.execute("INSERT INTO TRANSACTIONS_TEST VALUES(1)")
+                .await?;
+        }
 
+        {
+            let mut tx = conn.begin().await?;
+            tx.execute("INSERT INTO TRANSACTIONS_TEST VALUES(1)")
+                .await?;
+        }
+
+        drop(conn);
+
+        let inserted = pool
+            .fetch_all("SELECT * FROM TRANSACTIONS_TEST")
+            .await?
+            .len();
+
+        assert_eq!(inserted, 0);
         Ok(())
     }
 }

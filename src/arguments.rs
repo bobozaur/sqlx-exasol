@@ -44,8 +44,8 @@ impl<'q> Arguments<'q> for ExaArguments {
 #[derive(Debug)]
 pub struct ExaBuffer {
     pub(crate) inner: Vec<u8>,
-    pub(crate) params_count: usize,
-    pub(crate) num_param_sets: Option<usize>,
+    pub(crate) current_set_params: usize,
+    pub(crate) first_set_params: Option<usize>,
 }
 
 impl ExaBuffer {
@@ -54,7 +54,7 @@ impl ExaBuffer {
     where
         T: Serialize,
     {
-        self.params_count += 1;
+        self.current_set_params += 1;
         serde_json::to_writer(&mut self.inner, &value)
     }
 
@@ -80,18 +80,17 @@ impl ExaBuffer {
 
     /// Outputs the numbers of parameter sets in the buffer.
     pub(crate) fn num_param_sets(&self) -> usize {
-        self.num_param_sets.unwrap_or_default()
+        self.first_set_params.unwrap_or_default()
     }
 
     /// Ends the main sequence serialization in the buffer.
     ///
-    /// We're technically always guaranteed to have at least
-    /// one byte in the buffer as this type is only created
-    /// by [`sqlx`] through it's [`Default`] implementation.
+    /// We're technically always guaranteed to have at least one byte in the buffer as this type is
+    /// only created through it's [`Default`] implementation by [`sqlx`] when binding parameters
+    /// to queries. The [`Default`] impl starts a sequence already by adding `[` to the buffer.
     ///
-    /// It will either overwrite the `[` set by default
-    /// or a `,` separator automatically set when an element
-    /// is encoded and added.
+    /// It will therefore never be empty and this method is meant to overwrite the either overwrite
+    /// the `,` separator automatically set when an element is encoded and added.
     pub(crate) fn finalize(&mut self) {
         let b = self.inner.last_mut().expect("buffer cannot be empty");
         *b = b']';
@@ -119,20 +118,16 @@ impl ExaBuffer {
     /// parameters get passed for each column.
     ///
     /// All subsequent calls will check that the number of rows is the same.
-    /// If it is not, the first mismatch is recorded so we can throw
-    /// an error later (before sending data to the database).
-    ///
-    /// This is also due to `Encode` not throwing errors.
     fn check_param_count(&mut self) -> Result<(), ExaProtocolError> {
-        let count = self.params_count;
+        let count = self.current_set_params;
 
         // We must reset the count in preparation for the next parameter.
-        self.params_count = 0;
+        self.current_set_params = 0;
 
-        match self.num_param_sets {
+        match self.first_set_params {
             Some(n) if n == count => (),
             Some(n) => Err(ExaProtocolError::ParameterLengthMismatch(count, n))?,
-            None => self.num_param_sets = Some(count),
+            None => self.first_set_params = Some(count),
         };
 
         Ok(())
@@ -144,8 +139,8 @@ impl Default for ExaBuffer {
         let inner = Vec::with_capacity(1);
         let mut buffer = Self {
             inner,
-            params_count: 0,
-            num_param_sets: None,
+            current_set_params: 0,
+            first_set_params: None,
         };
 
         buffer.start_seq();

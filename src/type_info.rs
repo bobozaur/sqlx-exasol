@@ -12,7 +12,7 @@ use sqlx_core::type_info::TypeInfo;
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(from = "ExaDataType")]
 pub struct ExaTypeInfo {
-    name: DataTypeName,
+    pub(crate) name: DataTypeName,
     datatype: ExaDataType,
 }
 
@@ -215,7 +215,7 @@ impl AsRef<str> for ExaDataType {
 /// *IMPORTANT*: Creating absurd [`ExaDataType`] can result in panics
 /// if the name exceeds the inlined strings max capacity. Valid values always fit.
 #[derive(Debug, Clone, Copy)]
-enum DataTypeName {
+pub enum DataTypeName {
     Static(&'static str),
     Inline(ArrayString<30>),
 }

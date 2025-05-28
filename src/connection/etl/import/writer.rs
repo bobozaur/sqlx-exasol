@@ -6,7 +6,6 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use bytes::BytesMut;
 use futures_channel::mpsc::{Receiver, SendError, Sender};
 use futures_io::{AsyncWrite, IoSlice};
 use futures_util::{future::Fuse, FutureExt, SinkExt, Stream, StreamExt};
@@ -17,6 +16,7 @@ use hyper::{
     service::Service,
     Request, Response, StatusCode,
 };
+use sqlx_core::bytes::BytesMut;
 
 use crate::connection::websocket::socket::ExaSocket;
 

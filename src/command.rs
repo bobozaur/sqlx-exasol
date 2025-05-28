@@ -1,15 +1,9 @@
-#[cfg(feature = "etl")]
-use std::net::IpAddr;
-
 use serde::{ser::SerializeSeq, Serialize, Serializer};
 use serde_json::Deserializer;
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    arguments::ExaBuffer,
-    options::{ExaConnectOptionsRef, ProtocolVersion},
-    responses::ExaAttributes,
-    ExaTypeInfo,
+    arguments::ExaBuffer, options::ProtocolVersion, responses::ExaAttributes, ExaTypeInfo,
 };
 
 /// Enum encapsulating the various requests that can be made to the database.
@@ -47,7 +41,7 @@ impl<'a> ExaCommand<'a> {
     }
 
     #[cfg(feature = "etl")]
-    pub fn new_get_hosts(host_ip: IpAddr) -> Self {
+    pub fn new_get_hosts(host_ip: std::net::IpAddr) -> Self {
         Self::GetHosts(GetHosts { host_ip })
     }
 
@@ -110,31 +104,23 @@ impl<'a> TryFrom<ExaCommand<'a>> for String {
     }
 }
 
-impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for String {
-    type Error = SqlxError;
-
-    fn try_from(value: &'a ExaConnectOptionsRef<'a>) -> Result<Self, Self::Error> {
-        serde_json::to_string(value).map_err(|e| SqlxError::Protocol(e.to_string()))
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetAttributes<'a> {
     attributes: &'a ExaAttributes,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginInfo {
     protocol_version: ProtocolVersion,
 }
 
 #[cfg(feature = "etl")]
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetHosts {
-    host_ip: IpAddr,
+    host_ip: std::net::IpAddr,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -152,7 +138,7 @@ pub struct BatchSql<'a> {
     sql_texts: &'a [&'a str],
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fetch {
     result_set_handle: u16,
@@ -160,7 +146,7 @@ pub struct Fetch {
     num_bytes: usize,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloseResultSet {
     result_set_handles: [u16; 1],
@@ -221,7 +207,7 @@ impl<'a> From<&'a ExaTypeInfo> for ExaParameter<'a> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Copy, Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClosePreparedStmt {
     statement_handle: u16,

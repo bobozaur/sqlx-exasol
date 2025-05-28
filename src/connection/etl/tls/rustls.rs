@@ -18,7 +18,7 @@ use sqlx_core::{
 use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
-    error::ExaResultExt,
+    error::ToSqlxError,
     etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
 };
 

@@ -6,7 +6,7 @@ use serde_json::error::Error as JsonError;
 use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
-use crate::ExaTypeInfo;
+use crate::type_info::DataTypeName;
 
 /// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]
@@ -19,8 +19,10 @@ pub enum ExaProtocolError {
     TransactionAlreadyOpen,
     #[error("not ready to send data")]
     SendNotReady,
+    #[error("no response received")]
+    NoResponse,
     #[error("type mismatch: expected SQL type `{0}` but was provided `{1}`")]
-    DatatypeMismatch(ExaTypeInfo, ExaTypeInfo),
+    DatatypeMismatch(DataTypeName, DataTypeName),
     #[error("server closed connection; info: {0}")]
     WebSocketClosed(CloseError),
     #[error("feature 'compression' must be enabled to use compression")]
@@ -28,7 +30,7 @@ pub enum ExaProtocolError {
 }
 
 #[derive(Debug)]
-struct CloseError(Option<CloseFrame>);
+pub struct CloseError(Option<CloseFrame>);
 
 impl Display for CloseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

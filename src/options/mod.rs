@@ -256,6 +256,14 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for String {
+    type Error = SqlxError;
+
+    fn try_from(value: &'a ExaConnectOptionsRef<'a>) -> Result<Self, Self::Error> {
+        serde_json::to_string(value).map_err(|e| SqlxError::Protocol(e.to_string()))
+    }
+}
+
 /// Helper containing TLS related options.
 #[derive(Debug, Clone, Copy)]
 #[allow(clippy::struct_field_names)]

@@ -45,7 +45,7 @@ impl<'r> ValueRef<'r> for ExaValueRef<'r> {
     fn to_owned(&self) -> <Self::Database as Database>::Value {
         ExaValue {
             value: self.value.clone(),
-            type_info: self.type_info.clone(),
+            type_info: *self.type_info,
         }
     }
 

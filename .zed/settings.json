@@ -8,7 +8,7 @@
       "initialization_options": {
         "cargo": {
           "features": [
-            "etl_native_tls",
+            "etl_rustls",
             "compression",
             "uuid",
             "chrono",

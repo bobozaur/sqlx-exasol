@@ -12,7 +12,9 @@ use sqlx_core::{
 
 use super::stream::ResultStream;
 use crate::{
-    command::ExaCommand,
+    connection::futures::{
+        self, ClosePrepared, ExecuteBatch, ExecutePrepared, GetOrPrepare, WebSocketFuture,
+    },
     database::Exasol,
     responses::DescribeStatement,
     statement::{ExaStatement, ExaStatementMetadata},
@@ -25,14 +27,40 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 
     fn execute<'e, 'q: 'e, E>(
         self,
-        _query: E,
+        mut query: E,
     ) -> BoxFuture<'e, Result<<Self::Database as Database>::QueryResult, SqlxError>>
     where
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
     {
-        // self.fetch(query).try_collect().boxed()
-        todo!()
+        let sql = query.sql();
+        let persist = query.persistent();
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
+        let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
+            Ok(a) => a,
+            Err(e) => return Box::pin(ready(Err(e))),
+        };
+
+        let filter_fn = |step| async move {
+            Ok(match step {
+                Either::Left(rows) => Some(rows),
+                Either::Right(_) => None,
+            })
+        };
+
+        if let Some(arguments) = arguments {
+            let future = ExecutePrepared::new(sql, persist, arguments);
+            ResultStream::new(&mut self.ws, logger, future)
+                .try_filter_map(filter_fn)
+                .try_collect()
+                .boxed()
+        } else {
+            let future = futures::Execute::new(sql);
+            ResultStream::new(&mut self.ws, logger, future)
+                .try_filter_map(filter_fn)
+                .try_collect()
+                .boxed()
+        }
     }
 
     fn execute_many<'e, 'q: 'e, E>(
@@ -62,22 +90,27 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         E: 'q + Execute<'q, Self::Database>,
     {
         let sql = query.sql();
-        let persistent = query.persistent();
+        let persist = query.persistent();
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
         let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
             Ok(a) => a,
             Err(e) => return Box::pin(ready(Err(e)).into_stream()),
         };
 
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
-        let future = self.execute_query(sql, arguments, persistent);
-        Box::pin(
-            ResultStream::new(future, logger).try_filter_map(|step| async move {
-                Ok(match step {
-                    Either::Left(_) => None,
-                    Either::Right(row) => Some(row),
-                })
-            }),
-        )
+        let filter_fn = |step| async move {
+            Ok(match step {
+                Either::Left(_) => None,
+                Either::Right(row) => Some(row),
+            })
+        };
+
+        if let Some(arguments) = arguments {
+            let future = ExecutePrepared::new(sql, persist, arguments);
+            Box::pin(ResultStream::new(&mut self.ws, logger, future).try_filter_map(filter_fn))
+        } else {
+            let future = futures::Execute::new(sql);
+            Box::pin(ResultStream::new(&mut self.ws, logger, future).try_filter_map(filter_fn))
+        }
     }
 
     fn fetch_many<'e, 'q: 'e, E: 'q>(
@@ -95,15 +128,20 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         E: Execute<'q, Self::Database>,
     {
         let sql = query.sql();
-        let persistent = query.persistent();
+        let persist = query.persistent();
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
         let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
             Ok(a) => a,
             Err(e) => return Box::pin(ready(Err(e)).into_stream()),
         };
 
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
-        let future = self.execute_query(sql, arguments, persistent);
-        Box::pin(ResultStream::new(future, logger))
+        if let Some(arguments) = arguments {
+            let future = ExecutePrepared::new(sql, persist, arguments);
+            Box::pin(ResultStream::new(&mut self.ws, logger, future))
+        } else {
+            let future = ExecuteBatch::new(sql);
+            Box::pin(ResultStream::new(&mut self.ws, logger, future))
+        }
     }
 
     fn fetch_optional<'e, 'q: 'e, E: 'q>(
@@ -136,10 +174,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
     {
         Box::pin(async move {
-            let prepared = self
-                .ws
-                .get_or_prepare(&mut self.statement_cache, sql, true)
-                .await?;
+            let prepared = GetOrPrepare::new(sql, true).future(&mut self.ws).await?;
 
             Ok(ExaStatement {
                 sql: Cow::Borrowed(sql),
@@ -160,15 +195,15 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
     {
         Box::pin(async move {
-            let cmd = ExaCommand::new_create_prepared(sql).try_into()?;
-
             let DescribeStatement {
+                statement_handle,
                 columns,
                 parameters,
-                statement_handle,
-            } = self.ws.describe(cmd).await?;
+            } = futures::Describe::new(sql).future(&mut self.ws).await?;
 
-            self.ws.close_prepared(statement_handle).await?;
+            ClosePrepared::new(statement_handle)
+                .future(&mut self.ws)
+                .await?;
 
             let nullable = (0..columns.len()).map(|_| None).collect();
 

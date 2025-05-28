@@ -223,11 +223,6 @@ impl ExaAttributes {
         self.statement_cache_capacity
     }
 
-    pub(crate) fn set_open_transaction(&mut self, open_transaction: bool) -> &mut Self {
-        self.open_transaction = open_transaction;
-        self
-    }
-
     pub(crate) fn update(&mut self, other: Attributes) {
         macro_rules! other_or_prev {
             ($field:tt) => {

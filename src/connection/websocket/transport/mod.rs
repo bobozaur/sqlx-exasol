@@ -13,14 +13,11 @@ use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use compressed::CompressedWebSocket;
 use futures_core::Stream;
 use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
-use serde::de::DeserializeOwned;
 use sqlx_core::{bytes::Bytes, Error as SqlxError};
 pub use uncompressed::PlainWebSocket;
 
 use super::socket::ExaSocket;
-use crate::{
-    error::ToSqlxError, options::ExaConnectOptionsRef, responses::Attributes, SessionInfo,
-};
+use crate::{error::ToSqlxError, options::ExaConnectOptionsRef, SessionInfo};
 
 /// Websocket extension enum that wraps the plain and compressed variants
 /// of the websocket used for a connection.
@@ -95,17 +92,6 @@ impl MaybeCompressedWebSocket {
         };
 
         Ok((ws, session_info))
-    }
-
-    pub async fn recv<T>(&mut self) -> Result<(T, Option<Attributes>), SqlxError>
-    where
-        T: DeserializeOwned,
-    {
-        match self {
-            MaybeCompressedWebSocket::Plain(ws) => ws.recv().await,
-            #[cfg(feature = "compression")]
-            MaybeCompressedWebSocket::Compressed(ws) => ws.recv().await,
-        }
     }
 
     pub async fn ping(&mut self) -> Result<(), SqlxError> {

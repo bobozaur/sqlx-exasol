@@ -14,13 +14,20 @@ use sqlx_core::{
     connection::Connection,
     executor::Executor,
     pool::{Pool, PoolOptions},
-    query::query,
+    query::{self},
     query_scalar::query_scalar,
     testing::{FixtureSnapshot, TestArgs, TestContext, TestSupport},
     Error,
 };
 
-use crate::{connection::ExaConnection, database::Exasol, options::ExaConnectOptions};
+use crate::{
+    connection::{
+        futures::{ExecuteBatch, WebSocketFuture},
+        ExaConnection,
+    },
+    database::Exasol,
+    options::ExaConnectOptions,
+};
 
 static MASTER_POOL: OnceLock<Pool<Exasol>> = OnceLock::new();
 // Automatically delete any databases created before the start of the test binary.
@@ -45,7 +52,10 @@ impl TestSupport for Exasol {
             conn.execute(&*query_str).await?;
 
             let query_str = r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_id = ?;"#;
-            query(query_str).bind(db_id).execute(&mut *conn).await?;
+            query::query(query_str)
+                .bind(db_id)
+                .execute(&mut *conn)
+                .await?;
 
             Ok(())
         })
@@ -105,15 +115,14 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     let mut conn = master_pool.acquire().await?;
 
-    let queries = &[
-        r#"CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";"#,
-        r#"CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
+    let queries = r#"CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";
+        "CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
             db_id DECIMAL(20, 0) IDENTITY,
             test_path CLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );"#,
-    ];
-    conn.ws.execute_batch(queries).await?;
+        );"#;
+
+    ExecuteBatch::new(queries).future(&mut conn.ws).await?;
 
     // Record the current time _before_ we acquire the `DO_CLEANUP` permit. This
     // prevents the first test thread from accidentally deleting new test dbs
@@ -130,7 +139,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
     let mut tx = conn.begin().await?;
 
     let query_str = r#"INSERT INTO "_sqlx_tests"."_sqlx_test_databases" (test_path) VALUES (?)"#;
-    query(query_str)
+    query::query(query_str)
         .bind(args.test_path)
         .execute(&mut *tx)
         .await?;
@@ -202,7 +211,7 @@ async fn do_cleanup(conn: &mut ExaConnection, created_before: Duration) -> Resul
         }
     }
 
-    query(r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_id = ?;"#)
+    query::query(r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_id = ?;"#)
         .bind(&deleted_db_ids)
         .execute(&mut *conn)
         .await?;

@@ -1,10 +1,15 @@
 use std::borrow::Cow;
 
 use futures_core::future::BoxFuture;
-use futures_util::SinkExt;
+use futures_util::FutureExt;
 use sqlx_core::{transaction::TransactionManager, Error as SqlxError};
 
-use crate::{command::ExaCommand, database::Exasol, ExaConnection};
+use crate::{
+    connection::futures::{Commit, Rollback, SetAttributes, WebSocketFuture},
+    database::Exasol,
+    error::ExaProtocolError,
+    ExaConnection,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ExaTransactionManager;
@@ -16,27 +21,32 @@ impl TransactionManager for ExaTransactionManager {
         conn: &'conn mut ExaConnection,
         _: Option<Cow<'static, str>>,
     ) -> BoxFuture<'conn, Result<(), SqlxError>> {
-        Box::pin(std::future::ready(conn.ws.begin()))
+        Box::pin(async {
+            let attributes = conn.attributes_mut();
+            // Exasol does not have nested transactions.
+            if attributes.open_transaction() {
+                return Err(ExaProtocolError::TransactionAlreadyOpen)?;
+            }
+
+            attributes.set_autocommit(false);
+            SetAttributes::default().future(&mut conn.ws).await
+        })
     }
 
     fn commit(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(conn.ws.commit())
+        async move { Commit::default().future(&mut conn.ws).await }.boxed()
     }
 
     fn rollback(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
-        Box::pin(conn.ws.rollback())
+        async move { Rollback::default().future(&mut conn.ws).await }.boxed()
     }
 
     fn start_rollback(conn: &mut ExaConnection) {
-        // We only need to rollback if the transaction is still open.
-        if conn.ws.attributes.open_transaction() {
-            conn.ws.attributes.set_autocommit(true);
-            conn.ws.attributes.set_open_transaction(false);
+        let attributes = conn.attributes_mut();
 
-            let cmd = ExaCommand::new_execute("ROLLBACK;", conn.attributes())
-                .try_into()
-                .expect("constructing ROLLBACK should never fail");
-            conn.ws.start_send_unpin(cmd).ok();
+        // We only need to rollback if a transaction is open.
+        if attributes.open_transaction() {
+            attributes.set_autocommit(true);
         }
     }
 

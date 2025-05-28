@@ -104,6 +104,7 @@ use self::{
 use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
     command::ExaCommand,
+    connection::futures::{ExaRecv, GetHosts, WebSocketFuture},
     responses::{QueryResult, SingleResult},
     ExaConnection, ExaQueryResult,
 };
@@ -126,8 +127,12 @@ where
     T: EtlJob,
     'c: 'a,
 {
-    let ips = conn.ws.get_hosts().await?;
-    let port = conn.ws.socket_addr().port();
+    let socket_addr = conn.socket_addr();
+    let ips = GetHosts::new(socket_addr.ip())
+        .future(&mut conn.ws)
+        .await?
+        .into();
+
     let with_tls = conn.attributes().encryption_enabled();
     let with_compression = job
         .use_compression()
@@ -135,7 +140,7 @@ where
 
     // Get the internal Exasol node addresses and the socket spawning futures
     let (addrs, futures): (Vec<_>, Vec<_>) =
-        socket_spawners(job.num_workers(), ips, port, with_tls)
+        socket_spawners(job.num_workers(), ips, socket_addr.port(), with_tls)
             .await?
             .into_iter()
             .unzip();
@@ -151,7 +156,11 @@ where
     // Query execution driving future to be returned and awaited
     // alongside the worker IO operations
     let future = Box::pin(async move {
-        let query_res: QueryResult = conn.ws.recv::<SingleResult>().await?.into();
+        let query_res: QueryResult = ExaRecv::<SingleResult>::default()
+            .future(&mut conn.ws)
+            .await?
+            .into();
+
         match query_res {
             QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),

@@ -14,7 +14,6 @@ mod session_info;
 use std::fmt;
 
 pub use attributes::{Attributes, ExaAttributes};
-use bytes::Bytes;
 pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
 pub use fetch::DataChunk;
@@ -29,6 +28,7 @@ use serde::{
 };
 use serde_json::Value;
 pub use session_info::SessionInfo;
+use sqlx_core::bytes::Bytes;
 
 use self::columns::ExaColumns;
 use crate::{error::ExaProtocolError, ExaTypeInfo};

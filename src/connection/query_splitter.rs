@@ -1,29 +1,30 @@
-pub fn split_exasol_queries(input: &str) -> Vec<&str> {
+pub fn split_queries(input: &str) -> Vec<&str> {
     let mut chars = input.char_indices().peekable();
-    let mut state = State::InQuery;
+    let mut state = State::Query;
     let mut statements = Vec::new();
     let mut start = 0;
 
     while let Some((i, c)) = chars.next() {
         let peek = chars.peek().map(|(_, c)| c);
 
+        #[expect(clippy::match_same_arms, reason = "better readability if split")]
         match (state, c, peek) {
             // Line comment start
-            (State::InQuery, '-', Some('-')) => {
+            (State::Query, '-', Some('-')) => {
                 chars.next();
-                state = State::InLineComment;
+                state = State::LineComment;
             }
             // Block comment start
-            (State::InQuery, '/', Some('*')) => {
+            (State::Query, '/', Some('*')) => {
                 chars.next();
-                state = State::InBlockComment;
+                state = State::BlockComment;
             }
             // Double quote start
-            (State::InQuery, '"', _) => state = State::InDoubleQuote,
+            (State::Query, '"', _) => state = State::DoubleQuote,
             // Single quote start
-            (State::InQuery, '\'', _) => state = State::InSingleQuote,
+            (State::Query, '\'', _) => state = State::SingleQuote,
             // Statement end
-            (State::InQuery, ';', _) => {
+            (State::Query, ';', _) => {
                 let stmt = input[start..=i].trim();
                 if !stmt.is_empty() {
                     statements.push(stmt);
@@ -31,23 +32,23 @@ pub fn split_exasol_queries(input: &str) -> Vec<&str> {
                 start = i + 1;
             }
             // Skip escaped double quote
-            (State::InDoubleQuote, '"', Some('"')) => {
+            (State::DoubleQuote, '"', Some('"')) => {
                 chars.next();
             }
             // Skip escaped single quote
-            (State::InSingleQuote, '\'', Some('\'')) => {
+            (State::SingleQuote, '\'', Some('\'')) => {
                 chars.next();
             }
             // Double quote end
-            (State::InDoubleQuote, '"', _) => state = State::InQuery,
+            (State::DoubleQuote, '"', _) => state = State::Query,
             // Single quote end
-            (State::InSingleQuote, '\'', _) => state = State::InQuery,
+            (State::SingleQuote, '\'', _) => state = State::Query,
             // Line comment end
-            (State::InLineComment, '\n', _) => state = State::InQuery,
+            (State::LineComment, '\n', _) => state = State::Query,
             // Block comment end
-            (State::InBlockComment, '*', Some('/')) => {
+            (State::BlockComment, '*', Some('/')) => {
                 chars.next();
-                state = State::InQuery;
+                state = State::Query;
             }
             _ => (),
         }
@@ -64,9 +65,9 @@ pub fn split_exasol_queries(input: &str) -> Vec<&str> {
 
 #[derive(Clone, Copy)]
 enum State {
-    InQuery,
-    InLineComment,
-    InBlockComment,
-    InDoubleQuote,
-    InSingleQuote,
+    Query,
+    LineComment,
+    BlockComment,
+    DoubleQuote,
+    SingleQuote,
 }

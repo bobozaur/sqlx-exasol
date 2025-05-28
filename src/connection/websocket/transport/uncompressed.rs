@@ -3,8 +3,10 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use async_tungstenite::{tungstenite::Message, WebSocketStream};
-use bytes::Bytes;
+use async_tungstenite::{
+    tungstenite::{Bytes, Message},
+    WebSocketStream,
+};
 use futures_core::Stream;
 use futures_util::{io::BufReader, Sink, SinkExt, StreamExt, TryStreamExt};
 use rsa::RsaPublicKey;

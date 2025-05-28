@@ -285,7 +285,12 @@ impl_column_index_for_row!(ExaRow);
 impl_column_index_for_statement!(ExaStatement);
 
 // Look into connection/mod.rs tests
-// Look into Connection::should_flush and Connection::flush as well as Transaction::start_rollback ( do tests)
+// Look into Connection::should_flush and Connection::flush as well as
+// Transaction::start_rollback (do tests)
 // Look into the login flow
 // Added protocolVersion V4
-// look into cancel safety
+// look into cancel safety (just make begin, commit and rollback cancel safe)
+// flatten ExaConnection and ExaWebSocket
+// do Changelog
+// check version bump
+// make ExaCommand private
