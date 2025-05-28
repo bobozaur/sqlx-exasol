@@ -2,7 +2,6 @@ use std::{
     fmt::Debug,
     future::Future,
     marker::PhantomData,
-    net::IpAddr,
     pin::Pin,
     task::{ready, Context, Poll},
 };
@@ -18,8 +17,8 @@ use crate::{
     },
     error::ExaProtocolError,
     responses::{
-        DataChunk, DescribeStatement, ExaResult, Hosts, MultiResults, PreparedStatement,
-        QueryResult, SingleResult,
+        DataChunk, DescribeStatement, ExaResult, MultiResults, PreparedStatement, QueryResult,
+        SingleResult,
     },
     ExaArguments,
 };
@@ -516,13 +515,13 @@ impl<'a> WebSocketFuture for Describe<'a> {
 
 #[cfg(feature = "etl")]
 pub struct GetHosts {
-    host_ip: IpAddr,
-    future: Option<ExaTransport<Hosts>>,
+    host_ip: std::net::IpAddr,
+    future: Option<ExaTransport<crate::responses::Hosts>>,
 }
 
 #[cfg(feature = "etl")]
 impl GetHosts {
-    pub fn new(host_ip: IpAddr) -> Self {
+    pub fn new(host_ip: std::net::IpAddr) -> Self {
         Self {
             host_ip,
             future: None,
@@ -532,7 +531,7 @@ impl GetHosts {
 
 #[cfg(feature = "etl")]
 impl WebSocketFuture for GetHosts {
-    type Output = Hosts;
+    type Output = crate::responses::Hosts;
 
     fn poll_unpin(
         &mut self,
