@@ -43,18 +43,19 @@ impl MaybeCompressedWebSocket {
             MaybeCompressedWebSocket::Compressed(ws) => &mut ws.inner,
         };
 
-        SinkExt::send(ws, Message::Ping(Bytes::new()))
+        ws.send(Message::Ping(Bytes::new()))
             .await
-            .map_err(ToSqlxError::to_sqlx_err)?;
-        Ok(())
+            .map_err(ToSqlxError::to_sqlx_err)
     }
 
     pub fn socket_addr(&self) -> SocketAddr {
-        match self {
-            MaybeCompressedWebSocket::Plain(ws) => ws.0.get_ref().get_ref().sock_addr,
+        let ws = match self {
+            MaybeCompressedWebSocket::Plain(ws) => &ws.0,
             #[cfg(feature = "compression")]
-            MaybeCompressedWebSocket::Compressed(ws) => ws.inner.get_ref().get_ref().sock_addr,
-        }
+            MaybeCompressedWebSocket::Compressed(ws) => &ws.inner,
+        };
+
+        ws.get_ref().get_ref().sock_addr
     }
 }
 
