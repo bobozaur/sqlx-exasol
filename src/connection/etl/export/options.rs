@@ -5,7 +5,7 @@ use sqlx_core::Error as SqlxError;
 use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
+    etl::{build_etl, traits::EtlJob, EtlQuery, SocketFuture},
     ExaConnection,
 };
 
@@ -55,7 +55,7 @@ impl<'a> ExportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> Result<(JobFuture<'c>, Vec<ExaExport>), SqlxError>
+    ) -> Result<(EtlQuery<'c>, Vec<ExaExport>), SqlxError>
     where
         'c: 'a,
     {

@@ -1,28 +1,17 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::Deserialize;
 use sqlx_core::{column::Column, database::Database};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExaColumn {
     #[serde(skip)]
     pub(crate) ordinal: usize,
-    #[serde(deserialize_with = "ExaColumn::lowercase_name")]
     pub(crate) name: Arc<str>,
     pub(crate) data_type: ExaTypeInfo,
-}
-
-impl ExaColumn {
-    fn lowercase_name<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let name = Cow::<str>::deserialize(deserializer)?;
-        Ok(Arc::from(name.to_lowercase()))
-    }
 }
 
 impl Display for ExaColumn {

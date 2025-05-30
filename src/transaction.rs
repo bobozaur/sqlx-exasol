@@ -5,7 +5,7 @@ use futures_util::FutureExt;
 use sqlx_core::{transaction::TransactionManager, Error as SqlxError};
 
 use crate::{
-    connection::futures::{Commit, Rollback, SetAttributes, WebSocketFuture},
+    connection::futures::{Commit, Rollback, WebSocketFuture},
     database::Exasol,
     error::ExaProtocolError,
     ExaConnection,
@@ -22,14 +22,22 @@ impl TransactionManager for ExaTransactionManager {
         _: Option<Cow<'static, str>>,
     ) -> BoxFuture<'conn, Result<(), SqlxError>> {
         Box::pin(async {
-            let attributes = conn.attributes_mut();
             // Exasol does not have nested transactions.
-            if attributes.open_transaction() {
-                return Err(ExaProtocolError::TransactionAlreadyOpen)?;
+            if conn.attributes().open_transaction() {
+                // A pending rollback indicates that a transaction was dropped before an explicit
+                // rollback, which is why it's still open. If that's the case, then awaiting the
+                // rollback is sufficient to proceed.
+                match conn.ws.pending_rollback.take() {
+                    Some(rollback) => rollback.future(&mut conn.ws).await?,
+                    None => return Err(ExaProtocolError::TransactionAlreadyOpen)?,
+                }
             }
 
-            attributes.set_autocommit(false);
-            SetAttributes::default().future(&mut conn.ws).await
+            // The next time a request is sent, the transaction will be started.
+            // We could eagerly start it as well, but that implies one more
+            // round-trip to the server and back with no benefit.
+            conn.attributes_mut().set_autocommit(false);
+            Ok(())
         })
     }
 
@@ -42,12 +50,7 @@ impl TransactionManager for ExaTransactionManager {
     }
 
     fn start_rollback(conn: &mut ExaConnection) {
-        let attributes = conn.attributes_mut();
-
-        // We only need to rollback if a transaction is open.
-        if attributes.open_transaction() {
-            attributes.set_autocommit(true);
-        }
+        conn.ws.pending_rollback = Some(Rollback::default());
     }
 
     fn get_transaction_depth(conn: &ExaConnection) -> usize {

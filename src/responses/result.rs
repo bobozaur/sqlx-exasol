@@ -12,13 +12,7 @@ use crate::{column::ExaColumn, error::ExaProtocolError};
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MultiResults {
-    results: Vec<QueryResult>,
-}
-
-impl From<MultiResults> for Vec<QueryResult> {
-    fn from(value: MultiResults) -> Self {
-        value.results
-    }
+    pub results: Vec<QueryResult>,
 }
 
 /// The `results` field returned by Exasol after executing a query.
@@ -42,7 +36,8 @@ impl From<SingleResult> for QueryResult {
 
 /// Struct representing the result of a single query.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "resultType", rename_all = "camelCase")]
+#[serde(tag = "resultType")]
+#[serde(rename_all = "camelCase")]
 pub enum QueryResult {
     #[serde(rename_all = "camelCase")]
     ResultSet { result_set: ResultSet },

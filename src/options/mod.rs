@@ -1,18 +1,13 @@
 mod builder;
 mod error;
-mod login;
 mod protocol_version;
-mod serializable;
 mod ssl_mode;
 
-use std::{net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
 pub use builder::ExaConnectOptionsBuilder;
 use error::ExaConfigError;
-pub use login::{Login, LoginRef};
 pub use protocol_version::ProtocolVersion;
-use serde::Serialize;
-use serializable::SerializableConOpts;
 use sqlx_core::{
     connection::{ConnectOptions, LogSettings},
     net::tls::CertificateInput,
@@ -22,7 +17,10 @@ pub use ssl_mode::ExaSslMode;
 use tracing::log;
 use url::Url;
 
-use crate::connection::ExaConnection;
+use crate::{
+    connection::ExaConnection,
+    request::{ExaLoginRequest, LoginAttrs, LoginRef},
+};
 
 pub const URL_SCHEME: &str = "exa";
 
@@ -221,46 +219,51 @@ impl ConnectOptions for ExaConnectOptions {
     }
 }
 
-/// Serialization helper that borrows as much data as possible.
-/// This type cannot be [`Copy`] because of [`LoginRef`].
-//
-// We use a single set of connection options to create a connections pool,
-// yet each connection's password is encrypted individually with a
-// public key specific to that connection, so it will be different and is
-// stored as such.
-#[derive(Debug, Clone, Serialize)]
-#[serde(into = "SerializableConOpts<'_>")]
-pub struct ExaConnectOptionsRef<'a> {
-    pub login: LoginRef<'a>,
-    pub protocol_version: ProtocolVersion,
-    pub schema: Option<&'a str>,
-    pub fetch_size: usize,
-    pub query_timeout: u64,
-    pub compression: bool,
-    pub feedback_interval: u8,
-    pub statement_cache_capacity: NonZeroUsize,
-}
-
-impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
+impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
     fn from(value: &'a ExaConnectOptions) -> Self {
-        Self {
-            login: LoginRef::from(&value.login),
-            protocol_version: value.protocol_version,
-            schema: value.schema.as_deref(),
-            fetch_size: value.fetch_size,
+        let crate_version = option_env!("CARGO_PKG_VERSION").unwrap_or("UNKNOWN");
+
+        let attributes = LoginAttrs {
+            current_schema: value.schema.as_deref(),
             query_timeout: value.query_timeout,
-            compression: value.compression,
+            autocommit: true,
             feedback_interval: value.feedback_interval,
+        };
+
+        Self {
+            protocol_version: value.protocol_version,
+            fetch_size: value.fetch_size,
             statement_cache_capacity: value.statement_cache_capacity,
+            login: (&value.login).into(),
+            use_compression: value.compression,
+            client_name: "sqlx-exasol",
+            client_version: crate_version,
+            client_os: std::env::consts::OS,
+            client_runtime: "RUST",
+            attributes,
         }
     }
 }
 
-impl<'a> TryFrom<&'a ExaConnectOptionsRef<'a>> for String {
-    type Error = SqlxError;
+/// Enum representing the possible ways of authenticating a connection.
+/// The variant chosen dictates which login process is called.
+#[derive(Clone, Debug)]
+pub enum Login {
+    Credentials { username: String, password: String },
+    AccessToken { access_token: String },
+    RefreshToken { refresh_token: String },
+}
 
-    fn try_from(value: &'a ExaConnectOptionsRef<'a>) -> Result<Self, Self::Error> {
-        serde_json::to_string(value).map_err(|e| SqlxError::Protocol(e.to_string()))
+impl<'a> From<&'a Login> for LoginRef<'a> {
+    fn from(value: &'a Login) -> Self {
+        match value {
+            Login::Credentials { username, password } => LoginRef::Credentials {
+                username,
+                password: Cow::Borrowed(password),
+            },
+            Login::AccessToken { access_token } => LoginRef::AccessToken { access_token },
+            Login::RefreshToken { refresh_token } => LoginRef::RefreshToken { refresh_token },
+        }
     }
 }
 

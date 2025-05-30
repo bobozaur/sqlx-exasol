@@ -80,6 +80,7 @@ mod traits;
 
 use std::{
     fmt::Write as _,
+    future::Future,
     io::{Error as IoError, Result as IoResult},
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     pin::Pin,
@@ -90,7 +91,7 @@ use arrayvec::ArrayString;
 pub use export::{ExaExport, ExportBuilder, ExportSource};
 use futures_core::future::BoxFuture;
 use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::SinkExt;
+use futures_util::FutureExt;
 use hyper::rt;
 pub use import::{ExaImport, ImportBuilder, Trim};
 pub use row_separator::RowSeparator;
@@ -103,26 +104,53 @@ use self::{
 };
 use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
-    command::ExaCommand,
-    connection::futures::{ExaRecv, GetHosts, WebSocketFuture},
+    connection::futures::{ExaFuture, ExaRoundtrip, GetHosts, WebSocketFuture},
+    request::Execute,
     responses::{QueryResult, SingleResult},
-    ExaConnection, ExaQueryResult,
+    ExaConnection, ExaQueryResult, SqlxResult,
 };
 
 /// Special Exasol packet that enables tunneling.
 /// Exasol responds with an internal address that can be used in query.
 const SPECIAL_PACKET: [u8; 12] = [2, 33, 33, 2, 1, 0, 0, 0, 1, 0, 0, 0];
 
-/// Type of the future that executes the ETL job.
-type JobFuture<'a> = BoxFuture<'a, Result<ExaQueryResult, SqlxError>>;
 type SocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
+
+#[derive(Debug)]
+pub struct EtlQuery<'c>(ExaFuture<'c, ExecuteEtl>);
+
+impl<'c> Future for EtlQuery<'c> {
+    type Output = SqlxResult<ExaQueryResult>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.get_mut().0.poll_unpin(cx)
+    }
+}
+
+#[derive(Debug)]
+struct ExecuteEtl(ExaRoundtrip<Execute<'static>, SingleResult>);
+
+impl WebSocketFuture for ExecuteEtl {
+    type Output = ExaQueryResult;
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut super::websocket::ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        match QueryResult::from(ready!(self.0.poll_unpin(cx, ws))?) {
+            QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
+            QueryResult::RowCount { row_count } => Poll::Ready(Ok(ExaQueryResult::new(row_count))),
+        }
+    }
+}
 
 /// Builds an ETL job comprising of a [`JobFuture`], that drives the execution
 /// of the ETL query, and an array of workers that perform the IO.
 async fn build_etl<'a, 'c, T>(
     job: &'a T,
     conn: &'c mut ExaConnection,
-) -> Result<(JobFuture<'c>, Vec<T::Worker>), SqlxError>
+) -> Result<(EtlQuery<'c>, Vec<T::Worker>), SqlxError>
 where
     T: EtlJob,
     'c: 'a,
@@ -145,29 +173,15 @@ where
             .into_iter()
             .unzip();
 
-    // Construct and send query
+    // Query execution driving future to be returned and awaited
+    // alongside the worker IO operations
     let query = job.query(addrs, with_tls, with_compression);
-    let cmd = ExaCommand::new_execute(&query, &conn.ws.attributes).try_into()?;
-    conn.ws.send(cmd).await?;
+    let future = ExecuteEtl(ExaRoundtrip::new(Execute(query.into()))).future(&mut conn.ws);
 
     // Create the ETL workers
     let sockets = job.create_workers(futures, with_compression);
 
-    // Query execution driving future to be returned and awaited
-    // alongside the worker IO operations
-    let future = Box::pin(async move {
-        let query_res: QueryResult = ExaRecv::<SingleResult>::default()
-            .future(&mut conn.ws)
-            .await?
-            .into();
-
-        match query_res {
-            QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
-            QueryResult::RowCount { row_count } => Ok(ExaQueryResult::new(row_count)),
-        }
-    });
-
-    Ok((future, sockets))
+    Ok((EtlQuery(future), sockets))
 }
 
 /// Wrapper over [`_socket_spawners`] used to handle TLS/non-TLS reasoning.

@@ -5,7 +5,7 @@ use crate::{ExaColumn, ExaTypeInfo};
 
 /// A makeshift type representing the description of a statement.
 /// It is essentially a trimmed down version of a [`super::PreparedStatement`].
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(from = "DescribeStatementDe")]
 pub struct DescribeStatement {
     pub statement_handle: u16,

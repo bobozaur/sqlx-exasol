@@ -21,9 +21,12 @@ use sqlx_core::{logger::QueryLogger, Either, Error as SqlxError, HashMap};
 
 use crate::{
     column::ExaColumn,
-    connection::websocket::{
-        futures::{FetchChunk, WebSocketFuture},
-        ExaWebSocket,
+    connection::{
+        futures::CloseResultSets,
+        websocket::{
+            futures::{FetchChunk, WebSocketFuture},
+            ExaWebSocket,
+        },
     },
     query_result::ExaQueryResult,
     responses::{DataChunk, QueryResult, ResultSet, ResultSetOutput},
@@ -35,12 +38,10 @@ use crate::{
 ///
 /// This is the top of the hierarchy and the actual type used to stream rows
 /// from a [`ResultSet`].
-pub struct ResultStream<'a, F>
-where
-    F: WebSocketFuture<Output = MultiResultStream>,
-{
+pub struct ResultStream<'a, F> {
     ws: &'a mut ExaWebSocket,
     logger: QueryLogger<'a>,
+    result_set_handles: Vec<u16>,
     state: ResultStreamState<F>,
 }
 
@@ -52,6 +53,7 @@ where
         Self {
             ws,
             logger,
+            result_set_handles: Vec::new(),
             state: ResultStreamState::Initial(future),
         }
     }
@@ -70,11 +72,13 @@ where
         let this = self.get_mut();
 
         loop {
-            match this.state {
-                ResultStreamState::Initial(ref mut future) => {
-                    this.state = ResultStreamState::Stream(ready!(future.poll_unpin(cx, this.ws))?);
+            match &mut this.state {
+                ResultStreamState::Initial(future) => {
+                    let multi_stream = ready!(future.poll_unpin(cx, this.ws))?;
+                    this.result_set_handles = multi_stream.handles();
+                    this.state = ResultStreamState::Stream(multi_stream);
                 }
-                ResultStreamState::Stream(ref mut stream) => {
+                ResultStreamState::Stream(stream) => {
                     let Some(either) = ready!(stream.poll_next_unpin(cx, this.ws)).transpose()?
                     else {
                         return Poll::Ready(None);
@@ -92,12 +96,18 @@ where
     }
 }
 
+impl<'a, F> Drop for ResultStream<'a, F> {
+    fn drop(&mut self) {
+        let handles = std::mem::take(&mut self.result_set_handles);
+        if !handles.is_empty() {
+            self.ws.pending_close = Some(CloseResultSets::new(handles));
+        }
+    }
+}
+
 /// State used to distinguish between the initial query execution
 /// and the subsequent streaming of rows.
-enum ResultStreamState<F>
-where
-    F: WebSocketFuture<Output = MultiResultStream>,
-{
+enum ResultStreamState<F> {
     Initial(F),
     Stream(MultiResultStream),
 }
@@ -114,6 +124,26 @@ impl MultiResultStream {
             results_iter,
             stream,
         }
+    }
+
+    fn handles(&self) -> Vec<u16> {
+        let first_handle = match &self.stream {
+            QueryResultStream::RowStream(row_stream) => match &row_stream.chunk_stream {
+                ChunkStream::Multi(multi_chunk_stream) => Some(multi_chunk_stream.handle),
+                ChunkStream::Single(_) => None,
+            },
+            QueryResultStream::RowCount(_) => None,
+        };
+        let results_handles_iter = self
+            .results_iter
+            .as_slice()
+            .iter()
+            .filter_map(QueryResult::handle);
+
+        first_handle
+            .into_iter()
+            .chain(results_handles_iter)
+            .collect()
     }
 
     fn poll_next_unpin(

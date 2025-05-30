@@ -20,11 +20,11 @@ use transport::MaybeCompressedWebSocket;
 
 use crate::{
     connection::{
-        futures::{GetAttributes, Login, WebSocketFuture},
+        futures::{CloseResultSets, ExaLogin, GetAttributes, Rollback, WebSocketFuture},
         websocket::transport::PlainWebSocket,
     },
     error::ToSqlxError,
-    options::ExaConnectOptionsRef,
+    request::ExaLoginRequest,
     responses::{ExaAttributes, PreparedStatement, SessionInfo},
 };
 
@@ -34,8 +34,10 @@ use crate::{
 pub struct ExaWebSocket {
     pub inner: MaybeCompressedWebSocket,
     pub attributes: ExaAttributes,
-    pub last_rs_handle: Option<u16>,
+    pub pending_close: Option<CloseResultSets>,
+    pub pending_rollback: Option<Rollback>,
     pub statement_cache: LruCache<String, PreparedStatement>,
+    pub active_request: bool,
 }
 
 impl ExaWebSocket {
@@ -46,7 +48,7 @@ impl ExaWebSocket {
         host: &str,
         port: u16,
         socket: ExaSocket,
-        options: ExaConnectOptionsRef<'_>,
+        options: ExaLoginRequest<'_>,
         with_tls: bool,
     ) -> Result<(Self, SessionInfo), SqlxError> {
         let scheme = if with_tls {
@@ -62,7 +64,7 @@ impl ExaWebSocket {
             .map_err(ToSqlxError::to_sqlx_err)?;
 
         let attributes = ExaAttributes::new(
-            options.compression,
+            options.use_compression,
             options.fetch_size,
             with_tls,
             options.statement_cache_capacity,
@@ -73,16 +75,18 @@ impl ExaWebSocket {
         // Regardless of the compression choice, we always start uncompressed, login, then enable
         // compression, if necessary.
         let inner = MaybeCompressedWebSocket::Plain(PlainWebSocket(ws));
-        let use_compression = options.compression;
+        let use_compression = options.use_compression;
         let mut this = Self {
             inner,
             attributes,
-            last_rs_handle: None,
+            pending_close: None,
+            pending_rollback: None,
             statement_cache,
+            active_request: false,
         };
 
         // Login is always uncompressed!
-        let session_info = Login::new(options).future(&mut this).await?;
+        let session_info = ExaLogin::new(options).future(&mut this).await?;
 
         // Use compression if indicated to do so and it's enabled through the feature flagged.
         this.inner = this.inner.maybe_compress(use_compression);

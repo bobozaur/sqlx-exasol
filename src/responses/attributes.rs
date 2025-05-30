@@ -18,10 +18,10 @@ pub struct ExaAttributes {
     // ############# Database read-write attributes #############
     // ##########################################################
     autocommit: bool,
-    // The API doesn't having no schema open through this attribute,
-    // hence the serialization skip.
+    // Setting no open schema through this attribute is not supported, hence the serialization
+    // skip.
     //
-    // It is possible to change it through the attribute though.
+    // It is possible to change the open schema through the attribute, though.
     #[serde(skip_serializing_if = "Option::is_none")]
     current_schema: Option<String>,
     feedback_interval: u64,
@@ -57,6 +57,8 @@ pub struct ExaAttributes {
     encryption_enabled: bool,
     #[serde(skip_serializing)]
     statement_cache_capacity: NonZeroUsize,
+    #[serde(skip_serializing)]
+    needs_send: bool,
 }
 
 impl ExaAttributes {
@@ -66,6 +68,7 @@ impl ExaAttributes {
         encryption_enabled: bool,
         statement_cache_capacity: NonZeroUsize,
     ) -> Self {
+        // NOTE: This sets sensible defaults that get overwritten on login anyway.
         Self {
             autocommit: true,
             current_schema: None,
@@ -85,16 +88,12 @@ impl ExaAttributes {
             fetch_size,
             encryption_enabled,
             statement_cache_capacity,
+            needs_send: false,
         }
     }
     #[must_use]
     pub fn autocommit(&self) -> bool {
         self.autocommit
-    }
-
-    pub fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
-        self.autocommit = autocommit;
-        self
     }
 
     #[must_use]
@@ -108,6 +107,7 @@ impl ExaAttributes {
     /// An explicit `CLOSE SCHEMA;` statement would have to be executed
     /// to accomplish the `no open schema` behavior.
     pub fn set_current_schema(&mut self, schema: String) -> &mut Self {
+        self.needs_send = true;
         self.current_schema = Some(schema);
         self
     }
@@ -118,6 +118,7 @@ impl ExaAttributes {
     }
 
     pub fn set_feedback_interval(&mut self, feedback_interval: u64) -> &mut Self {
+        self.needs_send = true;
         self.feedback_interval = feedback_interval;
         self
     }
@@ -128,6 +129,7 @@ impl ExaAttributes {
     }
 
     pub fn set_numeric_characters(&mut self, numeric_characters: String) -> &mut Self {
+        self.needs_send = true;
         self.numeric_characters = numeric_characters;
         self
     }
@@ -139,6 +141,7 @@ impl ExaAttributes {
 
     #[must_use]
     pub fn set_query_timeout(&mut self, query_timeout: u64) -> &mut Self {
+        self.needs_send = true;
         self.query_timeout = query_timeout;
         self
     }
@@ -149,6 +152,7 @@ impl ExaAttributes {
     }
 
     pub fn set_snapshot_transactions_enabled(&mut self, enabled: bool) -> &mut Self {
+        self.needs_send = true;
         self.snapshot_transactions_enabled = enabled;
         self
     }
@@ -159,6 +163,7 @@ impl ExaAttributes {
     }
 
     pub fn set_timestamp_utc_enabled(&mut self, enabled: bool) -> &mut Self {
+        self.needs_send = true;
         self.timestamp_utc_enabled = enabled;
         self
     }
@@ -221,6 +226,22 @@ impl ExaAttributes {
     #[must_use]
     pub fn statement_cache_capacity(&self) -> NonZeroUsize {
         self.statement_cache_capacity
+    }
+
+    pub(crate) fn needs_send(&self) -> bool {
+        self.needs_send
+    }
+
+    pub(crate) fn set_needs_send(&mut self, flag: bool) -> &mut Self {
+        self.needs_send = flag;
+        self
+    }
+
+    pub(crate) fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
+        self.needs_send = true;
+        self.autocommit = autocommit;
+        self.open_transaction = !autocommit;
+        self
     }
 
     pub(crate) fn update(&mut self, other: Attributes) {
@@ -293,7 +314,8 @@ pub struct Attributes {
 }
 
 impl Attributes {
-    /// For some reason Exasol returns this as a number, although it's listed as bool.
+    /// Helper function because for some reason Exasol returns this as a number, although it's
+    /// listed as bool.
     fn deserialize_open_transaction<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
     where
         D: Deserializer<'de>,
@@ -311,7 +333,7 @@ impl Attributes {
         }
     }
 
-    /// Exasol returns an empty string if no schema was selected.
+    /// Helper function because Exasol returns an empty string if no schema was selected.
     fn deserialize_current_schema<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
     where
         D: Deserializer<'de>,

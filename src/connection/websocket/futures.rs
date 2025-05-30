@@ -6,31 +6,37 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use async_tungstenite::tungstenite::protocol::CloseFrame;
 use futures_util::{SinkExt, StreamExt};
-use rsa::RsaPublicKey;
-use serde::de::{DeserializeOwned, IgnoredAny};
+use serde::{
+    de::{DeserializeOwned, IgnoredAny},
+    Serialize,
+};
 use sqlx_core::Error as SqlxError;
 
 use crate::{
-    command::ExaCommand,
     connection::{
         query_splitter::split_queries, stream::MultiResultStream, websocket::ExaWebSocket,
     },
     error::ExaProtocolError,
-    options::{ExaConnectOptionsRef, LoginRef},
+    request::{
+        self, ClosePreparedStmt, CreatePreparedStmt, ExaLoginRequest, ExecutePreparedStmt, Fetch,
+        LoginCreds, LoginRef, LoginToken, WithAttributes,
+    },
     responses::{
         DataChunk, DescribeStatement, ExaResult, MultiResults, PreparedStatement, PublicKey,
-        QueryResult, SingleResult,
+        SingleResult,
     },
-    ExaArguments, ProtocolVersion, SessionInfo,
+    ExaArguments, SessionInfo,
 };
 
 /// Adapter that wraps a type implementing [`WebSocketFuture`] to
 /// allow interacting with it through a regular [`Future`].
 ///
 /// Gets constructed with [`WebSocketFuture::future`].
+#[derive(Debug)]
 pub struct ExaFuture<'a, T> {
-    inner: &'a mut T,
+    inner: T,
     ws: &'a mut ExaWebSocket,
 }
 
@@ -55,7 +61,7 @@ pub trait WebSocketFuture: Unpin + Sized {
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>>;
 
-    fn future<'a>(&'a mut self, ws: &'a mut ExaWebSocket) -> ExaFuture<'a, Self> {
+    fn future(self, ws: &mut ExaWebSocket) -> ExaFuture<'_, Self> {
         ExaFuture { inner: self, ws }
     }
 }
@@ -99,19 +105,19 @@ impl<'a> WebSocketFuture for ExecutePrepared<'a> {
                     }
 
                     let buf = std::mem::take(&mut self.arguments.buf);
-                    let command = ExaCommand::new_execute_prepared(
+                    let command = ExecutePreparedStmt::new(
                         prepared.statement_handle,
-                        &prepared.parameters,
+                        prepared.parameters.clone(),
                         buf,
-                        &ws.attributes,
                     );
 
-                    let future = GetQueryResults::new(command.try_into()?);
+                    let future = ExaRoundtrip::new(command);
                     self.state = ExecutePreparedState::ExecutePrepared(future);
                 }
                 ExecutePreparedState::ExecutePrepared(future) => {
                     return future
                         .poll_unpin(cx, ws)
+                        .map_ok(From::from)
                         .map_ok(|qr| MultiResultStream::new(qr, Vec::new().into_iter()));
                 }
             }
@@ -121,21 +127,15 @@ impl<'a> WebSocketFuture for ExecutePrepared<'a> {
 
 enum ExecutePreparedState<'a> {
     GetOrPrepare(GetOrPrepare<'a>),
-    ExecutePrepared(GetQueryResults<SingleResult, QueryResult>),
+    ExecutePrepared(ExaRoundtrip<ExecutePreparedStmt, SingleResult>),
 }
 
-/// TODO: Document the states here
-pub struct ExecuteBatch<'a> {
-    sql_texts: Vec<&'a str>,
-    future: Option<GetQueryResults<MultiResults, Vec<QueryResult>>>,
-}
+pub struct ExecuteBatch<'a>(ExaRoundtrip<request::ExecuteBatch<'a>, MultiResults>);
 
 impl<'a> ExecuteBatch<'a> {
     pub fn new(sql: &'a str) -> Self {
-        Self {
-            sql_texts: split_queries(sql),
-            future: None,
-        }
+        let request = request::ExecuteBatch(split_queries(sql));
+        Self(ExaRoundtrip::new(request))
     }
 }
 
@@ -147,36 +147,22 @@ impl<'a> WebSocketFuture for ExecuteBatch<'a> {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            match &mut self.future {
-                None => {
-                    let command = ExaCommand::new_execute_batch(&self.sql_texts, &ws.attributes)
-                        .try_into()?;
-                    let future = GetQueryResults::new(command);
-                    self.future = Some(future);
-                }
-                Some(future) => {
-                    let mut results_iter = ready!(future.poll_unpin(cx, ws))?.into_iter();
+        let multi_result = ready!(self.0.poll_unpin(cx, ws))?;
+        let mut results_iter = multi_result.results.into_iter();
 
-                    let Some(first_result) = results_iter.next() else {
-                        return Err(ExaProtocolError::NoResponse)?;
-                    };
+        let Some(first_result) = results_iter.next() else {
+            return Err(ExaProtocolError::NoResponse)?;
+        };
 
-                    return Poll::Ready(Ok(MultiResultStream::new(first_result, results_iter)));
-                }
-            }
-        }
+        Poll::Ready(Ok(MultiResultStream::new(first_result, results_iter)))
     }
 }
 
-pub struct Execute<'a> {
-    sql: &'a str,
-    future: Option<GetQueryResults<SingleResult, QueryResult>>,
-}
+pub struct Execute<'a>(ExaRoundtrip<request::Execute<'a>, SingleResult>);
 
 impl<'a> Execute<'a> {
     pub fn new(sql: &'a str) -> Self {
-        Self { sql, future: None }
+        Self(ExaRoundtrip::new(request::Execute(sql.into())))
     }
 }
 
@@ -188,20 +174,10 @@ impl<'a> WebSocketFuture for Execute<'a> {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            match &mut self.future {
-                None => {
-                    let command = ExaCommand::new_execute(self.sql, &ws.attributes).try_into()?;
-                    let future = GetQueryResults::new(command);
-                    self.future = Some(future);
-                }
-                Some(future) => {
-                    return future
-                        .poll_unpin(cx, ws)
-                        .map_ok(|qr| MultiResultStream::new(qr, Vec::new().into_iter()))
-                }
-            }
-        }
+        self.0
+            .poll_unpin(cx, ws)
+            .map_ok(From::from)
+            .map_ok(|qr| MultiResultStream::new(qr, Vec::new().into_iter()))
     }
 }
 
@@ -276,92 +252,12 @@ enum GetOrPrepareState<'a> {
     ClosePrepared(ClosePrepared),
 }
 
-struct GetQueryResults<T, U> {
-    state: GetQueryResultsState<T>,
-    command: String,
-    _marker: PhantomData<fn() -> U>,
-}
-
-impl<T, U> GetQueryResults<T, U> {
-    fn new(command: String) -> Self {
-        let state = GetQueryResultsState::CheckLastResultSet;
-
-        Self {
-            state,
-            command,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T, U> WebSocketFuture for GetQueryResults<T, U>
-where
-    U: From<T>,
-    ExaTransport<T>: WebSocketFuture<Output = T>,
-{
-    type Output = U;
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            match &mut self.state {
-                GetQueryResultsState::CheckLastResultSet => {
-                    self.state = match ws.last_rs_handle {
-                        Some(handle) => {
-                            GetQueryResultsState::CloseResultSet(CloseResultSet::new(handle))
-                        }
-                        None => GetQueryResultsState::BuildFuture,
-                    };
-                }
-                GetQueryResultsState::CloseResultSet(future) => {
-                    let res = future.poll_unpin(cx, ws);
-
-                    // Unregister the last result set handle once we know it got closed.
-                    if future.has_sent() {
-                        ws.last_rs_handle = None;
-                    }
-
-                    ready!(res)?;
-                    self.state = GetQueryResultsState::BuildFuture;
-                }
-                GetQueryResultsState::BuildFuture => {
-                    let command = std::mem::take(&mut self.command);
-                    let future = ExaTransport::from_command(command);
-                    self.state = GetQueryResultsState::GetQueryResult(future);
-                }
-                GetQueryResultsState::GetQueryResult(future) => {
-                    return future.poll_unpin(cx, ws).map_ok(From::from);
-                }
-            }
-        }
-    }
-}
-
-enum GetQueryResultsState<T> {
-    CheckLastResultSet,
-    CloseResultSet(CloseResultSet),
-    BuildFuture,
-    GetQueryResult(ExaTransport<T>),
-}
-
-pub struct FetchChunk {
-    handle: u16,
-    pos: usize,
-    num_bytes: usize,
-    future: Option<ExaTransport<DataChunk>>,
-}
+#[derive(Debug)]
+pub struct FetchChunk(ExaRoundtrip<Fetch, DataChunk>);
 
 impl FetchChunk {
     pub fn new(handle: u16, pos: usize, num_bytes: usize) -> Self {
-        Self {
-            handle,
-            pos,
-            num_bytes,
-            future: None,
-        }
+        Self(ExaRoundtrip::new(Fetch::new(handle, pos, num_bytes)))
     }
 }
 
@@ -373,126 +269,20 @@ impl WebSocketFuture for FetchChunk {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws);
-            }
-
-            let command = ExaCommand::new_fetch(self.handle, self.pos, self.num_bytes);
-            self.future = Some(ExaTransport::from_command(command.try_into()?));
-        }
+        self.0.poll_unpin(cx, ws)
     }
 }
 
-pub struct CloseResultSet {
-    handle: u16,
-    future: Option<ExaTransport<Option<IgnoredAny>>>,
+#[derive(Debug)]
+pub enum Describe<'a> {
+    CreatePrepared(ExaRoundtrip<CreatePreparedStmt<'a>, DescribeStatement>),
+    ClosePrepared(ClosePrepared, DescribeStatement),
+    Finished,
 }
 
-impl CloseResultSet {
-    pub fn new(handle: u16) -> Self {
-        Self {
-            handle,
-            future: None,
-        }
-    }
-
-    fn has_sent(&self) -> bool {
-        self.future.as_ref().is_some_and(ExaTransport::has_sent)
-    }
-}
-
-impl WebSocketFuture for CloseResultSet {
-    type Output = ();
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(|_| ());
-            }
-
-            let command = ExaCommand::new_close_result(self.handle).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
-    }
-}
-
-pub struct CreatePrepared<'a> {
-    sql: &'a str,
-    future: Option<ExaTransport<PreparedStatement>>,
-}
-
-impl<'a> CreatePrepared<'a> {
-    pub fn new(sql: &'a str) -> Self {
-        Self { sql, future: None }
-    }
-}
-
-impl<'a> WebSocketFuture for CreatePrepared<'a> {
-    type Output = PreparedStatement;
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws);
-            }
-
-            let command = ExaCommand::new_create_prepared(self.sql).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
-    }
-}
-
-pub struct ClosePrepared {
-    handle: u16,
-    future: Option<ExaTransport<Option<IgnoredAny>>>,
-}
-
-impl ClosePrepared {
-    pub fn new(handle: u16) -> Self {
-        Self {
-            handle,
-            future: None,
-        }
-    }
-}
-
-impl WebSocketFuture for ClosePrepared {
-    type Output = ();
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(|_| ());
-            }
-
-            let command = ExaCommand::new_close_prepared(self.handle).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
-    }
-}
-
-pub struct Describe<'a> {
-    sql: &'a str,
-    future: Option<ExaTransport<DescribeStatement>>,
-}
-
-/// Use prepare & close prepared in the state machine
 impl<'a> Describe<'a> {
     pub fn new(sql: &'a str) -> Self {
-        Self { sql, future: None }
+        Self::CreatePrepared(ExaRoundtrip::new(CreatePreparedStmt(sql)))
     }
 }
 
@@ -505,29 +295,95 @@ impl<'a> WebSocketFuture for Describe<'a> {
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
         loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws);
+            match self {
+                Self::CreatePrepared(future) => {
+                    let describe = ready!(future.poll_unpin(cx, ws))?;
+                    let future = ClosePrepared::new(describe.statement_handle);
+                    *self = Self::ClosePrepared(future, describe);
+                }
+                Self::ClosePrepared(future, describe) => {
+                    ready!(future.poll_unpin(cx, ws))?;
+                    let describe = std::mem::take(describe);
+                    *self = Self::Finished;
+                    return Poll::Ready(Ok(describe));
+                }
+                Self::Finished => return Poll::Pending,
             }
-
-            let command = ExaCommand::new_create_prepared(self.sql).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
         }
     }
 }
 
-#[cfg(feature = "etl")]
-pub struct GetHosts {
-    host_ip: std::net::IpAddr,
-    future: Option<ExaTransport<crate::responses::Hosts>>,
+#[derive(Debug)]
+pub struct CreatePrepared<'a>(ExaRoundtrip<CreatePreparedStmt<'a>, PreparedStatement>);
+
+impl<'a> CreatePrepared<'a> {
+    pub fn new(sql: &'a str) -> Self {
+        Self(ExaRoundtrip::new(CreatePreparedStmt(sql)))
+    }
 }
+
+impl<'a> WebSocketFuture for CreatePrepared<'a> {
+    type Output = PreparedStatement;
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        self.0.poll_unpin(cx, ws)
+    }
+}
+
+#[derive(Debug)]
+pub struct ClosePrepared(ExaRoundtrip<ClosePreparedStmt, Option<IgnoredAny>>);
+
+impl ClosePrepared {
+    pub fn new(handle: u16) -> Self {
+        Self(ExaRoundtrip::new(ClosePreparedStmt(handle)))
+    }
+}
+
+impl WebSocketFuture for ClosePrepared {
+    type Output = ();
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        self.0.poll_unpin(cx, ws).map_ok(|_| ())
+    }
+}
+
+#[derive(Debug)]
+pub struct CloseResultSets(ExaRoundtrip<request::CloseResultSets, Option<IgnoredAny>>);
+
+impl CloseResultSets {
+    pub fn new(handles: Vec<u16>) -> Self {
+        Self(ExaRoundtrip::new(request::CloseResultSets(handles)))
+    }
+}
+
+impl WebSocketFuture for CloseResultSets {
+    type Output = ();
+
+    fn poll_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+        ws: &mut ExaWebSocket,
+    ) -> Poll<Result<Self::Output, SqlxError>> {
+        self.0.poll_unpin(cx, ws).map_ok(|_| ())
+    }
+}
+
+#[cfg(feature = "etl")]
+#[derive(Debug)]
+pub struct GetHosts(ExaRoundtrip<request::GetHosts, crate::responses::Hosts>);
 
 #[cfg(feature = "etl")]
 impl GetHosts {
     pub fn new(host_ip: std::net::IpAddr) -> Self {
-        Self {
-            host_ip,
-            future: None,
-        }
+        Self(ExaRoundtrip::new(request::GetHosts(host_ip)))
     }
 }
 
@@ -540,19 +396,12 @@ impl WebSocketFuture for GetHosts {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws);
-            }
-
-            let command = ExaCommand::new_get_hosts(self.host_ip).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
+        self.0.poll_unpin(cx, ws)
     }
 }
 
-#[derive(Default)]
-pub struct SetAttributes(Option<ExaTransport<Option<IgnoredAny>>>);
+#[derive(Debug, Default)]
+pub struct SetAttributes(ExaRoundtrip<request::SetAttributes, Option<IgnoredAny>>);
 
 impl WebSocketFuture for SetAttributes {
     type Output = ();
@@ -562,19 +411,12 @@ impl WebSocketFuture for SetAttributes {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.0.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(|_| ());
-            }
-
-            let command = ExaCommand::new_set_attributes(&ws.attributes).try_into()?;
-            self.0 = Some(ExaTransport::from_command(command));
-        }
+        self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
 
-#[derive(Default)]
-pub struct GetAttributes(Option<ExaTransport<Option<IgnoredAny>>>);
+#[derive(Debug, Default)]
+pub struct GetAttributes(ExaRoundtrip<request::GetAttributes, Option<IgnoredAny>>);
 
 impl WebSocketFuture for GetAttributes {
     type Output = ();
@@ -584,19 +426,18 @@ impl WebSocketFuture for GetAttributes {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.0.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(|_| ());
-            }
-
-            let command = ExaCommand::GetAttributes.try_into()?;
-            self.0 = Some(ExaTransport::from_command(command));
-        }
+        self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
 
-#[derive(Default)]
-pub struct Commit(Option<ExaTransport<Option<IgnoredAny>>>);
+#[derive(Debug)]
+pub struct Commit(ExaRoundtrip<request::Execute<'static>, Option<IgnoredAny>>);
+
+impl Default for Commit {
+    fn default() -> Self {
+        Self(ExaRoundtrip::new(request::Execute("COMMIT;".into())))
+    }
+}
 
 impl WebSocketFuture for Commit {
     type Output = ();
@@ -606,28 +447,27 @@ impl WebSocketFuture for Commit {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.0.as_mut() {
-                let res = future.poll_unpin(cx, ws).map_ok(|_| ());
+        let res = self.0.poll_unpin(cx, ws).map_ok(|_| ());
 
-                // We explicitly set the attribute after we know the rollback was sent.
-                // Receiving the response is not needed for the rollback to take place
-                // on the database side.
-                if future.has_sent() {
-                    ws.attributes.set_autocommit(true);
-                }
-
-                return res;
-            }
-
-            let command = ExaCommand::new_execute("COMMIT;", &ws.attributes).try_into()?;
-            self.0 = Some(ExaTransport::from_command(command));
+        // We explicitly set the attribute after we know the commit was sent.
+        // Receiving the response is not needed for the commit to take place
+        // on the database side.
+        if self.0.has_sent() {
+            ws.attributes.set_autocommit(true);
         }
+
+        res
     }
 }
 
-#[derive(Default)]
-pub struct Rollback(Option<ExaTransport<Option<IgnoredAny>>>);
+#[derive(Debug)]
+pub struct Rollback(ExaRoundtrip<request::Execute<'static>, Option<IgnoredAny>>);
+
+impl Default for Rollback {
+    fn default() -> Self {
+        Self(ExaRoundtrip::new(request::Execute("ROLLBACK;".into())))
+    }
+}
 
 impl WebSocketFuture for Rollback {
     type Output = ();
@@ -637,28 +477,21 @@ impl WebSocketFuture for Rollback {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.0.as_mut() {
-                let res = future.poll_unpin(cx, ws).map_ok(|_| ());
+        let res = self.0.poll_unpin(cx, ws).map_ok(|_| ());
 
-                // We explicitly set the attribute after we know the rollback was sent.
-                // Receiving the response is not needed for the rollback to take place
-                // on the database side.
-                if future.has_sent() {
-                    ws.attributes.set_autocommit(true);
-                }
-
-                return res;
-            }
-
-            let command = ExaCommand::new_execute("ROLLBACK;", &ws.attributes).try_into()?;
-            self.0 = Some(ExaTransport::from_command(command));
+        // We explicitly set the attribute after we know the rollback was sent.
+        // Receiving the response is not needed for the rollback to take place
+        // on the database side.
+        if self.0.has_sent() {
+            ws.attributes.set_autocommit(true);
         }
+
+        res
     }
 }
 
 #[derive(Default)]
-pub struct Disconnect(Option<ExaTransport<Option<IgnoredAny>>>);
+pub struct Disconnect(ExaRoundtrip<request::Disconnect, Option<IgnoredAny>>);
 
 impl WebSocketFuture for Disconnect {
     type Output = ();
@@ -668,14 +501,7 @@ impl WebSocketFuture for Disconnect {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.0.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(|_| ());
-            }
-
-            let command = ExaCommand::Disconnect.try_into()?;
-            self.0 = Some(ExaTransport::from_command(command));
-        }
+        self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
 
@@ -684,20 +510,21 @@ impl WebSocketFuture for Disconnect {
 /// finishing the login by sending the connection options.
 ///
 /// It is ALWAYS uncompressed.
-pub struct Login<'a> {
-    // TODO: FIXME!!!!
-    opts: Option<ExaConnectOptionsRef<'a>>,
+pub struct ExaLogin<'a> {
+    opts: Option<ExaLoginRequest<'a>>,
     state: LoginState<'a>,
 }
 
-impl<'a> Login<'a> {
-    pub fn new(opts: ExaConnectOptionsRef<'a>) -> Self {
+impl<'a> ExaLogin<'a> {
+    pub fn new(opts: ExaLoginRequest<'a>) -> Self {
         let state = match opts.login {
             LoginRef::Credentials { .. } => {
-                LoginState::Credentials(LoginCredentials::new(opts.protocol_version))
+                let command = LoginCreds(opts.protocol_version);
+                LoginState::Credentials(ExaRoundtrip::new(command))
             }
             LoginRef::AccessToken { .. } | LoginRef::RefreshToken { .. } => {
-                LoginState::Token(LoginToken::new(opts.protocol_version))
+                let command = LoginToken(opts.protocol_version);
+                LoginState::Token(ExaRoundtrip::new(command))
             }
         };
 
@@ -708,7 +535,7 @@ impl<'a> Login<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for Login<'a> {
+impl WebSocketFuture for ExaLogin<'_> {
     type Output = SessionInfo;
 
     fn poll_unpin(
@@ -720,15 +547,14 @@ impl<'a> WebSocketFuture for Login<'a> {
             match &mut self.state {
                 LoginState::Token(future) => {
                     ready!(future.poll_unpin(cx, ws))?;
-                    let future = CompleteLogin::new(self.opts.take().unwrap());
-                    self.state = LoginState::Complete(future);
+                    let command = self.opts.take().unwrap();
+                    self.state = LoginState::Complete(ExaRoundtrip::new(command));
                 }
                 LoginState::Credentials(future) => {
-                    let public_key = ready!(future.poll_unpin(cx, ws))?;
-                    let mut opts = self.opts.take().unwrap();
-                    opts.login.encrypt_password(&public_key)?;
-                    let future = CompleteLogin::new(opts);
-                    self.state = LoginState::Complete(future);
+                    let public_key = ready!(future.poll_unpin(cx, ws))?.into();
+                    let mut command = self.opts.take().unwrap();
+                    command.encrypt_password(&public_key)?;
+                    self.state = LoginState::Complete(ExaRoundtrip::new(command));
                 }
                 LoginState::Complete(future) => return future.poll_unpin(cx, ws),
             }
@@ -737,130 +563,49 @@ impl<'a> WebSocketFuture for Login<'a> {
 }
 
 enum LoginState<'a> {
-    Token(LoginToken),
-    Credentials(LoginCredentials),
-    Complete(CompleteLogin<'a>),
-}
-
-pub struct CompleteLogin<'a> {
-    opts: ExaConnectOptionsRef<'a>,
-    future: Option<ExaTransport<SessionInfo>>,
-}
-
-impl<'a> CompleteLogin<'a> {
-    pub fn new(opts: ExaConnectOptionsRef<'a>) -> Self {
-        Self { opts, future: None }
-    }
-}
-
-impl<'a> WebSocketFuture for CompleteLogin<'a> {
-    type Output = SessionInfo;
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws);
-            }
-
-            let command = (&self.opts).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
-    }
-}
-
-pub struct LoginToken {
-    protocol_version: ProtocolVersion,
-    future: Option<ExaTransport<Option<IgnoredAny>>>,
-}
-
-impl LoginToken {
-    pub fn new(protocol_version: ProtocolVersion) -> Self {
-        Self {
-            protocol_version,
-            future: None,
-        }
-    }
-}
-
-impl WebSocketFuture for LoginToken {
-    type Output = ();
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(|_| ());
-            }
-
-            let command = ExaCommand::new_login_token(self.protocol_version).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
-    }
-}
-
-pub struct LoginCredentials {
-    protocol_version: ProtocolVersion,
-    future: Option<ExaTransport<PublicKey>>,
-}
-
-impl LoginCredentials {
-    pub fn new(protocol_version: ProtocolVersion) -> Self {
-        Self {
-            protocol_version,
-            future: None,
-        }
-    }
-}
-
-impl WebSocketFuture for LoginCredentials {
-    type Output = RsaPublicKey;
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            if let Some(future) = self.future.as_mut() {
-                return future.poll_unpin(cx, ws).map_ok(From::from);
-            }
-
-            let command = ExaCommand::new_login(self.protocol_version).try_into()?;
-            self.future = Some(ExaTransport::from_command(command));
-        }
-    }
+    Token(ExaRoundtrip<LoginToken, Option<IgnoredAny>>),
+    Credentials(ExaRoundtrip<LoginCreds, PublicKey>),
+    Complete(ExaRoundtrip<ExaLoginRequest<'a>, SessionInfo>),
 }
 
 #[derive(Debug)]
-enum ExaTransport<T> {
-    Sending(ExaSend),
-    Receiving(ExaRecv<T>),
+pub enum ExaRoundtrip<REQ, OUT> {
+    Waiting(REQ),
+    Flushing,
+    Receiving(PhantomData<fn() -> OUT>),
     Finished,
 }
 
-impl<T> ExaTransport<T> {
-    fn from_command(command: String) -> Self {
-        Self::Sending(ExaSend::new(command))
+impl<REQ, OUT> ExaRoundtrip<REQ, OUT> {
+    pub fn new(request: REQ) -> Self {
+        Self::Waiting(request)
     }
 
     fn has_sent(&self) -> bool {
-        !matches!(self, ExaTransport::Sending(_))
+        match self {
+            Self::Waiting(_) | Self::Flushing => false,
+            Self::Receiving(_) | Self::Finished => true,
+        }
     }
 }
 
-impl<T> WebSocketFuture for ExaTransport<T>
+impl<REQ, OUT> Default for ExaRoundtrip<REQ, OUT>
 where
-    T: Debug,
-    ExaResult<T>: DeserializeOwned,
+    REQ: Default,
 {
-    type Output = T;
+    fn default() -> Self {
+        Self::new(REQ::default())
+    }
+}
+
+impl<REQ, OUT> WebSocketFuture for ExaRoundtrip<REQ, OUT>
+where
+    REQ: Unpin,
+    for<'a> WithAttributes<'a, REQ>: Serialize,
+    OUT: Debug,
+    ExaResult<OUT>: DeserializeOwned,
+{
+    type Output = OUT;
 
     fn poll_unpin(
         &mut self,
@@ -869,106 +614,76 @@ where
     ) -> Poll<Result<Self::Output, SqlxError>> {
         loop {
             match self {
-                ExaTransport::Sending(f) => {
-                    ready!(f.poll_unpin(cx, ws))?;
-                    *self = Self::Receiving(ExaRecv::default());
-                }
+                Self::Waiting(request) => {
+                    // Check if we need to rollback a transaction.
+                    // We need to take the future out of the websocket for ownership reasons.
+                    if let Some(mut future) = ws.pending_rollback.take() {
+                        // If the rollback is not over yet, we register the future back.
+                        if future.poll_unpin(cx, ws)?.is_pending() {
+                            ws.pending_rollback = Some(future);
+                            return Poll::Pending;
+                        }
+                    }
 
-                ExaTransport::Receiving(f) => {
-                    let out = ready!(f.poll_unpin(cx, ws))?;
-                    *self = ExaTransport::Finished;
+                    // Check if we need to close some open result sets.
+                    // We need to take the future out of the websocket for ownership reasons.
+                    if let Some(mut future) = ws.pending_close.take() {
+                        // If closing the result sets is not over yet, we register the future back.
+                        if future.poll_unpin(cx, ws)?.is_pending() {
+                            ws.pending_close = Some(future);
+                            return Poll::Pending;
+                        }
+                    }
+
+                    if ws.active_request {
+                        ready!(ws.poll_flush_unpin(cx))?;
+                        ready!(ws.poll_next_unpin(cx)).transpose()?;
+                        ws.active_request = false;
+                    }
+
+                    ready!(ws.poll_ready_unpin(cx))?;
+                    let with_attrs = WithAttributes::new(request, &ws.attributes);
+                    let request = serde_json::to_string(&with_attrs)
+                        .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+
+                    tracing::trace!("sending request:\n{request}");
+                    ws.start_send_unpin(request)?;
+                    ws.attributes.set_needs_send(false);
+                    ws.active_request = true;
+
+                    *self = Self::Flushing;
+                }
+                Self::Flushing => {
+                    ready!(ws.poll_flush_unpin(cx))?;
+                    *self = Self::Receiving(PhantomData);
+                }
+                Self::Receiving(_) => {
+                    let Some(bytes) = ready!(ws.poll_next_unpin(cx)).transpose()? else {
+                        return Err(ExaProtocolError::from(None::<CloseFrame>))?;
+                    };
+
+                    ws.active_request = false;
+
+                    let (out, attr_opt) =
+                        match serde_json::from_slice(&bytes).map_err(ExaProtocolError::from)? {
+                            ExaResult::Ok {
+                                response_data,
+                                attributes,
+                            } => (response_data, attributes),
+                            ExaResult::Error { exception } => Err(exception)?,
+                        };
+
+                    if let Some(attributes) = attr_opt {
+                        tracing::debug!("updating connection attributes using:\n{attributes:#?}");
+                        ws.attributes.update(attributes);
+                    }
+
+                    tracing::trace!("database response:\n{out:#?}");
+                    *self = Self::Finished;
                     return Poll::Ready(Ok(out));
                 }
-                ExaTransport::Finished => return Poll::Pending,
+                Self::Finished => return Poll::Pending,
             }
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct ExaSend {
-    command: String,
-    state: ExaSendState,
-}
-
-impl ExaSend {
-    pub fn new(command: String) -> Self {
-        Self {
-            command,
-            state: ExaSendState::WaitReady,
-        }
-    }
-}
-
-impl WebSocketFuture for ExaSend {
-    type Output = ();
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        loop {
-            match self.state {
-                ExaSendState::WaitReady => {
-                    ready!(ws.poll_ready_unpin(cx))?;
-                    let command = std::mem::take(&mut self.command);
-                    tracing::trace!("sending command:\n{command}");
-                    ws.start_send_unpin(command)?;
-                    self.state = ExaSendState::WaitFlush;
-                }
-                ExaSendState::WaitFlush => return ws.poll_flush_unpin(cx),
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-enum ExaSendState {
-    WaitReady,
-    WaitFlush,
-}
-
-#[derive(Debug)]
-pub struct ExaRecv<T>(PhantomData<fn() -> T>);
-
-impl<T> Default for ExaRecv<T> {
-    fn default() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T> WebSocketFuture for ExaRecv<T>
-where
-    T: Debug,
-    ExaResult<T>: DeserializeOwned,
-{
-    type Output = T;
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
-        let Some(bytes) = ready!(ws.poll_next_unpin(cx)).transpose()? else {
-            return Err(ExaProtocolError::from(None))?;
-        };
-
-        let (out, attr_opt) =
-            match serde_json::from_slice(&bytes).map_err(ExaProtocolError::from)? {
-                ExaResult::Ok {
-                    response_data,
-                    attributes,
-                } => (response_data, attributes),
-                ExaResult::Error { exception } => Err(exception)?,
-            };
-
-        if let Some(attributes) = attr_opt {
-            tracing::debug!("updating connection attributes using:\n{attributes:#?}");
-            ws.attributes.update(attributes);
-        }
-
-        tracing::trace!("database response:\n{out:#?}");
-        Poll::Ready(Ok(out))
     }
 }

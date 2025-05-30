@@ -6,7 +6,7 @@ use sqlx_core::Error as SqlxError;
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
+    etl::{build_etl, traits::EtlJob, EtlQuery, SocketFuture},
     ExaConnection,
 };
 
@@ -62,7 +62,7 @@ impl<'a> ImportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> Result<(JobFuture<'c>, Vec<ExaImport>), SqlxError>
+    ) -> Result<(EtlQuery<'c>, Vec<ExaImport>), SqlxError>
     where
         'c: 'a,
     {

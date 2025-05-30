@@ -1,0 +1,469 @@
+use std::{borrow::Cow, num::NonZeroUsize, sync::Arc};
+
+use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
+use rand::rngs::OsRng;
+use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
+use serde::{Serialize, Serializer};
+use serde_json::Deserializer;
+
+use crate::{
+    arguments::ExaBuffer, options::ProtocolVersion, responses::ExaAttributes, ExaTypeInfo,
+    SqlxError, SqlxResult,
+};
+
+pub struct WithAttributes<'attr, REQ> {
+    attributes: &'attr ExaAttributes,
+    request: &'attr mut REQ,
+}
+
+impl<'attr, REQ> WithAttributes<'attr, REQ> {
+    pub fn new(request: &'attr mut REQ, attributes: &'attr ExaAttributes) -> Self {
+        Self {
+            attributes,
+            request,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LoginCreds(pub ProtocolVersion);
+
+impl Serialize for WithAttributes<'_, LoginCreds> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::Login {
+            protocol_version: self.request.0,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LoginToken(pub ProtocolVersion);
+
+impl Serialize for WithAttributes<'_, LoginToken> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::LoginToken {
+            protocol_version: self.request.0,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Disconnect;
+
+impl Serialize for WithAttributes<'_, Disconnect> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Command::Disconnect.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GetAttributes;
+
+impl Serialize for WithAttributes<'_, GetAttributes> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Command::GetAttributes.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SetAttributes;
+
+impl Serialize for WithAttributes<'_, SetAttributes> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::SetAttributes {
+            attributes: self.attributes,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CloseResultSets(pub Vec<u16>);
+
+impl Serialize for WithAttributes<'_, CloseResultSets> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::CloseResultSet {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            result_set_handles: &self.request.0,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ClosePreparedStmt(pub u16);
+
+impl Serialize for WithAttributes<'_, ClosePreparedStmt> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::ClosePreparedStatement {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            statement_handle: self.request.0,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "etl")]
+#[derive(Clone, Copy, Debug)]
+pub struct GetHosts(pub std::net::IpAddr);
+
+#[cfg(feature = "etl")]
+impl Serialize for WithAttributes<'_, GetHosts> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Command::GetHosts {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            host_ip: self.request.0,
+        }
+        .serialize(serializer)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Fetch {
+    result_set_handle: u16,
+    start_position: usize,
+    num_bytes: usize,
+}
+
+impl Fetch {
+    pub fn new(result_set_handle: u16, start_position: usize, num_bytes: usize) -> Self {
+        Self {
+            result_set_handle,
+            start_position,
+            num_bytes,
+        }
+    }
+}
+
+impl Serialize for WithAttributes<'_, Fetch> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::Fetch {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            result_set_handle: self.request.result_set_handle,
+            start_position: self.request.start_position,
+            num_bytes: self.request.num_bytes,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Execute<'a>(pub Cow<'a, str>);
+
+impl Serialize for WithAttributes<'_, Execute<'_>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::Execute {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            sql_text: self.request.0.as_ref(),
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecuteBatch<'a>(pub Vec<&'a str>);
+
+impl Serialize for WithAttributes<'_, ExecuteBatch<'_>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::ExecuteBatch {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            sql_texts: &self.request.0,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CreatePreparedStmt<'a>(pub &'a str);
+
+impl Serialize for WithAttributes<'_, CreatePreparedStmt<'_>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::CreatePreparedStatement {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            sql_text: self.request.0,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecutePreparedStmt {
+    statement_handle: u16,
+    num_columns: usize,
+    num_rows: usize,
+    columns: Arc<[ExaTypeInfo]>,
+    data: PreparedStmtData,
+}
+
+impl ExecutePreparedStmt {
+    pub fn new(handle: u16, columns: Arc<[ExaTypeInfo]>, data: ExaBuffer) -> Self {
+        Self {
+            statement_handle: handle,
+            num_columns: columns.len(),
+            num_rows: data.num_param_sets(),
+            columns,
+            data: data.into(),
+        }
+    }
+}
+
+impl Serialize for WithAttributes<'_, ExecutePreparedStmt> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let command = Command::ExecutePreparedStatement {
+            attributes: self.attributes.needs_send().then_some(self.attributes),
+            statement_handle: self.request.statement_handle,
+            num_columns: self.request.num_columns,
+            num_rows: self.request.num_rows,
+            columns: &self.request.columns,
+            data: &self.request.data,
+        };
+
+        command.serialize(serializer)
+    }
+}
+
+/// A complete login request. This does not conform to the command structure and thus
+/// sits separately. Constructed from a reference of [`crate::ExaConnectOptions`].
+/// The type borrows most of the data from [`crate::ExaConnectOptions`], but uses a
+/// [`std::borrow::Cow`] for the password since it'll get overwritten when encrypted.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExaLoginRequest<'a> {
+    #[serde(skip_serializing)]
+    pub protocol_version: ProtocolVersion,
+    #[serde(skip_serializing)]
+    pub fetch_size: usize,
+    #[serde(skip_serializing)]
+    pub statement_cache_capacity: NonZeroUsize,
+    #[serde(flatten)]
+    pub login: LoginRef<'a>,
+    pub use_compression: bool,
+    pub client_name: &'static str,
+    pub client_version: &'static str,
+    pub client_os: &'static str,
+    pub client_runtime: &'static str,
+    pub attributes: LoginAttrs<'a>,
+}
+
+impl<'a> ExaLoginRequest<'a> {
+    /// Encrypts the password with the provided key.
+    ///
+    /// When connecting using [`Login::Credentials`], Exasol first sends out a public key to encrypt
+    /// the password with.
+    pub fn encrypt_password(&mut self, key: &RsaPublicKey) -> SqlxResult<()> {
+        let LoginRef::Credentials { password, .. } = &mut self.login else {
+            return Ok(());
+        };
+
+        let enc_pass = key
+            .encrypt(&mut OsRng, Pkcs1v15Encrypt, password.as_bytes())
+            .map(|pass| STD_BASE64_ENGINE.encode(pass))
+            .map(Cow::Owned)
+            .map_err(|e| SqlxError::Protocol(e.to_string()))?;
+
+        let _ = std::mem::replace(password, enc_pass);
+        Ok(())
+    }
+}
+
+impl Serialize for WithAttributes<'_, ExaLoginRequest<'_>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.request.serialize(serializer)
+    }
+}
+
+/// Borrowed equivalent of [`crate::options::Login`], with the password wrapped in a
+/// [`std::borrow::Cow`] as it'll get overwritten when encrypted.
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum LoginRef<'a> {
+    #[serde(rename_all = "camelCase")]
+    Credentials {
+        username: &'a str,
+        password: Cow<'a, str>,
+    },
+    #[serde(rename_all = "camelCase")]
+    AccessToken { access_token: &'a str },
+    #[serde(rename_all = "camelCase")]
+    RefreshToken { refresh_token: &'a str },
+}
+
+/// Serialization helper, analog to [`crate::responses::Attributes`]
+/// but containing only the relevant fields for login.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginAttrs<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_schema: Option<&'a str>,
+    pub query_timeout: u64,
+    pub autocommit: bool,
+    pub feedback_interval: u8,
+}
+
+/// Serialization helper encapsulating all the commands that can be sent as a request.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "command")]
+enum Command<'a> {
+    #[serde(rename_all = "camelCase")]
+    Login {
+        protocol_version: ProtocolVersion,
+    },
+    #[serde(rename_all = "camelCase")]
+    LoginToken {
+        protocol_version: ProtocolVersion,
+    },
+    Disconnect,
+    GetAttributes,
+    #[serde(rename_all = "camelCase")]
+    SetAttributes {
+        attributes: &'a ExaAttributes,
+    },
+    #[serde(rename_all = "camelCase")]
+    CloseResultSet {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        result_set_handles: &'a [u16],
+    },
+    #[serde(rename_all = "camelCase")]
+    ClosePreparedStatement {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        statement_handle: u16,
+    },
+    #[cfg(feature = "etl")]
+    #[serde(rename_all = "camelCase")]
+    GetHosts {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        host_ip: std::net::IpAddr,
+    },
+    #[serde(rename_all = "camelCase")]
+    Fetch {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        result_set_handle: u16,
+        start_position: usize,
+        num_bytes: usize,
+    },
+    #[serde(rename_all = "camelCase")]
+    Execute {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        sql_text: &'a str,
+    },
+    #[serde(rename_all = "camelCase")]
+    ExecuteBatch {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        sql_texts: &'a [&'a str],
+    },
+    #[serde(rename_all = "camelCase")]
+    CreatePreparedStatement {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        sql_text: &'a str,
+    },
+    #[serde(rename_all = "camelCase")]
+    ExecutePreparedStatement {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attributes: Option<&'a ExaAttributes>,
+        statement_handle: u16,
+        num_columns: usize,
+        num_rows: usize,
+        #[serde(skip_serializing_if = "<[ExaTypeInfo]>::is_empty")]
+        columns: &'a [ExaTypeInfo],
+        #[serde(skip_serializing_if = "PreparedStmtData::is_empty")]
+        data: &'a PreparedStmtData,
+    },
+}
+
+/// Type containing the parameters data to be passed
+/// as part of executing a prepared statement.
+///
+/// The type ensures the parameter sequence in the
+/// [`ExaBuffer`] is appropriately ended.
+#[derive(Debug, Clone)]
+struct PreparedStmtData {
+    inner: Vec<u8>,
+    num_rows: usize,
+}
+
+impl PreparedStmtData {
+    fn is_empty(&self) -> bool {
+        self.num_rows == 0
+    }
+}
+
+impl Serialize for PreparedStmtData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serde_transcode::transcode(&mut Deserializer::from_slice(&self.inner), serializer)
+    }
+}
+
+impl From<ExaBuffer> for PreparedStmtData {
+    fn from(mut value: ExaBuffer) -> Self {
+        value.finalize();
+
+        Self {
+            num_rows: value.num_param_sets(),
+            inner: value.inner,
+        }
+    }
+}

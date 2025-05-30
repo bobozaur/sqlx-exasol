@@ -34,7 +34,8 @@ use crate::ExaTypeInfo;
 
 /// A response from the Exasol server.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "status", rename_all = "camelCase")]
+#[serde(tag = "status")]
+#[serde(rename_all = "camelCase")]
 pub enum ExaResult<T> {
     #[serde(rename_all = "camelCase")]
     Ok {
@@ -51,7 +52,8 @@ pub enum ExaResult<T> {
 /// construct, but only the columns are relevant.
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
-#[serde(tag = "resultType", rename_all = "camelCase")]
+#[serde(tag = "resultType")]
+#[serde(rename_all = "camelCase")]
 enum OutputColumns {
     #[serde(rename_all = "camelCase")]
     ResultSet {

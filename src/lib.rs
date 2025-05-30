@@ -229,7 +229,6 @@
 /// Gets rid of unused dependencies warning from dev-dependencies.
 mod arguments;
 mod column;
-mod command;
 mod connection;
 mod database;
 mod error;
@@ -237,6 +236,7 @@ mod error;
 mod migrate;
 mod options;
 mod query_result;
+mod request;
 mod responses;
 mod row;
 mod statement;
@@ -259,7 +259,7 @@ pub use responses::{ExaAttributes, ExaDatabaseError, SessionInfo};
 pub use row::ExaRow;
 use sqlx_core::{
     executor::Executor, impl_acquire, impl_column_index_for_row, impl_column_index_for_statement,
-    impl_into_arguments_for_arguments,
+    impl_into_arguments_for_arguments, Error as SqlxError, Result as SqlxResult,
 };
 pub use statement::ExaStatement;
 pub use transaction::ExaTransactionManager;
@@ -298,3 +298,12 @@ impl_column_index_for_statement!(ExaStatement);
 // look into src/options/mod constants
 // Fix README and lib.rs with footnote about execute_many
 // Link the issue in the changelog
+// Better serialize for ExaParameter?
+// Can usage of serde_transcode be removed?
+// Can we close multiple result sets at once?
+// Reduce attributes sending to only when they are changed
+// Move ExaConnectOptionsRef to the command module
+// See whether LoginAttrs are really necessary or can be replaced by ExaAttributes
+// Link the borrow checker issue and close it
+// Write result set closing tests and cancel safety tests
+// Document that WithAttributes handles after login sending

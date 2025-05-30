@@ -9,11 +9,13 @@ use sqlx_core::type_info::TypeInfo;
 
 /// Information about an Exasol data type.
 // Note that the [`DataTypeName`] is automatically constructed from the provided [`ExaDataType`].
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(from = "ExaDataType")]
+#[serde(rename_all = "camelCase")]
 pub struct ExaTypeInfo {
+    #[serde(skip_serializing)]
     pub(crate) name: DataTypeName,
-    datatype: ExaDataType,
+    data_type: ExaDataType,
 }
 
 impl ExaTypeInfo {
@@ -23,29 +25,20 @@ impl ExaTypeInfo {
     /// accommodate the `other` instance.
     #[must_use]
     pub fn compatible(&self, other: &Self) -> bool {
-        self.datatype.compatible(&other.datatype)
+        self.data_type.compatible(&other.data_type)
     }
 }
 
 impl From<ExaDataType> for ExaTypeInfo {
-    fn from(datatype: ExaDataType) -> Self {
-        let name = datatype.full_name();
-        Self { name, datatype }
-    }
-}
-
-impl Serialize for ExaTypeInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.datatype.serialize(serializer)
+    fn from(data_type: ExaDataType) -> Self {
+        let name = data_type.full_name();
+        Self { name, data_type }
     }
 }
 
 impl PartialEq for ExaTypeInfo {
     fn eq(&self, other: &Self) -> bool {
-        self.datatype == other.datatype
+        self.data_type == other.data_type
     }
 }
 
@@ -57,7 +50,7 @@ impl Display for ExaTypeInfo {
 
 impl TypeInfo for ExaTypeInfo {
     fn is_null(&self) -> bool {
-        matches!(self.datatype, ExaDataType::Null)
+        matches!(self.data_type, ExaDataType::Null)
     }
 
     /// We're going against `sqlx` here, but knowing the full data type definition

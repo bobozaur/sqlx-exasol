@@ -193,6 +193,7 @@ impl Connection for ExaConnection {
 mod tests {
     use std::num::NonZeroUsize;
 
+    use futures_util::TryStreamExt;
     use sqlx::{query, Connection, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
@@ -413,6 +414,53 @@ mod tests {
             .len();
 
         assert_eq!(inserted, 0);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_connection_result_set_auto_close(
+        pool_opts: PoolOptions<Exasol>,
+        exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        // Only allow one connection
+        let pool = pool_opts.max_connections(1).connect_with(exa_opts).await?;
+        let mut conn = pool.acquire().await?;
+        conn.execute("CREATE TABLE CLOSE_RESULTS_TEST ( col DECIMAL(1, 0) );")
+            .await?;
+
+        query("INSERT INTO CLOSE_RESULTS_TEST VALUES(?)")
+            .bind([1; 10000])
+            .execute(&mut *conn)
+            .await?;
+
+        assert!(conn.ws.pending_close.is_none());
+        let _ = conn
+            .fetch("SELECT * FROM CLOSE_RESULTS_TEST")
+            .try_next()
+            .await?;
+
+        assert!(conn.ws.pending_close.is_some());
+        let _ = conn
+            .fetch("SELECT * FROM CLOSE_RESULTS_TEST")
+            .try_next()
+            .await;
+
+        assert!(conn.ws.pending_close.is_some());
+        let _ = conn
+            .fetch("SELECT * FROM CLOSE_RESULTS_TEST")
+            .try_next()
+            .await;
+
+        assert!(conn.ws.pending_close.is_some());
+        let _ = conn
+            .fetch("SELECT * FROM CLOSE_RESULTS_TEST")
+            .try_next()
+            .await;
+
+        assert!(conn.ws.pending_close.is_some());
+        conn.flush_attributes().await?;
+
+        assert!(conn.ws.pending_close.is_none());
         Ok(())
     }
 }
