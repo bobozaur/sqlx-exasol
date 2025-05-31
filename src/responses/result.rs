@@ -21,7 +21,7 @@ pub struct MultiResults {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleResult {
-    results: [QueryResult; 1],
+    pub results: [QueryResult; 1],
 }
 
 impl From<SingleResult> for QueryResult {

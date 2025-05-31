@@ -115,10 +115,7 @@ impl<'a> WebSocketFuture for ExecutePrepared<'a> {
                     self.state = ExecutePreparedState::ExecutePrepared(future);
                 }
                 ExecutePreparedState::ExecutePrepared(future) => {
-                    return future
-                        .poll_unpin(cx, ws)
-                        .map_ok(From::from)
-                        .map_ok(|qr| MultiResultStream::new(qr, Vec::new().into_iter()));
+                    return future.poll_unpin(cx, ws).map_ok(From::from);
                 }
             }
         }
@@ -147,14 +144,8 @@ impl<'a> WebSocketFuture for ExecuteBatch<'a> {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        let multi_result = ready!(self.0.poll_unpin(cx, ws))?;
-        let mut results_iter = multi_result.results.into_iter();
-
-        let Some(first_result) = results_iter.next() else {
-            return Err(ExaProtocolError::NoResponse)?;
-        };
-
-        Poll::Ready(Ok(MultiResultStream::new(first_result, results_iter)))
+        let multi_results = ready!(self.0.poll_unpin(cx, ws))?;
+        Poll::Ready(multi_results.try_into())
     }
 }
 
@@ -174,10 +165,7 @@ impl<'a> WebSocketFuture for Execute<'a> {
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
     ) -> Poll<Result<Self::Output, SqlxError>> {
-        self.0
-            .poll_unpin(cx, ws)
-            .map_ok(From::from)
-            .map_ok(|qr| MultiResultStream::new(qr, Vec::new().into_iter()))
+        self.0.poll_unpin(cx, ws).map_ok(From::from)
     }
 }
 

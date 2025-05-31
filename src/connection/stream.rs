@@ -28,8 +28,9 @@ use crate::{
             ExaWebSocket,
         },
     },
+    error::ExaProtocolError,
     query_result::ExaQueryResult,
-    responses::{DataChunk, QueryResult, ResultSet, ResultSetOutput},
+    responses::{DataChunk, MultiResults, QueryResult, ResultSet, ResultSetOutput, SingleResult},
     row::ExaRow,
 };
 
@@ -113,15 +114,16 @@ enum ResultStreamState<F> {
 }
 
 pub struct MultiResultStream {
-    results_iter: vec::IntoIter<QueryResult>,
+    next_results: vec::IntoIter<QueryResult>,
     stream: QueryResultStream,
 }
 
 impl MultiResultStream {
-    pub fn new(first_result: QueryResult, results_iter: vec::IntoIter<QueryResult>) -> Self {
+    pub fn new(first_result: QueryResult, next_results: vec::IntoIter<QueryResult>) -> Self {
         let stream = QueryResultStream::new(first_result);
+
         Self {
-            results_iter,
+            next_results,
             stream,
         }
     }
@@ -134,8 +136,9 @@ impl MultiResultStream {
             },
             QueryResultStream::RowCount(_) => None,
         };
+
         let results_handles_iter = self
-            .results_iter
+            .next_results
             .as_slice()
             .iter()
             .filter_map(QueryResult::handle);
@@ -156,12 +159,38 @@ impl MultiResultStream {
                 return Poll::Ready(Some(res));
             }
 
-            let Some(qr) = self.results_iter.next() else {
+            let Some(qr) = self.next_results.next() else {
                 return Poll::Ready(None);
             };
 
             self.stream = QueryResultStream::new(qr);
         }
+    }
+}
+
+impl From<SingleResult> for MultiResultStream {
+    fn from(value: SingleResult) -> Self {
+        let first_result = value
+            .results
+            .into_iter()
+            .next()
+            .expect("query result array must have one element");
+
+        Self::new(first_result, Vec::new().into_iter())
+    }
+}
+
+impl TryFrom<MultiResults> for MultiResultStream {
+    type Error = SqlxError;
+
+    fn try_from(value: MultiResults) -> Result<Self, Self::Error> {
+        let mut next_results = value.results.into_iter();
+
+        let Some(first_result) = next_results.next() else {
+            return Err(ExaProtocolError::NoResponse)?;
+        };
+
+        Ok(MultiResultStream::new(first_result, next_results))
     }
 }
 
