@@ -1,19 +1,15 @@
 use std::{
     future::Future,
-    io::{BufRead, Read},
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
-use async_compression::futures::bufread::{ZlibDecoder, ZlibEncoder};
+use async_compression::futures::write::{ZlibDecoder, ZlibEncoder};
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_core::Stream;
-use futures_io::{AsyncBufRead, AsyncRead};
+use futures_io::AsyncWrite;
 use futures_util::{io::BufReader, FutureExt, Sink, SinkExt, StreamExt};
-use sqlx_core::{
-    bytes::{buf::Reader, Buf, Bytes, BytesMut},
-    Error as SqlxError,
-};
+use sqlx_core::{bytes::Bytes, Error as SqlxError};
 
 use crate::{
     connection::websocket::{socket::ExaSocket, transport::PlainWebSocket},
@@ -23,8 +19,8 @@ use crate::{
 #[derive(Debug)]
 pub struct CompressedWebSocket {
     pub inner: WebSocketStream<BufReader<ExaSocket>>,
-    decoding: Option<Compression<ZlibDecoder<AsyncReader>>>,
-    encoding: Option<Compression<ZlibEncoder<AsyncReader>>>,
+    decoding: Option<Compression<ZlibDecoder<Vec<u8>>>>,
+    encoding: Option<Compression<ZlibEncoder<Vec<u8>>>>,
 }
 
 impl Stream for CompressedWebSocket {
@@ -32,7 +28,7 @@ impl Stream for CompressedWebSocket {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            // Decrypt the last message, if any
+            // Decompress the last message, if any
             if let Some(future) = self.decoding.as_mut() {
                 let bytes = ready!(future.poll_unpin(cx))?;
                 self.decoding = None;
@@ -52,7 +48,10 @@ impl Stream for CompressedWebSocket {
                 _ => continue,
             };
 
-            self.decoding = Some(Compression::new(bytes));
+            // The whole point of compression is to end up with smaller data so we might as well
+            // allocate the length we know from the compressed data in advance.
+            let capacity = bytes.len();
+            self.decoding = Some(Compression::new(bytes, capacity));
         }
     }
 }
@@ -61,23 +60,9 @@ impl Sink<String> for CompressedWebSocket {
     type Error = SqlxError;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        loop {
-            match self.encoding.as_mut() {
-                Some(future) => {
-                    let bytes = ready!(future.poll_unpin(cx))?;
-                    self.encoding = None;
-                    self.inner
-                        .start_send_unpin(Message::Binary(bytes))
-                        .map_err(ToSqlxError::to_sqlx_err)?;
-                }
-                None => {
-                    return self
-                        .inner
-                        .poll_ready_unpin(cx)
-                        .map_err(ToSqlxError::to_sqlx_err)
-                }
-            }
-        }
+        self.inner
+            .poll_ready_unpin(cx)
+            .map_err(ToSqlxError::to_sqlx_err)
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
@@ -86,14 +71,25 @@ impl Sink<String> for CompressedWebSocket {
         }
 
         let bytes = item.into_bytes().into_boxed_slice().into();
-        self.encoding = Some(Compression::new(bytes));
+        self.encoding = Some(Compression::new(bytes, 0));
         Ok(())
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner
-            .poll_flush_unpin(cx)
-            .map_err(ToSqlxError::to_sqlx_err)
+        loop {
+            if let Some(future) = self.encoding.as_mut() {
+                let bytes = ready!(future.poll_unpin(cx))?;
+                self.encoding = None;
+                self.inner
+                    .start_send_unpin(Message::Binary(bytes))
+                    .map_err(ToSqlxError::to_sqlx_err)?;
+            } else {
+                return self
+                    .inner
+                    .poll_flush_unpin(cx)
+                    .map_err(ToSqlxError::to_sqlx_err);
+            }
+        }
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -115,20 +111,22 @@ impl From<PlainWebSocket> for CompressedWebSocket {
 
 #[derive(Debug)]
 struct Compression<T> {
-    reader: T,
+    writer: T,
     offset: usize,
-    buffer: BytesMut,
+    data: Bytes,
+    state: CompressionState,
 }
 
 impl<T> Compression<T>
 where
     T: ExaCompression,
 {
-    fn new(bytes: Bytes) -> Self {
+    fn new(data: Bytes, capacity: usize) -> Self {
         Self {
-            reader: AsyncReader(bytes.reader()).into(),
+            writer: T::new(capacity),
             offset: 0,
-            buffer: BytesMut::new(),
+            data,
+            state: CompressionState::Writing,
         }
     }
 }
@@ -143,72 +141,58 @@ where
         let this = self.get_mut();
 
         loop {
-            let buf = &mut this.buffer[this.offset..];
-            let written = ready!(Pin::new(&mut this.reader).poll_read(cx, buf))?;
-            this.offset += written;
+            match this.state {
+                CompressionState::Writing => {
+                    let buf = &this.data[this.offset..];
+                    let written = ready!(Pin::new(&mut this.writer).poll_write(cx, buf))?;
+                    this.offset += written;
 
-            if this.offset >= this.buffer.len() {
-                return Poll::Ready(Ok(this.reader.take_buffer()));
+                    if written == 0 {
+                        this.state = CompressionState::Flushing;
+                    }
+                }
+                CompressionState::Flushing => {
+                    ready!(Pin::new(&mut this.writer).poll_flush(cx))?;
+                    this.state = CompressionState::Closing;
+                }
+                CompressionState::Closing => {
+                    ready!(Pin::new(&mut this.writer).poll_close(cx))?;
+                    return Poll::Ready(Ok(this.writer.take_buffer()));
+                }
             }
         }
     }
 }
 
-trait ExaCompression: From<AsyncReader> + AsyncRead + Unpin {
+#[derive(Debug)]
+enum CompressionState {
+    Writing,
+    Flushing,
+    Closing,
+}
+
+trait ExaCompression: AsyncWrite + Unpin {
+    fn new(capacity: usize) -> Self;
+
     fn take_buffer(&mut self) -> Bytes;
 }
 
-impl ExaCompression for ZlibDecoder<AsyncReader> {
+impl ExaCompression for ZlibDecoder<Vec<u8>> {
+    fn new(capacity: usize) -> Self {
+        Self::new(Vec::with_capacity(capacity))
+    }
+
     fn take_buffer(&mut self) -> Bytes {
-        std::mem::take(self.get_mut().0.get_mut())
+        std::mem::take(self.get_mut()).into()
     }
 }
 
-impl ExaCompression for ZlibEncoder<AsyncReader> {
+impl ExaCompression for ZlibEncoder<Vec<u8>> {
+    fn new(capacity: usize) -> Self {
+        Self::new(Vec::with_capacity(capacity))
+    }
+
     fn take_buffer(&mut self) -> Bytes {
-        std::mem::take(self.get_mut().0.get_mut())
-    }
-}
-
-impl From<AsyncReader> for ZlibEncoder<AsyncReader> {
-    fn from(value: AsyncReader) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<AsyncReader> for ZlibDecoder<AsyncReader> {
-    fn from(value: AsyncReader) -> Self {
-        Self::new(value)
-    }
-}
-
-#[derive(Debug)]
-struct AsyncReader(Reader<Bytes>);
-
-impl AsyncRead for AsyncReader {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Poll::Ready(self.0.read(buf))
-    }
-
-    fn poll_read_vectored(
-        mut self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        bufs: &mut [std::io::IoSliceMut<'_>],
-    ) -> Poll<std::io::Result<usize>> {
-        Poll::Ready(self.0.read_vectored(bufs))
-    }
-}
-
-impl AsyncBufRead for AsyncReader {
-    fn poll_fill_buf(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<&[u8]>> {
-        Poll::Ready(self.get_mut().0.fill_buf())
-    }
-
-    fn consume(mut self: Pin<&mut Self>, amt: usize) {
-        self.0.consume(amt);
+        std::mem::take(self.get_mut()).into()
     }
 }
