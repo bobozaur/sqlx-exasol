@@ -17,9 +17,9 @@ pub use ssl_mode::ExaSslMode;
 use tracing::log;
 use url::Url;
 
-use crate::{
-    connection::ExaConnection,
-    request::{ExaLoginRequest, LoginAttrs, LoginRef},
+use crate::connection::{
+    websocket::request::{ExaLoginRequest, LoginAttrs, LoginRef},
+    ExaConnection,
 };
 
 const URL_SCHEME: &str = "exa";

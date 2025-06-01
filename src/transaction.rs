@@ -5,7 +5,7 @@ use futures_util::FutureExt;
 use sqlx_core::{transaction::TransactionManager, Error as SqlxError};
 
 use crate::{
-    connection::futures::{Commit, Rollback, WebSocketFuture},
+    connection::websocket::future::{Commit, Rollback, WebSocketFuture},
     database::Exasol,
     error::ExaProtocolError,
     ExaConnection,

@@ -102,10 +102,12 @@ use self::{
     non_tls::NonTlsSocketSpawner,
     traits::{EtlJob, WithSocketMaker},
 };
-use super::websocket::socket::{ExaSocket, WithExaSocket};
 use crate::{
-    connection::futures::{ExaFuture, ExaRoundtrip, GetHosts, WebSocketFuture},
-    request::Execute,
+    connection::websocket::{
+        future::{ExaFuture, ExaRoundtrip, GetHosts, WebSocketFuture},
+        request::Execute,
+        socket::{ExaSocket, WithExaSocket},
+    },
     responses::{QueryResult, SingleResult},
     ExaConnection, ExaQueryResult, SqlxResult,
 };

@@ -236,7 +236,6 @@ mod error;
 mod migrate;
 mod options;
 mod query_result;
-mod request;
 mod responses;
 mod row;
 mod statement;
@@ -290,13 +289,12 @@ impl_column_index_for_statement!(ExaStatement);
 // etl refactor
 // attributes get sent on changes only
 // cancellation safety
-// 
+//
 // ##### TODO: #####
 // do Changelog
 // check version bump
 // Fix README and lib.rs with footnote about execute_many
 // Link statement the issue in the changelog
-// Can usage of serde_transcode be removed?
 // See whether LoginAttrs are really necessary or can be replaced by ExaAttributes
 // Link the borrow checker issue and close it
 // Document that WithAttributes handles attributes after login sending

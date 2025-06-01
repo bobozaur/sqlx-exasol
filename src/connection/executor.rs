@@ -12,7 +12,7 @@ use sqlx_core::{
 
 use super::stream::ResultStream;
 use crate::{
-    connection::futures::{
+    connection::websocket::future::{
         self, ClosePrepared, ExecuteBatch, ExecutePrepared, GetOrPrepare, WebSocketFuture,
     },
     database::Exasol,
@@ -55,7 +55,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
                 .try_collect()
                 .boxed()
         } else {
-            let future = futures::Execute::new(sql);
+            let future = future::Execute::new(sql);
             ResultStream::new(&mut self.ws, logger, future)
                 .try_filter_map(filter_fn)
                 .try_collect()
@@ -108,7 +108,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
             let future = ExecutePrepared::new(sql, persist, arguments);
             Box::pin(ResultStream::new(&mut self.ws, logger, future).try_filter_map(filter_fn))
         } else {
-            let future = futures::Execute::new(sql);
+            let future = future::Execute::new(sql);
             Box::pin(ResultStream::new(&mut self.ws, logger, future).try_filter_map(filter_fn))
         }
     }
@@ -199,7 +199,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
                 statement_handle,
                 columns,
                 parameters,
-            } = futures::Describe::new(sql).future(&mut self.ws).await?;
+            } = future::Describe::new(sql).future(&mut self.ws).await?;
 
             ClosePrepared::new(statement_handle)
                 .future(&mut self.ws)

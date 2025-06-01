@@ -21,12 +21,9 @@ use sqlx_core::{logger::QueryLogger, Either, Error as SqlxError, HashMap};
 
 use crate::{
     column::ExaColumn,
-    connection::{
-        futures::CloseResultSets,
-        websocket::{
-            futures::{FetchChunk, WebSocketFuture},
-            ExaWebSocket,
-        },
+    connection::websocket::{
+        future::{CloseResultSets, FetchChunk, WebSocketFuture},
+        ExaWebSocket,
     },
     error::ExaProtocolError,
     query_result::ExaQueryResult,

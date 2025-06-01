@@ -16,13 +16,17 @@ use sqlx_core::Error as SqlxError;
 
 use crate::{
     connection::{
-        query_splitter::split_queries, stream::MultiResultStream, websocket::ExaWebSocket,
+        query_splitter::split_queries,
+        stream::MultiResultStream,
+        websocket::{
+            request::{
+                self, ClosePreparedStmt, CreatePreparedStmt, ExaLoginRequest, ExecutePreparedStmt,
+                Fetch, LoginCreds, LoginRef, LoginToken, WithAttributes,
+            },
+            ExaWebSocket,
+        },
     },
     error::ExaProtocolError,
-    request::{
-        self, ClosePreparedStmt, CreatePreparedStmt, ExaLoginRequest, ExecutePreparedStmt, Fetch,
-        LoginCreds, LoginRef, LoginToken, WithAttributes,
-    },
     responses::{
         DataChunk, DescribeStatement, ExaResult, MultiResults, PreparedStatement, PublicKey,
         SingleResult,

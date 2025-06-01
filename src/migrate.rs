@@ -16,7 +16,7 @@ use sqlx_core::{
 
 use crate::{
     connection::{
-        futures::{ExecuteBatch, WebSocketFuture},
+        websocket::future::{ExecuteBatch, WebSocketFuture},
         ExaConnection,
     },
     database::Exasol,

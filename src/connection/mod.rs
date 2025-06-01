@@ -3,7 +3,7 @@ pub mod etl;
 mod executor;
 mod query_splitter;
 mod stream;
-mod websocket;
+pub mod websocket;
 
 use std::net::SocketAddr;
 
@@ -14,12 +14,13 @@ use sqlx_core::{
     transaction::Transaction,
     Error as SqlxError,
 };
-pub use websocket::futures;
 use websocket::{socket::WithExaSocket, ExaWebSocket};
 
-use self::websocket::WithMaybeTlsExaSocket;
 use crate::{
-    connection::futures::{ClosePrepared, Disconnect, SetAttributes, WebSocketFuture},
+    connection::websocket::{
+        future::{ClosePrepared, Disconnect, SetAttributes, WebSocketFuture},
+        WithMaybeTlsExaSocket,
+    },
     database::Exasol,
     options::ExaConnectOptions,
     responses::{ExaAttributes, SessionInfo},

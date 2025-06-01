@@ -1,4 +1,5 @@
-pub mod futures;
+pub mod future;
+pub mod request;
 pub mod socket;
 mod tls;
 mod transport;
@@ -19,12 +20,12 @@ pub use tls::WithMaybeTlsExaSocket;
 use transport::MaybeCompressedWebSocket;
 
 use crate::{
-    connection::{
-        futures::{CloseResultSets, ExaLogin, GetAttributes, Rollback, WebSocketFuture},
-        websocket::transport::PlainWebSocket,
+    connection::websocket::{
+        future::{CloseResultSets, ExaLogin, GetAttributes, Rollback, WebSocketFuture},
+        request::ExaLoginRequest,
+        transport::PlainWebSocket,
     },
     error::ToSqlxError,
-    request::ExaLoginRequest,
     responses::{ExaAttributes, PreparedStatement, SessionInfo},
 };
 
