@@ -36,6 +36,7 @@ impl TransactionManager for ExaTransactionManager {
             // The next time a request is sent, the transaction will be started.
             // We could eagerly start it as well, but that implies one more
             // round-trip to the server and back with no benefit.
+            #[expect(deprecated, reason = "will make this private")]
             conn.attributes_mut().set_autocommit(false);
             Ok(())
         })

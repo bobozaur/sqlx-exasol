@@ -17,9 +17,12 @@ pub use ssl_mode::ExaSslMode;
 use tracing::log;
 use url::Url;
 
-use crate::connection::{
-    websocket::request::{ExaLoginRequest, LoginAttrs, LoginRef},
-    ExaConnection,
+use crate::{
+    connection::{
+        websocket::request::{ExaLoginRequest, LoginRef},
+        ExaConnection,
+    },
+    responses::ExaRwAttributes,
 };
 
 const URL_SCHEME: &str = "exa";
@@ -223,12 +226,11 @@ impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
     fn from(value: &'a ExaConnectOptions) -> Self {
         let crate_version = option_env!("CARGO_PKG_VERSION").unwrap_or("UNKNOWN");
 
-        let attributes = LoginAttrs {
-            current_schema: value.schema.as_deref(),
-            query_timeout: value.query_timeout,
-            autocommit: true,
-            feedback_interval: value.feedback_interval,
-        };
+        let attributes = ExaRwAttributes::new(
+            value.schema.as_deref().map(Cow::Borrowed),
+            value.query_timeout,
+            value.feedback_interval.into(),
+        );
 
         Self {
             protocol_version: value.protocol_version,

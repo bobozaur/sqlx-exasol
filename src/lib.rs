@@ -298,3 +298,4 @@ impl_column_index_for_statement!(ExaStatement);
 // See whether LoginAttrs are really necessary or can be replaced by ExaAttributes
 // Link the borrow checker issue and close it
 // Document that WithAttributes handles attributes after login sending
+// Look into semver and backwards compatibility

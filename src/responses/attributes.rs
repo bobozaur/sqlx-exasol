@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, ops::Not};
+use std::{borrow::Cow, num::NonZeroUsize, ops::Not};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -12,7 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// Moreover, we store in this other custom connection related attributes, specific to the driver.
 #[derive(Clone, Debug)]
 pub struct ExaAttributes {
-    read_write: ExaRwAttributes,
+    read_write: ExaRwAttributes<'static>,
     read_only: ExaRoAttributes,
     driver: ExaDriverAttributes,
 }
@@ -34,9 +34,18 @@ impl ExaAttributes {
             ),
         }
     }
+
     #[must_use]
     pub fn autocommit(&self) -> bool {
         self.read_write.autocommit
+    }
+
+    #[deprecated = "use Connection::begin() to start a transaction"]
+    pub fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
+        self.driver.needs_send = true;
+        self.read_write.autocommit = autocommit;
+        self.driver.open_transaction = !autocommit;
+        self
     }
 
     #[must_use]
@@ -51,7 +60,7 @@ impl ExaAttributes {
     /// to accomplish the `no open schema` behavior.
     pub fn set_current_schema(&mut self, schema: String) -> &mut Self {
         self.driver.needs_send = true;
-        self.read_write.current_schema = Some(schema);
+        self.read_write.current_schema = Some(schema.into());
         self
     }
 
@@ -73,7 +82,7 @@ impl ExaAttributes {
 
     pub fn set_numeric_characters(&mut self, numeric_characters: String) -> &mut Self {
         self.driver.needs_send = true;
-        self.read_write.numeric_characters = numeric_characters;
+        self.read_write.numeric_characters = numeric_characters.into();
         self
     }
 
@@ -180,14 +189,7 @@ impl ExaAttributes {
         self
     }
 
-    pub(crate) fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
-        self.driver.needs_send = true;
-        self.read_write.autocommit = autocommit;
-        self.driver.open_transaction = !autocommit;
-        self
-    }
-
-    pub(crate) fn read_write(&self) -> &ExaRwAttributes {
+    pub(crate) fn read_write(&self) -> &ExaRwAttributes<'static> {
         &self.read_write
     }
 
@@ -195,12 +197,12 @@ impl ExaAttributes {
         macro_rules! other_or_prev {
             ($kind:tt, $field:tt) => {
                 if let Some(new) = other.$field {
-                    self.$kind.$field = new;
+                    self.$kind.$field = new.into();
                 }
             };
         }
 
-        self.read_write.current_schema = other.current_schema;
+        self.read_write.current_schema = other.current_schema.map(From::from);
 
         other_or_prev!(read_write, autocommit);
         other_or_prev!(read_write, feedback_interval);
@@ -221,26 +223,41 @@ impl ExaAttributes {
 /// Database read-write attributes
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExaRwAttributes {
+pub struct ExaRwAttributes<'a> {
     // The attribute can only change the open schema, it cannot close it, hence the skip. However,
     // if no schema is currently open Exasol returns `null`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_schema: Option<String>,
+    current_schema: Option<Cow<'a, str>>,
     autocommit: bool,
     feedback_interval: u64,
-    numeric_characters: String,
+    numeric_characters: Cow<'a, str>,
     query_timeout: u64,
     snapshot_transactions_enabled: bool,
     timestamp_utc_enabled: bool,
 }
 
-impl Default for ExaRwAttributes {
+impl<'a> ExaRwAttributes<'a> {
+    pub(crate) fn new(
+        current_schema: Option<Cow<'a, str>>,
+        feedback_interval: u64,
+        query_timeout: u64,
+    ) -> Self {
+        Self {
+            current_schema,
+            feedback_interval,
+            query_timeout,
+            ..Default::default()
+        }
+    }
+}
+
+impl<'a> Default for ExaRwAttributes<'a> {
     fn default() -> Self {
         Self {
             autocommit: true,
             current_schema: None,
             feedback_interval: 1,
-            numeric_characters: ".,".to_owned(),
+            numeric_characters: Cow::Owned(".,".into()),
             query_timeout: 0,
             snapshot_transactions_enabled: false,
             timestamp_utc_enabled: false,

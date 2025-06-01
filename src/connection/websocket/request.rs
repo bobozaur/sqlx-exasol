@@ -13,7 +13,7 @@ use crate::{
 
 pub struct WithAttributes<'attr, REQ> {
     needs_send: bool,
-    attributes: &'attr ExaRwAttributes,
+    attributes: &'attr ExaRwAttributes<'static>,
     request: &'attr mut REQ,
 }
 
@@ -294,7 +294,7 @@ pub struct ExaLoginRequest<'a> {
     pub client_version: &'static str,
     pub client_os: &'static str,
     pub client_runtime: &'static str,
-    pub attributes: LoginAttrs<'a>,
+    pub attributes: ExaRwAttributes<'a>,
 }
 
 impl<'a> ExaLoginRequest<'a> {
@@ -343,18 +343,6 @@ pub enum LoginRef<'a> {
     RefreshToken { refresh_token: &'a str },
 }
 
-/// Serialization helper, analog to [`crate::responses::Attributes`]
-/// but containing only the relevant fields for login.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginAttrs<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_schema: Option<&'a str>,
-    pub query_timeout: u64,
-    pub autocommit: bool,
-    pub feedback_interval: u8,
-}
-
 /// Serialization helper encapsulating all the commands that can be sent as a request.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -372,31 +360,31 @@ enum Command<'a> {
     GetAttributes,
     #[serde(rename_all = "camelCase")]
     SetAttributes {
-        attributes: &'a ExaRwAttributes,
+        attributes: &'a ExaRwAttributes<'static>,
     },
     #[serde(rename_all = "camelCase")]
     CloseResultSet {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         result_set_handles: &'a [u16],
     },
     #[serde(rename_all = "camelCase")]
     ClosePreparedStatement {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         statement_handle: u16,
     },
     #[cfg(feature = "etl")]
     #[serde(rename_all = "camelCase")]
     GetHosts {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         host_ip: std::net::IpAddr,
     },
     #[serde(rename_all = "camelCase")]
     Fetch {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         result_set_handle: u16,
         start_position: usize,
         num_bytes: usize,
@@ -404,25 +392,25 @@ enum Command<'a> {
     #[serde(rename_all = "camelCase")]
     Execute {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         sql_text: &'a str,
     },
     #[serde(rename_all = "camelCase")]
     ExecuteBatch {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         sql_texts: &'a [&'a str],
     },
     #[serde(rename_all = "camelCase")]
     CreatePreparedStatement {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         sql_text: &'a str,
     },
     #[serde(rename_all = "camelCase")]
     ExecutePreparedStatement {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaRwAttributes>,
+        attributes: Option<&'a ExaRwAttributes<'static>>,
         statement_handle: u16,
         num_columns: usize,
         num_rows: usize,
