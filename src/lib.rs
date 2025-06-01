@@ -268,6 +268,9 @@ pub use types::ExaIter;
 pub use types::Months;
 pub use value::{ExaValue, ExaValueRef};
 
+type IoError = std::io::Error;
+type IoResult<T> = std::io::Result<T>;
+
 /// An alias for [`Pool`][sqlx_core::pool::Pool], specialized for Exasol.
 pub type ExaPool = sqlx_core::pool::Pool<Exasol>;
 
@@ -289,13 +292,18 @@ impl_column_index_for_statement!(ExaStatement);
 // etl refactor
 // attributes get sent on changes only
 // cancellation safety
+// removed usage of serde_transcode in favor of a smidge of unsafe
 //
 // ##### TODO: #####
 // do Changelog
 // check version bump
 // Fix README and lib.rs with footnote about execute_many
 // Link statement the issue in the changelog
-// See whether LoginAttrs are really necessary or can be replaced by ExaAttributes
 // Link the borrow checker issue and close it
 // Document that WithAttributes handles attributes after login sending
-// Look into semver and backwards compatibility
+// Check for SqlxError and SqlxResult and use from lib.rs
+// Create semver issue:
+// - wrap ExaImport and ExaExport into structs as a breaking change
+//     - this can also come with feature gated enum construction, maybe
+// - make "set_autocommit" private
+// - rename etl feature to maybe http?

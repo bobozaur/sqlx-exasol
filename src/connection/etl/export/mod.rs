@@ -1,5 +1,4 @@
 mod compression;
-mod export_source;
 mod options;
 mod reader;
 
@@ -11,12 +10,11 @@ use std::{
 };
 
 use compression::ExaExportReader;
-pub use export_source::ExportSource;
 use futures_io::AsyncRead;
 use futures_util::FutureExt;
 pub use options::ExportBuilder;
 
-use super::SocketFuture;
+use super::WithSocketFuture;
 
 /// An ETL EXPORT worker.
 ///
@@ -30,15 +28,15 @@ use super::SocketFuture;
 /// circumvent that other than handling the error in code.
 #[allow(clippy::large_enum_variant)]
 pub enum ExaExport {
-    Setup(SocketFuture, bool),
+    Setup(WithSocketFuture, bool),
     Reading(ExaExportReader),
 }
 
 impl Debug for ExaExport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
             Self::Reading(arg0) => f.debug_tuple("Reading").field(arg0).finish(),
+            Self::Setup(..) => f.debug_tuple("Setup").finish(),
         }
     }
 }
@@ -59,4 +57,11 @@ impl AsyncRead for ExaExport {
             self.set(Self::Reading(reader));
         }
     }
+}
+
+/// The EXPORT source type, which can either directly be a table or an entire query.
+#[derive(Clone, Copy, Debug)]
+pub enum ExportSource<'a> {
+    Query(&'a str),
+    Table(&'a str),
 }

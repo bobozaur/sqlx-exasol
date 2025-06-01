@@ -2,39 +2,33 @@
 mod native_tls;
 #[cfg(feature = "etl_rustls")]
 mod rustls;
+#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod sync_socket;
 
-use rcgen::{CertificateParams, KeyPair};
-use rsa::{
-    pkcs8::{EncodePrivateKey, LineEnding},
-    RsaPrivateKey,
-};
-use sqlx_core::error::Error as SqlxError;
+use crate::{etl::with_socket::WithSocketMaker, SqlxError, SqlxResult};
 
-#[cfg(feature = "etl_native_tls")]
-use self::native_tls::NativeTlsSocketSpawner;
-#[cfg(feature = "etl_rustls")]
-use self::rustls::RustlsSocketSpawner;
-use super::traits::WithSocketMaker;
-use crate::error::ToSqlxError;
-
-#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
-compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
-
-#[allow(unreachable_code)]
-pub fn tls_with_socket_maker() -> Result<impl WithSocketMaker, SqlxError> {
-    let key_pair = make_key()?;
-    let cert = CertificateParams::default()
-        .self_signed(&key_pair)
-        .map_err(ToSqlxError::to_sqlx_err)?;
-
-    #[cfg(feature = "etl_native_tls")]
-    return NativeTlsSocketSpawner::new(&cert, &key_pair);
-    #[cfg(feature = "etl_rustls")]
-    return RustlsSocketSpawner::new(&cert, &key_pair);
+#[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
+pub fn with_socket_maker() -> SqlxResult<impl WithSocketMaker> {
+    let err = SqlxError::Tls("No ETL TLS feature set".into());
+    Err::<super::non_tls::NonTlsSocketSpawner, _>(err)
 }
 
-fn make_key() -> Result<KeyPair, SqlxError> {
+#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+pub fn with_socket_maker() -> SqlxResult<impl WithSocketMaker> {
+    use rcgen::{CertificateParams, KeyPair};
+    use rsa::{
+        pkcs8::{EncodePrivateKey, LineEnding},
+        RsaPrivateKey,
+    };
+
+    use crate::error::ToSqlxError;
+
+    impl ToSqlxError for rcgen::Error {
+        fn to_sqlx_err(self) -> SqlxError {
+            SqlxError::Tls(self.into())
+        }
+    }
+
     let mut rng = rand::thread_rng();
     let bits = 2048;
     let private_key = RsaPrivateKey::new(&mut rng, bits).map_err(ToSqlxError::to_sqlx_err)?;
@@ -44,11 +38,16 @@ fn make_key() -> Result<KeyPair, SqlxError> {
         .map_err(From::from)
         .map_err(SqlxError::Tls)?;
 
-    KeyPair::from_pem(&key).map_err(ToSqlxError::to_sqlx_err)
+    let key_pair = KeyPair::from_pem(&key).map_err(ToSqlxError::to_sqlx_err)?;
+    let cert = CertificateParams::default()
+        .self_signed(&key_pair)
+        .map_err(ToSqlxError::to_sqlx_err)?;
+
+    #[cfg(feature = "etl_native_tls")]
+    return native_tls::NativeTlsSocketSpawner::new(&cert, &key_pair);
+    #[cfg(feature = "etl_rustls")]
+    return rustls::RustlsSocketSpawner::new(&cert, &key_pair);
 }
 
-impl ToSqlxError for rcgen::Error {
-    fn to_sqlx_err(self) -> SqlxError {
-        SqlxError::Tls(self.into())
-    }
-}
+#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
+compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");

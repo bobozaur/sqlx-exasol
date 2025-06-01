@@ -19,7 +19,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture},
+    etl::{with_socket::WithSocketMaker, SocketFuture},
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
@@ -48,27 +48,25 @@ impl RustlsSocketSpawner {
 impl WithSocketMaker for RustlsSocketSpawner {
     type WithSocket = WithRustlsSocket;
 
-    fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
-        WithRustlsSocket::new(wrapper, self.0.clone())
+    fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
+        WithRustlsSocket::new(with_socket, self.0.clone())
     }
 }
 
 pub struct WithRustlsSocket {
-    wrapper: WithExaSocket,
+    inner: WithExaSocket,
     config: Arc<ServerConfig>,
 }
 
 impl WithRustlsSocket {
-    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
-        Self { wrapper, config }
-    }
-
-    fn map_tls_error(e: rustls::Error) -> IoError {
-        IoError::new(IoErrorKind::Other, e)
+    fn new(inner: WithExaSocket, config: Arc<ServerConfig>) -> Self {
+        Self { inner, config }
     }
 
     async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
-        let state = ServerConnection::new(self.config).map_err(Self::map_tls_error)?;
+        let state =
+            ServerConnection::new(self.config).map_err(|e| IoError::new(IoErrorKind::Other, e))?;
+
         let mut socket = RustlsSocket {
             inner: SyncSocket(socket),
             state,
@@ -79,22 +77,16 @@ impl WithRustlsSocket {
         poll_fn(|cx| socket.poll_read_ready(cx)).await?;
         poll_fn(|cx| socket.poll_write_ready(cx)).await?;
 
-        let socket = self.wrapper.with_socket(socket).await;
+        let socket = self.inner.with_socket(socket).await;
         Ok(socket)
-    }
-
-    async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
-        let (socket, address) = get_etl_addr(socket).await?;
-        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
-        Ok((address, future))
     }
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = Result<(SocketAddrV4, SocketFuture), SqlxError>;
+    type Output = Result<SocketFuture, SqlxError>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        self.work(socket).await
+        Ok(Box::pin(self.wrap_socket(socket)))
     }
 }
 

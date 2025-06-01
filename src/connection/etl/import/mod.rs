@@ -1,6 +1,5 @@
 mod compression;
 mod options;
-mod trim;
 mod writer;
 
 use std::{
@@ -11,12 +10,12 @@ use std::{
 };
 
 use compression::ExaImportWriter;
+use futures_core::future::BoxFuture;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
 pub use options::ImportBuilder;
-pub use trim::Trim;
 
-use super::SocketFuture;
+use crate::connection::websocket::socket::ExaSocket;
 
 /// An ETL IMPORT worker.
 ///
@@ -74,15 +73,15 @@ use super::SocketFuture;
 /// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[allow(clippy::large_enum_variant)]
 pub enum ExaImport {
-    Setup(SocketFuture, usize, bool),
+    Setup(BoxFuture<'static, IoResult<ExaSocket>>, usize, bool),
     Writing(ExaImportWriter),
 }
 
 impl Debug for ExaImport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
             Self::Writing(arg0) => f.debug_tuple("Writing").field(arg0).finish(),
+            Self::Setup(..) => f.debug_tuple("Setup").finish(),
         }
     }
 }
@@ -125,6 +124,24 @@ impl AsyncWrite for ExaImport {
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
             self.set(Self::Writing(writer));
+        }
+    }
+}
+
+/// Trim options for IMPORT
+#[derive(Debug, Clone, Copy)]
+pub enum Trim {
+    Left,
+    Right,
+    Both,
+}
+
+impl AsRef<str> for Trim {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Left => "LTRIM",
+            Self::Right => "RTRIM",
+            Self::Both => "TRIM",
         }
     }
 }
