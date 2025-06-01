@@ -22,27 +22,27 @@ use crate::{
     request::{ExaLoginRequest, LoginAttrs, LoginRef},
 };
 
-pub const URL_SCHEME: &str = "exa";
+const URL_SCHEME: &str = "exa";
 
-pub const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
-pub const DEFAULT_PORT: u16 = 8563;
-pub const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
+const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
+const DEFAULT_PORT: u16 = 8563;
+const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
     Some(v) => v,
     None => unreachable!(),
 };
 
-pub const PARAM_ACCESS_TOKEN: &str = "access-token";
-pub const PARAM_REFRESH_TOKEN: &str = "refresh-token";
-pub const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
-pub const PARAM_SSL_MODE: &str = "ssl-mode";
-pub const PARAM_SSL_CA: &str = "ssl-ca";
-pub const PARAM_SSL_CERT: &str = "ssl-cert";
-pub const PARAM_SSL_KEY: &str = "ssl-key";
-pub const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
-pub const PARAM_FETCH_SIZE: &str = "fetch-size";
-pub const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
-pub const PARAM_COMPRESSION: &str = "compression";
-pub const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
+const PARAM_ACCESS_TOKEN: &str = "access-token";
+const PARAM_REFRESH_TOKEN: &str = "refresh-token";
+const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
+const PARAM_SSL_MODE: &str = "ssl-mode";
+const PARAM_SSL_CA: &str = "ssl-ca";
+const PARAM_SSL_CERT: &str = "ssl-cert";
+const PARAM_SSL_KEY: &str = "ssl-key";
+const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
+const PARAM_FETCH_SIZE: &str = "fetch-size";
+const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
+const PARAM_COMPRESSION: &str = "compression";
+const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
 /// Options for connecting to the Exasol database.
 ///
