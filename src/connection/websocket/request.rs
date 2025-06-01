@@ -7,19 +7,21 @@ use serde::{Serialize, Serializer};
 use sqlx_core::types::JsonRawValue;
 
 use crate::{
-    arguments::ExaBuffer, options::ProtocolVersion, responses::ExaAttributes, ExaTypeInfo,
-    SqlxError, SqlxResult,
+    arguments::ExaBuffer, options::ProtocolVersion, responses::ExaRwAttributes, ExaAttributes,
+    ExaTypeInfo, SqlxError, SqlxResult,
 };
 
 pub struct WithAttributes<'attr, REQ> {
-    attributes: &'attr ExaAttributes,
+    needs_send: bool,
+    attributes: &'attr ExaRwAttributes,
     request: &'attr mut REQ,
 }
 
 impl<'attr, REQ> WithAttributes<'attr, REQ> {
     pub fn new(request: &'attr mut REQ, attributes: &'attr ExaAttributes) -> Self {
         Self {
-            attributes,
+            needs_send: attributes.needs_send(),
+            attributes: attributes.read_write(),
             request,
         }
     }
@@ -106,7 +108,7 @@ impl Serialize for WithAttributes<'_, CloseResultSets> {
         S: Serializer,
     {
         let command = Command::CloseResultSet {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             result_set_handles: &self.request.0,
         };
 
@@ -123,7 +125,7 @@ impl Serialize for WithAttributes<'_, ClosePreparedStmt> {
         S: Serializer,
     {
         let command = Command::ClosePreparedStatement {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             statement_handle: self.request.0,
         };
 
@@ -142,7 +144,7 @@ impl Serialize for WithAttributes<'_, GetHosts> {
         S: Serializer,
     {
         Command::GetHosts {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             host_ip: self.request.0,
         }
         .serialize(serializer)
@@ -172,7 +174,7 @@ impl Serialize for WithAttributes<'_, Fetch> {
         S: Serializer,
     {
         let command = Command::Fetch {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             result_set_handle: self.request.result_set_handle,
             start_position: self.request.start_position,
             num_bytes: self.request.num_bytes,
@@ -191,7 +193,7 @@ impl Serialize for WithAttributes<'_, Execute<'_>> {
         S: Serializer,
     {
         let command = Command::Execute {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             sql_text: self.request.0.as_ref(),
         };
 
@@ -208,7 +210,7 @@ impl Serialize for WithAttributes<'_, ExecuteBatch<'_>> {
         S: Serializer,
     {
         let command = Command::ExecuteBatch {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             sql_texts: &self.request.0,
         };
 
@@ -225,7 +227,7 @@ impl Serialize for WithAttributes<'_, CreatePreparedStmt<'_>> {
         S: Serializer,
     {
         let command = Command::CreatePreparedStatement {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             sql_text: self.request.0,
         };
 
@@ -260,7 +262,7 @@ impl Serialize for WithAttributes<'_, ExecutePreparedStmt> {
         S: Serializer,
     {
         let command = Command::ExecutePreparedStatement {
-            attributes: self.attributes.needs_send().then_some(self.attributes),
+            attributes: self.needs_send.then_some(self.attributes),
             statement_handle: self.request.statement_handle,
             num_columns: self.request.num_columns,
             num_rows: self.request.num_rows,
@@ -370,31 +372,31 @@ enum Command<'a> {
     GetAttributes,
     #[serde(rename_all = "camelCase")]
     SetAttributes {
-        attributes: &'a ExaAttributes,
+        attributes: &'a ExaRwAttributes,
     },
     #[serde(rename_all = "camelCase")]
     CloseResultSet {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         result_set_handles: &'a [u16],
     },
     #[serde(rename_all = "camelCase")]
     ClosePreparedStatement {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         statement_handle: u16,
     },
     #[cfg(feature = "etl")]
     #[serde(rename_all = "camelCase")]
     GetHosts {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         host_ip: std::net::IpAddr,
     },
     #[serde(rename_all = "camelCase")]
     Fetch {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         result_set_handle: u16,
         start_position: usize,
         num_bytes: usize,
@@ -402,25 +404,25 @@ enum Command<'a> {
     #[serde(rename_all = "camelCase")]
     Execute {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         sql_text: &'a str,
     },
     #[serde(rename_all = "camelCase")]
     ExecuteBatch {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         sql_texts: &'a [&'a str],
     },
     #[serde(rename_all = "camelCase")]
     CreatePreparedStatement {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         sql_text: &'a str,
     },
     #[serde(rename_all = "camelCase")]
     ExecutePreparedStatement {
         #[serde(skip_serializing_if = "Option::is_none")]
-        attributes: Option<&'a ExaAttributes>,
+        attributes: Option<&'a ExaRwAttributes>,
         statement_handle: u16,
         num_columns: usize,
         num_rows: usize,
@@ -431,11 +433,8 @@ enum Command<'a> {
     },
 }
 
-/// Type containing the parameters data to be passed
-/// as part of executing a prepared statement.
-///
-/// The type ensures the parameter sequence in the
-/// [`ExaBuffer`] is appropriately ended.
+/// Type containing the parameters data to be passed as part of executing a prepared statement.
+/// It ensures the parameter sequence in the [`ExaBuffer`] is appropriately ended.
 #[derive(Debug, Clone)]
 struct PreparedStmtData {
     buffer: String,

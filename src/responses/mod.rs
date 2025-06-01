@@ -13,7 +13,7 @@ mod session_info;
 
 use std::fmt;
 
-pub use attributes::{Attributes, ExaAttributes};
+pub use attributes::{ExaAttributes, ExaAttributesOpt, ExaRwAttributes};
 pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
 pub use fetch::DataChunk;
@@ -40,7 +40,7 @@ pub enum ExaResult<T> {
     #[serde(rename_all = "camelCase")]
     Ok {
         response_data: T,
-        attributes: Option<Attributes>,
+        attributes: Option<ExaAttributesOpt>,
     },
     Error {
         exception: ExaDatabaseError,
