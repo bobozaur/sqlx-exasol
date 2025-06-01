@@ -284,26 +284,19 @@ impl_acquire!(Exasol, ExaConnection);
 impl_column_index_for_row!(ExaRow);
 impl_column_index_for_statement!(ExaStatement);
 
-// Look into connection/mod.rs tests
-// Transaction::start_rollback (do tests)
-// Look into the login flow
+// ##### CHANGES: #####
 // Added protocolVersion V4
-// look into cancel safety (just make begin, commit and rollback cancel safe)
-// flatten ExaConnection and ExaWebSocket
+// futures based transport refactor
+// etl refactor
+// attributes get sent on changes only
+// cancellation safety
+// 
+// ##### TODO: #####
 // do Changelog
 // check version bump
-// make ExaCommand private
-// clear clutter around login and credentials
-// look into Describe future being composed of CreatePrepared and ClosePrepared
-// look into src/options/mod constants
 // Fix README and lib.rs with footnote about execute_many
-// Link the issue in the changelog
-// Better serialize for ExaParameter?
+// Link statement the issue in the changelog
 // Can usage of serde_transcode be removed?
-// Can we close multiple result sets at once?
-// Reduce attributes sending to only when they are changed
-// Move ExaConnectOptionsRef to the command module
 // See whether LoginAttrs are really necessary or can be replaced by ExaAttributes
 // Link the borrow checker issue and close it
-// Write result set closing tests and cancel safety tests
 // Document that WithAttributes handles attributes after login sending

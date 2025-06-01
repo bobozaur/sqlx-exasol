@@ -15,7 +15,7 @@ impl<'q> Arguments<'q> for ExaArguments {
 
     fn reserve(&mut self, additional: usize, size: usize) {
         self.types.reserve(additional);
-        self.buf.inner.reserve(size);
+        self.buf.buffer.reserve(size);
     }
 
     fn add<T>(&mut self, value: T) -> Result<(), BoxDynError>
@@ -43,7 +43,7 @@ impl<'q> Arguments<'q> for ExaArguments {
 
 #[derive(Debug)]
 pub struct ExaBuffer {
-    pub(crate) inner: Vec<u8>,
+    pub(crate) buffer: String,
     pub(crate) current_set_params: usize,
     pub(crate) first_set_params: Option<usize>,
 }
@@ -55,7 +55,8 @@ impl ExaBuffer {
         T: Serialize,
     {
         self.current_set_params += 1;
-        serde_json::to_writer(&mut self.inner, &value)
+        // SAFETY: `serde_json` will only write valid UTF-8.
+        serde_json::to_writer(unsafe { self.buffer.as_mut_vec() }, &value)
     }
 
     /// Serializes and appends an iterator of values to this buffer.
@@ -83,32 +84,27 @@ impl ExaBuffer {
         self.first_set_params.unwrap_or_default()
     }
 
-    /// Ends the main sequence serialization in the buffer.
-    ///
-    /// We're technically always guaranteed to have at least one byte in the buffer as this type is
-    /// only created through it's [`Default`] implementation by [`sqlx`] when binding parameters
-    /// to queries. The [`Default`] impl starts a sequence already by adding `[` to the buffer.
-    ///
-    /// It will therefore never be empty and this method is meant to overwrite the either overwrite
-    /// the `,` separator automatically set when an element is encoded and added.
-    pub(crate) fn finalize(&mut self) {
-        let b = self.inner.last_mut().expect("buffer cannot be empty");
-        *b = b']';
+    /// Ends the main sequence serialization and returns the JSON [`String`] buffer.
+    pub(crate) fn finish(mut self) -> String {
+        // Pop the last `,` separator automatically added when an element is encoded and appended.
+        self.buffer.pop();
+        self.end_seq();
+        self.buffer
     }
 
     /// Adds the sequence serialization start to the buffer.
     fn start_seq(&mut self) {
-        self.inner.push(b'[');
+        self.buffer.push('[');
     }
 
     /// Adds the sequence serialization start to the buffer.
     fn end_seq(&mut self) {
-        self.inner.push(b']');
+        self.buffer.push(']');
     }
 
     /// Adds the sequence serialization separator to the buffer.
     fn add_separator(&mut self) {
-        self.inner.push(b',');
+        self.buffer.push(',');
     }
 
     /// Registers the number of rows we bound parameters for.
@@ -136,9 +132,8 @@ impl ExaBuffer {
 
 impl Default for ExaBuffer {
     fn default() -> Self {
-        let inner = Vec::with_capacity(1);
         let mut buffer = Self {
-            inner,
+            buffer: String::with_capacity(1),
             current_set_params: 0,
             first_set_params: None,
         };

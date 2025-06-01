@@ -7,7 +7,7 @@ pub fn split_queries(input: &str) -> Vec<&str> {
     while let Some((i, c)) = chars.next() {
         let peek = chars.peek().map(|(_, c)| c);
 
-        #[expect(clippy::match_same_arms, reason = "better readability if split")]
+        #[allow(clippy::match_same_arms, reason = "better readability if split")]
         match (state, c, peek) {
             // Line comment start
             (State::Query, '-', Some('-')) => {

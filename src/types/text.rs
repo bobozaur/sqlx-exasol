@@ -24,12 +24,12 @@ where
     T: Display,
 {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        let prev_len = buf.inner.len();
+        let prev_len = buf.buffer.len();
         buf.append(format_args!("{}", self.0))?;
 
         // Serializing an empty string would result in just the quotes being added to the buffer.
         // Important because Exasol treats empty strings as NULL.
-        if buf.inner.len() - prev_len == 2 {
+        if buf.buffer.len() - prev_len == 2 {
             Ok(IsNull::Yes)
         } else {
             // Otherwise, the resulted text was not an empty string.
