@@ -1,11 +1,9 @@
-use sqlx_core::{
-    error::Error as SqlxError,
-    net::{Socket, WithSocket},
-};
+use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
     connection::websocket::socket::WithExaSocket,
     etl::{with_socket::WithSocketMaker, WithSocketFuture},
+    SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNonTlsSocket`].
@@ -24,7 +22,7 @@ impl WithSocketMaker for NonTlsSocketSpawner {
 pub struct WithNonTlsSocket(WithExaSocket);
 
 impl WithSocket for WithNonTlsSocket {
-    type Output = Result<WithSocketFuture, SqlxError>;
+    type Output = SqlxResult<WithSocketFuture>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let future = Box::pin(async move { Ok(self.0.with_socket(socket).await) });

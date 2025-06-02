@@ -2,10 +2,12 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use sqlx_core::{
     column::ColumnIndex, database::Database, impl_statement_query, statement::Statement, Either,
-    Error as SqlxError,
 };
 
-use crate::{arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
+use crate::{
+    arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo,
+    SqlxError, SqlxResult,
+};
 
 #[derive(Debug, Clone)]
 pub struct ExaStatement<'q> {
@@ -62,7 +64,7 @@ impl<'q> Statement<'q> for ExaStatement<'q> {
 }
 
 impl ColumnIndex<ExaStatement<'_>> for &'_ str {
-    fn index(&self, statement: &ExaStatement<'_>) -> Result<usize, SqlxError> {
+    fn index(&self, statement: &ExaStatement<'_>) -> SqlxResult<usize> {
         statement
             .metadata
             .column_names

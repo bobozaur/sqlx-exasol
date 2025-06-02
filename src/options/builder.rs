@@ -1,11 +1,12 @@
 use std::{net::ToSocketAddrs, num::NonZeroUsize};
 
-use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
+use sqlx_core::{connection::LogSettings, net::tls::CertificateInput};
 
 use super::{
     error::ExaConfigError, ssl_mode::ExaSslMode, ExaConnectOptions, Login, ProtocolVersion,
     DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
+use crate::SqlxResult;
 
 /// Builder for [`ExaConnectOptions`].
 #[derive(Clone, Debug)]
@@ -59,7 +60,7 @@ impl ExaConnectOptionsBuilder {
     /// # Errors
     ///
     /// Will return an error if resolving the hostname to [`std::net::SocketAddr`] fails.
-    pub fn build(self) -> Result<ExaConnectOptions, SqlxError> {
+    pub fn build(self) -> SqlxResult<ExaConnectOptions> {
         let hostname = self.host.ok_or(ExaConfigError::MissingHost)?;
         let password = self.password.unwrap_or_default();
 

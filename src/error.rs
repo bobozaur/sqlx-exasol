@@ -3,10 +3,9 @@ use std::fmt::{Debug, Display};
 use async_tungstenite::tungstenite::{protocol::CloseFrame, Error as WsError};
 use rsa::errors::Error as RsaError;
 use serde_json::error::Error as JsonError;
-use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
-use crate::type_info::DataTypeName;
+use crate::{type_info::DataTypeName, SqlxError};
 
 /// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]

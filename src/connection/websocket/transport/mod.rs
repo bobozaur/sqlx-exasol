@@ -13,10 +13,10 @@ use async_tungstenite::tungstenite::Message;
 use compressed::CompressedWebSocket;
 use futures_core::Stream;
 use futures_util::{Sink, SinkExt, StreamExt};
-use sqlx_core::{bytes::Bytes, Error as SqlxError};
+use sqlx_core::bytes::Bytes;
 pub use uncompressed::PlainWebSocket;
 
-use crate::error::ToSqlxError;
+use crate::{error::ToSqlxError, SqlxError, SqlxResult};
 
 /// Websocket extension enum that wraps the plain and compressed variants
 /// of the websocket used for a connection.
@@ -36,7 +36,7 @@ impl MaybeCompressedWebSocket {
         }
     }
 
-    pub async fn ping(&mut self) -> Result<(), SqlxError> {
+    pub async fn ping(&mut self) -> SqlxResult<()> {
         let ws = match self {
             MaybeCompressedWebSocket::Plain(ws) => &mut ws.0,
             #[cfg(feature = "compression")]
@@ -60,7 +60,7 @@ impl MaybeCompressedWebSocket {
 }
 
 impl Stream for MaybeCompressedWebSocket {
-    type Item = Result<Bytes, SqlxError>;
+    type Item = SqlxResult<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.get_mut() {

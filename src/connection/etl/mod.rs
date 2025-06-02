@@ -90,7 +90,6 @@ use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::FutureExt;
 use hyper::rt;
 pub use import::{ExaImport, ImportBuilder, Trim};
-use sqlx_core::error::Error as SqlxError;
 
 use self::error::ExaEtlError;
 use crate::{
@@ -143,7 +142,7 @@ impl WebSocketFuture for ExecuteEtl {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut super::websocket::ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         match QueryResult::from(ready!(self.0.poll_unpin(cx, ws))?) {
             QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Poll::Ready(Ok(ExaQueryResult::new(row_count))),

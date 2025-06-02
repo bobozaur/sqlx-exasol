@@ -7,12 +7,12 @@ pub mod websocket;
 
 use std::net::SocketAddr;
 
+use futures_core::future::BoxFuture;
 use futures_util::SinkExt;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
     transaction::Transaction,
-    Error as SqlxError,
 };
 use websocket::{socket::WithExaSocket, ExaWebSocket};
 
@@ -24,6 +24,7 @@ use crate::{
     database::Exasol,
     options::ExaConnectOptions,
     responses::{ExaAttributes, SessionInfo},
+    SqlxError, SqlxResult,
 };
 
 /// A connection to the Exasol database.
@@ -58,7 +59,7 @@ impl ExaConnection {
     /// # Errors
     ///
     /// Will return an error if sending the attributes fails.
-    pub async fn flush_attributes(&mut self) -> Result<(), SqlxError> {
+    pub async fn flush_attributes(&mut self) -> SqlxResult<()> {
         SetAttributes::default().future(&mut self.ws).await
     }
 
@@ -67,7 +68,7 @@ impl ExaConnection {
         &self.session_info
     }
 
-    pub(crate) async fn establish(opts: &ExaConnectOptions) -> Result<Self, SqlxError> {
+    pub(crate) async fn establish(opts: &ExaConnectOptions) -> SqlxResult<Self> {
         let mut ws_result = Err(SqlxError::Configuration("No hosts found".into()));
 
         // We want to try and randomly connect to nodes, if multiple were provided.
@@ -126,7 +127,7 @@ impl Connection for ExaConnection {
 
     type Options = ExaConnectOptions;
 
-    fn close(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
+    fn close(mut self) -> BoxFuture<'static, SqlxResult<()>> {
         Box::pin(async move {
             Disconnect::default().future(&mut self.ws).await?;
             self.ws.close().await?;
@@ -134,20 +135,18 @@ impl Connection for ExaConnection {
         })
     }
 
-    fn close_hard(mut self) -> futures_util::future::BoxFuture<'static, Result<(), SqlxError>> {
+    fn close_hard(mut self) -> BoxFuture<'static, SqlxResult<()>> {
         Box::pin(async move {
             self.ws.close().await?;
             Ok(())
         })
     }
 
-    fn ping(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
+    fn ping(&mut self) -> BoxFuture<'_, SqlxResult<()>> {
         Box::pin(self.ws.ping())
     }
 
-    fn begin(
-        &mut self,
-    ) -> futures_util::future::BoxFuture<'_, Result<Transaction<'_, Self::Database>, SqlxError>>
+    fn begin(&mut self) -> BoxFuture<'_, SqlxResult<Transaction<'_, Self::Database>>>
     where
         Self: Sized,
     {
@@ -156,7 +155,7 @@ impl Connection for ExaConnection {
 
     fn shrink_buffers(&mut self) {}
 
-    fn flush(&mut self) -> futures_util::future::BoxFuture<'_, Result<(), SqlxError>> {
+    fn flush(&mut self) -> BoxFuture<'_, SqlxResult<()>> {
         Box::pin(std::future::ready(Ok(())))
     }
 
@@ -171,9 +170,7 @@ impl Connection for ExaConnection {
         self.ws.statement_cache.len()
     }
 
-    fn clear_cached_statements(
-        &mut self,
-    ) -> futures_core::future::BoxFuture<'_, Result<(), SqlxError>>
+    fn clear_cached_statements(&mut self) -> BoxFuture<'_, SqlxResult<()>>
     where
         Self::Database: sqlx_core::database::HasStatementCache,
     {

@@ -1,13 +1,12 @@
 use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
-use sqlx_core::Error as SqlxError;
 
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
     etl::{job::EtlJob, EtlQuery, WithSocketFuture},
-    ExaConnection,
+    ExaConnection, SqlxResult,
 };
 
 /// A builder for an ETL IMPORT job.
@@ -62,7 +61,7 @@ impl<'a> ImportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> Result<(EtlQuery<'c>, Vec<ExaImport>), SqlxError>
+    ) -> SqlxResult<(EtlQuery<'c>, Vec<ExaImport>)>
     where
         'c: 'a,
     {

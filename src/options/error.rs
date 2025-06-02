@@ -1,7 +1,6 @@
-use sqlx_core::Error as SqlxError;
 use thiserror::Error as ThisError;
 
-use crate::options::URL_SCHEME;
+use crate::{options::URL_SCHEME, SqlxError};
 
 // Error returned for configuration failures caused by invalid URL connection strings.
 #[derive(Debug, ThisError)]

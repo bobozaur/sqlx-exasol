@@ -1,8 +1,7 @@
 use rsa::{errors::Error as RsaError, pkcs1::DecodeRsaPublicKey, RsaPublicKey};
 use serde::Deserialize;
-use sqlx_core::Error as SqlxError;
 
-use crate::error::ToSqlxError;
+use crate::{error::ToSqlxError, SqlxError};
 
 /// The public key Exasol sends during the login process
 /// to be used for encrypting the password.

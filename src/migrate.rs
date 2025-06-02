@@ -11,7 +11,6 @@ use sqlx_core::{
     query::query,
     query_as::query_as,
     query_scalar::query_scalar,
-    Error as SqlxError,
 };
 
 use crate::{
@@ -21,11 +20,12 @@ use crate::{
     },
     database::Exasol,
     options::ExaConnectOptions,
+    SqlxError, SqlxResult,
 };
 
 const LOCK_WARN: &str = "Exasol does not support database locking!";
 
-fn parse_for_maintenance(url: &str) -> Result<(ExaConnectOptions, String), SqlxError> {
+fn parse_for_maintenance(url: &str) -> SqlxResult<(ExaConnectOptions, String)> {
     let mut options = ExaConnectOptions::from_str(url)?;
 
     let database = options.schema.ok_or_else(|| {
@@ -39,7 +39,7 @@ fn parse_for_maintenance(url: &str) -> Result<(ExaConnectOptions, String), SqlxE
 }
 
 impl MigrateDatabase for Exasol {
-    fn create_database(url: &str) -> BoxFuture<'_, Result<(), SqlxError>> {
+    fn create_database(url: &str) -> BoxFuture<'_, SqlxResult<()>> {
         Box::pin(async move {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
@@ -51,7 +51,7 @@ impl MigrateDatabase for Exasol {
         })
     }
 
-    fn database_exists(url: &str) -> BoxFuture<'_, Result<bool, SqlxError>> {
+    fn database_exists(url: &str) -> BoxFuture<'_, SqlxResult<bool>> {
         Box::pin(async move {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
@@ -66,7 +66,7 @@ impl MigrateDatabase for Exasol {
         })
     }
 
-    fn drop_database(url: &str) -> BoxFuture<'_, Result<(), SqlxError>> {
+    fn drop_database(url: &str) -> BoxFuture<'_, SqlxResult<()>> {
         Box::pin(async move {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;

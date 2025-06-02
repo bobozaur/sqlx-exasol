@@ -9,11 +9,12 @@ use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures_core::Stream;
 use futures_io::AsyncWrite;
 use futures_util::{io::BufReader, FutureExt, Sink, SinkExt, StreamExt};
-use sqlx_core::{bytes::Bytes, Error as SqlxError};
+use sqlx_core::bytes::Bytes;
 
 use crate::{
     connection::websocket::{socket::ExaSocket, transport::PlainWebSocket},
     error::{ExaProtocolError, ToSqlxError},
+    SqlxError, SqlxResult,
 };
 
 #[derive(Debug)]
@@ -24,7 +25,7 @@ pub struct CompressedWebSocket {
 }
 
 impl Stream for CompressedWebSocket {
-    type Item = Result<Bytes, SqlxError>;
+    type Item = SqlxResult<Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {

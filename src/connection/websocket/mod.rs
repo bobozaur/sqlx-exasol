@@ -15,7 +15,7 @@ use futures_core::Stream;
 use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
 use lru::LruCache;
 use socket::ExaSocket;
-use sqlx_core::{bytes::Bytes, Error as SqlxError};
+use sqlx_core::bytes::Bytes;
 pub use tls::WithMaybeTlsExaSocket;
 use transport::MaybeCompressedWebSocket;
 
@@ -27,6 +27,7 @@ use crate::{
     },
     error::ToSqlxError,
     responses::{ExaAttributes, PreparedStatement, SessionInfo},
+    SqlxError, SqlxResult,
 };
 
 /// A websocket connected to the Exasol, providing lower level
@@ -51,7 +52,7 @@ impl ExaWebSocket {
         socket: ExaSocket,
         options: ExaLoginRequest<'_>,
         with_tls: bool,
-    ) -> Result<(Self, SessionInfo), SqlxError> {
+    ) -> SqlxResult<(Self, SessionInfo)> {
         let scheme = if with_tls {
             Self::WSS_SCHEME
         } else {
@@ -96,7 +97,7 @@ impl ExaWebSocket {
         Ok((this, session_info))
     }
 
-    pub async fn ping(&mut self) -> Result<(), SqlxError> {
+    pub async fn ping(&mut self) -> SqlxResult<()> {
         self.inner.ping().await
     }
 
@@ -106,7 +107,7 @@ impl ExaWebSocket {
 }
 
 impl Stream for ExaWebSocket {
-    type Item = Result<Bytes, SqlxError>;
+    type Item = SqlxResult<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.get_mut().inner.poll_next_unpin(cx)

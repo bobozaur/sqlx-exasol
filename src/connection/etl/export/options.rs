@@ -1,12 +1,10 @@
 use std::{fmt::Debug, net::SocketAddrV4};
 
-use sqlx_core::Error as SqlxError;
-
 use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
     etl::{job::EtlJob, EtlQuery, WithSocketFuture},
-    ExaConnection,
+    ExaConnection, SqlxResult,
 };
 
 /// A builder for an ETL EXPORT job.
@@ -55,7 +53,7 @@ impl<'a> ExportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> Result<(EtlQuery<'c>, Vec<ExaExport>), SqlxError>
+    ) -> SqlxResult<(EtlQuery<'c>, Vec<ExaExport>)>
     where
         'c: 'a,
     {

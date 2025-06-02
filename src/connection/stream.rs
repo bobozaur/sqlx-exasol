@@ -17,7 +17,7 @@ use std::{
 use futures_core::ready;
 use futures_util::Stream;
 use serde_json::Value;
-use sqlx_core::{logger::QueryLogger, Either, Error as SqlxError, HashMap};
+use sqlx_core::{logger::QueryLogger, Either, HashMap};
 
 use crate::{
     column::ExaColumn,
@@ -29,6 +29,7 @@ use crate::{
     query_result::ExaQueryResult,
     responses::{DataChunk, MultiResults, QueryResult, ResultSet, ResultSetOutput, SingleResult},
     row::ExaRow,
+    SqlxError, SqlxResult,
 };
 
 /// Adapter stream that stores a future following the query execution
@@ -64,7 +65,7 @@ impl<'a, F> Stream for ResultStream<'a, F>
 where
     F: WebSocketFuture<Output = MultiResultStream>,
 {
-    type Item = Result<Either<ExaQueryResult, ExaRow>, SqlxError>;
+    type Item = SqlxResult<Either<ExaQueryResult, ExaRow>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -150,7 +151,7 @@ impl MultiResultStream {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Option<Result<Either<ExaQueryResult, ExaRow>, SqlxError>>> {
+    ) -> Poll<Option<SqlxResult<Either<ExaQueryResult, ExaRow>>>> {
         loop {
             if let Some(res) = ready!(self.stream.poll_next_unpin(cx, ws)) {
                 return Poll::Ready(Some(res));
@@ -216,7 +217,7 @@ impl QueryResultStream {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Option<Result<Either<ExaQueryResult, ExaRow>, SqlxError>>> {
+    ) -> Poll<Option<SqlxResult<Either<ExaQueryResult, ExaRow>>>> {
         match self {
             QueryResultStream::RowStream(rs) => rs
                 .poll_next_unpin(cx, ws)
@@ -269,7 +270,7 @@ impl RowStream {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Option<Result<ExaRow, SqlxError>>> {
+    ) -> Poll<Option<SqlxResult<ExaRow>>> {
         loop {
             if let Some(row) = self.chunk_iter.next() {
                 return Poll::Ready(Some(Ok(row)));
@@ -301,7 +302,7 @@ impl ChunkStream {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Option<Result<DataChunk, SqlxError>>> {
+    ) -> Poll<Option<SqlxResult<DataChunk>>> {
         match self {
             Self::Multi(s) => s.poll_next_unpin(cx, ws),
             Self::Single(chunk) => Poll::Ready(chunk.take().map(Ok)),
@@ -336,7 +337,7 @@ impl MultiChunkStream {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Option<Result<DataChunk, SqlxError>>> {
+    ) -> Poll<Option<SqlxResult<DataChunk>>> {
         loop {
             match &mut self.state {
                 MultiChunkStreamState::Initial => {

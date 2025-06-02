@@ -1,13 +1,10 @@
-use sqlx_core::{
-    net::{
-        tls::{self, TlsConfig},
-        Socket, WithSocket,
-    },
-    Error as SqlxError,
+use sqlx_core::net::{
+    tls::{self, TlsConfig},
+    Socket, WithSocket,
 };
 
 use super::socket::{ExaSocket, WithExaSocket};
-use crate::{options::ExaTlsOptionsRef, ExaSslMode};
+use crate::{options::ExaTlsOptionsRef, ExaSslMode, SqlxResult};
 
 pub struct WithMaybeTlsExaSocket<'a> {
     wrapper: WithExaSocket,
@@ -26,7 +23,7 @@ impl<'a> WithMaybeTlsExaSocket<'a> {
 }
 
 impl WithSocket for WithMaybeTlsExaSocket<'_> {
-    type Output = Result<(ExaSocket, bool), SqlxError>;
+    type Output = SqlxResult<(ExaSocket, bool)>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let WithMaybeTlsExaSocket {

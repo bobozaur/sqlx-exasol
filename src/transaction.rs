@@ -2,13 +2,13 @@ use std::borrow::Cow;
 
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
-use sqlx_core::{transaction::TransactionManager, Error as SqlxError};
+use sqlx_core::transaction::TransactionManager;
 
 use crate::{
     connection::websocket::future::{Commit, Rollback, WebSocketFuture},
     database::Exasol,
     error::ExaProtocolError,
-    ExaConnection,
+    ExaConnection, SqlxResult,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -20,7 +20,7 @@ impl TransactionManager for ExaTransactionManager {
     fn begin<'conn>(
         conn: &'conn mut ExaConnection,
         _: Option<Cow<'static, str>>,
-    ) -> BoxFuture<'conn, Result<(), SqlxError>> {
+    ) -> BoxFuture<'conn, SqlxResult<()>> {
         Box::pin(async {
             // Exasol does not have nested transactions.
             if conn.attributes().open_transaction() {
@@ -42,11 +42,11 @@ impl TransactionManager for ExaTransactionManager {
         })
     }
 
-    fn commit(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
+    fn commit(conn: &mut ExaConnection) -> BoxFuture<'_, SqlxResult<()>> {
         async move { Commit::default().future(&mut conn.ws).await }.boxed()
     }
 
-    fn rollback(conn: &mut ExaConnection) -> BoxFuture<'_, Result<(), SqlxError>> {
+    fn rollback(conn: &mut ExaConnection) -> BoxFuture<'_, SqlxResult<()>> {
         async move { Rollback::default().future(&mut conn.ws).await }.boxed()
     }
 

@@ -11,7 +11,6 @@ pub use protocol_version::ProtocolVersion;
 use sqlx_core::{
     connection::{ConnectOptions, LogSettings},
     net::tls::CertificateInput,
-    Error as SqlxError,
 };
 pub use ssl_mode::ExaSslMode;
 use tracing::log;
@@ -23,6 +22,7 @@ use crate::{
         ExaConnection,
     },
     responses::ExaRwAttributes,
+    SqlxError, SqlxResult,
 };
 
 const URL_SCHEME: &str = "exa";
@@ -91,7 +91,7 @@ impl FromStr for ExaConnectOptions {
 impl ConnectOptions for ExaConnectOptions {
     type Connection = ExaConnection;
 
-    fn from_url(url: &Url) -> Result<Self, SqlxError> {
+    fn from_url(url: &Url) -> SqlxResult<Self> {
         let scheme = url.scheme();
 
         if URL_SCHEME != scheme {
@@ -200,7 +200,7 @@ impl ConnectOptions for ExaConnectOptions {
         builder.build()
     }
 
-    fn connect(&self) -> futures_util::future::BoxFuture<'_, Result<Self::Connection, SqlxError>>
+    fn connect(&self) -> futures_util::future::BoxFuture<'_, SqlxResult<Self::Connection>>
     where
         Self::Connection: Sized,
     {

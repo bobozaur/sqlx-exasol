@@ -10,7 +10,6 @@ use futures_core::future::BoxFuture;
 use rcgen::{Certificate, KeyPair};
 use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 use sqlx_core::{
-    error::Error as SqlxError,
     io::ReadBuf,
     net::{Socket, WithSocket},
 };
@@ -20,13 +19,14 @@ use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
     etl::{with_socket::WithSocketMaker, SocketFuture},
+    SqlxError, SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
 pub struct RustlsSocketSpawner(Arc<ServerConfig>);
 
 impl RustlsSocketSpawner {
-    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> Result<Self, SqlxError> {
+    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'rustls' socket spawner");
 
         let tls_cert = cert.der().clone();
@@ -83,7 +83,7 @@ impl WithRustlsSocket {
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = Result<SocketFuture, SqlxError>;
+    type Output = SqlxResult<SocketFuture>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         Ok(Box::pin(self.wrap_socket(socket)))

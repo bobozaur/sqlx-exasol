@@ -9,18 +9,18 @@ use async_tungstenite::{
 };
 use futures_core::Stream;
 use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
-use sqlx_core::Error as SqlxError;
 
 use crate::{
     connection::websocket::socket::ExaSocket,
     error::{ExaProtocolError, ToSqlxError},
+    SqlxError, SqlxResult,
 };
 
 #[derive(Debug)]
 pub struct PlainWebSocket(pub WebSocketStream<BufReader<ExaSocket>>);
 
 impl Stream for PlainWebSocket {
-    type Item = Result<Bytes, SqlxError>;
+    type Item = SqlxResult<Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {

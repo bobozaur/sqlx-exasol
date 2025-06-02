@@ -12,7 +12,6 @@ use serde::{
     de::{DeserializeOwned, IgnoredAny},
     Serialize,
 };
-use sqlx_core::Error as SqlxError;
 
 use crate::{
     connection::{
@@ -31,7 +30,7 @@ use crate::{
         DataChunk, DescribeStatement, ExaResult, MultiResults, PreparedStatement, PublicKey,
         SingleResult,
     },
-    ExaArguments, SessionInfo,
+    ExaArguments, SessionInfo, SqlxError, SqlxResult,
 };
 
 /// Adapter that wraps a type implementing [`WebSocketFuture`] to
@@ -48,7 +47,7 @@ impl<'a, T> Future for ExaFuture<'a, T>
 where
     T: WebSocketFuture,
 {
-    type Output = Result<T::Output, SqlxError>;
+    type Output = SqlxResult<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
@@ -63,7 +62,7 @@ pub trait WebSocketFuture: Unpin + Sized {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>>;
+    ) -> Poll<SqlxResult<Self::Output>>;
 
     fn future(self, ws: &mut ExaWebSocket) -> ExaFuture<'_, Self> {
         ExaFuture { inner: self, ws }
@@ -90,7 +89,7 @@ impl<'a> WebSocketFuture for ExecutePrepared<'a> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         loop {
             match &mut self.state {
                 ExecutePreparedState::GetOrPrepare(future) => {
@@ -147,7 +146,7 @@ impl<'a> WebSocketFuture for ExecuteBatch<'a> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         let multi_results = ready!(self.0.poll_unpin(cx, ws))?;
         Poll::Ready(multi_results.try_into())
     }
@@ -168,7 +167,7 @@ impl<'a> WebSocketFuture for Execute<'a> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws).map_ok(From::from)
     }
 }
@@ -196,7 +195,7 @@ impl<'a> WebSocketFuture for GetOrPrepare<'a> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         loop {
             match &mut self.state {
                 GetOrPrepareState::GetCached => {
@@ -260,7 +259,7 @@ impl WebSocketFuture for FetchChunk {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws)
     }
 }
@@ -285,7 +284,7 @@ impl<'a> WebSocketFuture for Describe<'a> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         loop {
             match self {
                 Self::CreatePrepared(future) => {
@@ -321,7 +320,7 @@ impl<'a> WebSocketFuture for CreatePrepared<'a> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws)
     }
 }
@@ -342,7 +341,7 @@ impl WebSocketFuture for ClosePrepared {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
@@ -363,7 +362,7 @@ impl WebSocketFuture for CloseResultSets {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
@@ -387,7 +386,7 @@ impl WebSocketFuture for GetHosts {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws)
     }
 }
@@ -402,7 +401,7 @@ impl WebSocketFuture for SetAttributes {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
@@ -417,7 +416,7 @@ impl WebSocketFuture for GetAttributes {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
@@ -438,7 +437,7 @@ impl WebSocketFuture for Commit {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         let res = self.0.poll_unpin(cx, ws).map_ok(|_| ());
 
         // We explicitly set the attribute after we know the commit was sent.
@@ -469,7 +468,7 @@ impl WebSocketFuture for Rollback {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         let res = self.0.poll_unpin(cx, ws).map_ok(|_| ());
 
         // We explicitly set the attribute after we know the rollback was sent.
@@ -494,7 +493,7 @@ impl WebSocketFuture for Disconnect {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         self.0.poll_unpin(cx, ws).map_ok(|_| ())
     }
 }
@@ -536,7 +535,7 @@ impl WebSocketFuture for ExaLogin<'_> {
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         loop {
             match &mut self.state {
                 LoginState::Token(future) => {
@@ -605,7 +604,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         ws: &mut ExaWebSocket,
-    ) -> Poll<Result<Self::Output, SqlxError>> {
+    ) -> Poll<SqlxResult<Self::Output>> {
         loop {
             match self {
                 Self::Waiting(request) => {

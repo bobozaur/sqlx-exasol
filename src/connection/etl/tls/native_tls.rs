@@ -8,7 +8,6 @@ use std::{
 use native_tls::{HandshakeError, Identity, TlsAcceptor, TlsStream};
 use rcgen::{Certificate, KeyPair};
 use sqlx_core::{
-    error::Error as SqlxError,
     io::ReadBuf,
     net::{Socket, WithSocket},
 };
@@ -18,13 +17,14 @@ use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
     etl::{with_socket::WithSocketMaker, WithSocketFuture},
+    SqlxError, SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].
 pub struct NativeTlsSocketSpawner(Arc<TlsAcceptor>);
 
 impl NativeTlsSocketSpawner {
-    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> Result<Self, SqlxError> {
+    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'native-tls' socket spawner");
 
         let tls_cert = cert.pem();
@@ -75,7 +75,7 @@ impl WithNativeTlsSocket {
 }
 
 impl WithSocket for WithNativeTlsSocket {
-    type Output = Result<WithSocketFuture, SqlxError>;
+    type Output = SqlxResult<WithSocketFuture>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         Ok(Box::pin(self.wrap_socket(socket)))

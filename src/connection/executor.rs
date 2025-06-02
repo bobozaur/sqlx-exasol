@@ -7,7 +7,7 @@ use sqlx_core::{
     describe::Describe,
     executor::{Execute, Executor},
     logger::QueryLogger,
-    Either, Error as SqlxError,
+    Either,
 };
 
 use super::stream::ResultStream;
@@ -18,7 +18,7 @@ use crate::{
     database::Exasol,
     responses::DescribeStatement,
     statement::{ExaStatement, ExaStatementMetadata},
-    ExaConnection,
+    ExaConnection, SqlxError, SqlxResult,
 };
 
 #[allow(clippy::multiple_bound_locations)]
@@ -28,7 +28,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn execute<'e, 'q: 'e, E>(
         self,
         mut query: E,
-    ) -> BoxFuture<'e, Result<<Self::Database as Database>::QueryResult, SqlxError>>
+    ) -> BoxFuture<'e, SqlxResult<<Self::Database as Database>::QueryResult>>
     where
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
@@ -66,7 +66,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn execute_many<'e, 'q: 'e, E>(
         self,
         query: E,
-    ) -> BoxStream<'e, Result<<Self::Database as Database>::QueryResult, SqlxError>>
+    ) -> BoxStream<'e, SqlxResult<<Self::Database as Database>::QueryResult>>
     where
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
@@ -84,7 +84,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn fetch<'e, 'q: 'e, E>(
         self,
         mut query: E,
-    ) -> BoxStream<'e, Result<<Self::Database as Database>::Row, SqlxError>>
+    ) -> BoxStream<'e, SqlxResult<<Self::Database as Database>::Row>>
     where
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
@@ -118,9 +118,8 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         mut query: E,
     ) -> BoxStream<
         'e,
-        Result<
+        SqlxResult<
             Either<<Self::Database as Database>::QueryResult, <Self::Database as Database>::Row>,
-            SqlxError,
         >,
     >
     where
@@ -147,7 +146,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn fetch_optional<'e, 'q: 'e, E: 'q>(
         self,
         query: E,
-    ) -> BoxFuture<'e, Result<Option<<Self::Database as Database>::Row>, SqlxError>>
+    ) -> BoxFuture<'e, SqlxResult<Option<<Self::Database as Database>::Row>>>
     where
         'c: 'e,
         E: Execute<'q, Self::Database>,
@@ -169,7 +168,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         self,
         sql: &'q str,
         _parameters: &'e [<Self::Database as Database>::TypeInfo],
-    ) -> BoxFuture<'e, Result<<Self::Database as Database>::Statement<'q>, SqlxError>>
+    ) -> BoxFuture<'e, SqlxResult<<Self::Database as Database>::Statement<'q>>>
     where
         'c: 'e,
     {
@@ -190,7 +189,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     fn describe<'e, 'q: 'e>(
         self,
         sql: &'q str,
-    ) -> BoxFuture<'e, Result<Describe<Self::Database>, SqlxError>>
+    ) -> BoxFuture<'e, SqlxResult<Describe<Self::Database>>>
     where
         'c: 'e,
     {
