@@ -1,7 +1,15 @@
-use std::{ops::Deref, str::FromStr, sync::OnceLock, time::Duration};
+use std::{
+    ops::Deref,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
+    time::Duration,
+};
 
 use futures_core::future::BoxFuture;
-use futures_util::StreamExt;
+use futures_util::TryStreamExt;
 use sqlx_core::{
     connection::Connection,
     error::DatabaseError,
@@ -12,9 +20,12 @@ use sqlx_core::{
     Error,
 };
 
-use crate::{connection::ExaConnection, database::Exasol, options::ExaConnectOptions};
+use crate::{
+    connection::ExaConnection, database::Exasol, options::ExaConnectOptions, ExaQueryResult,
+};
 
 static MASTER_POOL: OnceLock<Pool<Exasol>> = OnceLock::new();
+static DO_INITIAL_SETUP: AtomicBool = AtomicBool::new(true);
 
 impl TestSupport for Exasol {
     fn test_context(args: &TestArgs) -> BoxFuture<'_, Result<TestContext<Self>, Error>> {
@@ -118,19 +129,24 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     let mut conn = master_pool.acquire().await?;
 
-    cleanup_old_dbs(&mut conn).await?;
+    // NOTE: This is used to minimize contention on this.
+    //       There's no need for every test to attempt this and Exasol seems to sporadically get a
+    //       conflict if many instances try to create the test schema at once.
+    if DO_INITIAL_SETUP.swap(false, Ordering::Relaxed) {
+        cleanup_old_dbs(&mut conn).await?;
 
-    conn.execute_many(
-        r#"
+        conn.execute_many(
+            r#"
         CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";
         CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
             db_name CLOB NOT NULL,
             test_path CLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );"#,
-    )
-    .for_each(|_| async {})
-    .await;
+        )
+        .try_collect::<ExaQueryResult>()
+        .await?;
+    }
 
     let db_name = Exasol::db_name(args);
     do_cleanup(&mut conn, &db_name).await?;
