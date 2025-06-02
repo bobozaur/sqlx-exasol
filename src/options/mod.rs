@@ -228,8 +228,8 @@ impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
 
         let attributes = ExaRwAttributes::new(
             value.schema.as_deref().map(Cow::Borrowed),
-            value.query_timeout,
             value.feedback_interval.into(),
+            value.query_timeout,
         );
 
         Self {

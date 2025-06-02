@@ -311,3 +311,4 @@ type SqlxResult<T> = sqlx_core::Result<T>;
 // - make "set_autocommit" private
 // - remove the boxed JobFuture
 // - rename etl feature to maybe http?
+// - make feedback_interval match between options and attributes
