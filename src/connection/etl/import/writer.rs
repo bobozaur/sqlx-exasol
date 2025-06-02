@@ -1,6 +1,5 @@
 use std::{
     future::Future,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
     pin::Pin,
     sync::Mutex,
     task::{ready, Context, Poll},
@@ -18,7 +17,7 @@ use hyper::{
 };
 use sqlx_core::bytes::BytesMut;
 
-use crate::connection::websocket::socket::ExaSocket;
+use crate::{connection::websocket::socket::ExaSocket, IoError, IoErrorKind, IoResult};
 
 pub type ImportConnection = Connection<ExaSocket, ImportService>;
 type ImportResponse = Response<StreamBody<ImportStream>>;

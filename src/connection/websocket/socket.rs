@@ -1,6 +1,5 @@
 use std::{
     fmt::Debug,
-    io::{ErrorKind as IoErrorKind, Result as IoResult},
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
@@ -12,6 +11,8 @@ use sqlx_core::{
     bytes::BufMut,
     net::{Socket, WithSocket},
 };
+
+use crate::{IoErrorKind, IoResult};
 
 #[derive(Debug, Clone, Copy)]
 pub struct WithExaSocket(pub SocketAddr);

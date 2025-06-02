@@ -1,6 +1,5 @@
 use std::{
     future::Future,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
     pin::Pin,
     sync::Mutex,
     task::{ready, Context, Poll},
@@ -22,7 +21,7 @@ use hyper::{
     Request, Response, StatusCode,
 };
 
-use crate::connection::websocket::socket::ExaSocket;
+use crate::{connection::websocket::socket::ExaSocket, IoError, IoErrorKind, IoResult};
 
 type ExportResponse = Response<Empty<&'static [u8]>>;
 pub type ExportConnection = Fuse<Connection<ExaSocket, ExportService>>;

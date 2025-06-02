@@ -1,6 +1,6 @@
 use std::{
     future::poll_fn,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
+    io::{Read, Write},
     net::SocketAddrV4,
     sync::Arc,
     task::{ready, Context, Poll},
@@ -19,7 +19,7 @@ use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
     etl::{with_socket::WithSocketMaker, SocketFuture},
-    SqlxError, SqlxResult,
+    IoError, IoErrorKind, IoResult, SqlxError, SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].

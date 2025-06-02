@@ -1,6 +1,6 @@
 use std::{
     future::poll_fn,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
+    io::{Read, Write},
     sync::Arc,
     task::{ready, Context, Poll},
 };
@@ -17,7 +17,7 @@ use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
     etl::{with_socket::WithSocketMaker, WithSocketFuture},
-    SqlxError, SqlxResult,
+    IoError, IoErrorKind, IoResult, SqlxError, SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].

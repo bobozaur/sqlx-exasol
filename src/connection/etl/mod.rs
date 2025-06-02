@@ -79,7 +79,6 @@ mod with_socket;
 
 use std::{
     future::Future,
-    io::{Error as IoError, Result as IoResult},
     pin::Pin,
     task::{ready, Context, Poll},
 };
@@ -99,7 +98,7 @@ use crate::{
         socket::ExaSocket,
     },
     responses::{QueryResult, SingleResult},
-    ExaQueryResult, SqlxResult,
+    ExaQueryResult, IoError, IoResult, SqlxResult,
 };
 
 type WithSocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;

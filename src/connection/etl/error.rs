@@ -1,9 +1,8 @@
-use std::{
-    io::{Error as IoError, ErrorKind as IoErrorKind},
-    net::AddrParseError,
-};
+use std::net::AddrParseError;
 
 use thiserror::Error as ThisError;
+
+use crate::{IoError, IoErrorKind};
 
 /// Enum representing ETL errors.
 #[derive(Clone, Debug, ThisError)]
