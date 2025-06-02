@@ -1,12 +1,4 @@
-use std::{
-    ops::Deref,
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        OnceLock,
-    },
-    time::Duration,
-};
+use std::{ops::Deref, str::FromStr, sync::OnceLock, time::Duration};
 
 use futures_core::future::BoxFuture;
 use futures_util::TryStreamExt;
@@ -25,7 +17,6 @@ use crate::{
 };
 
 static MASTER_POOL: OnceLock<Pool<Exasol>> = OnceLock::new();
-static DO_INITIAL_SETUP: AtomicBool = AtomicBool::new(true);
 
 impl TestSupport for Exasol {
     fn test_context(args: &TestArgs) -> BoxFuture<'_, Result<TestContext<Self>, Error>> {
@@ -129,13 +120,10 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     let mut conn = master_pool.acquire().await?;
 
-    // NOTE: This is used to minimize contention on this.
-    //       There's no need for every test to attempt this and Exasol seems to sporadically get a
-    //       conflict if many instances try to create the test schema at once.
-    if DO_INITIAL_SETUP.swap(false, Ordering::Relaxed) {
-        cleanup_old_dbs(&mut conn).await?;
+    cleanup_old_dbs(&mut conn).await?;
 
-        conn.execute_many(
+    let setup_res = conn
+        .execute_many(
             r#"
         CREATE SCHEMA IF NOT EXISTS "_sqlx_tests";
         CREATE TABLE IF NOT EXISTS "_sqlx_tests"."_sqlx_test_databases" (
@@ -145,7 +133,23 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         );"#,
         )
         .try_collect::<ExaQueryResult>()
-        .await?;
+        .await;
+
+    if let Err(e) = setup_res {
+        match e
+            .as_database_error()
+            .and_then(DatabaseError::code)
+            .as_deref()
+        {
+            // Error code for when an object already exists.
+            //
+            // Multiple tests concurrenclty trying to create the test schema and table can cause a
+            // `GlobalTransactionRollback`, where the objects did not exist when creating them was
+            // attempted but they got created by another test before the current one could create
+            // them. This means that the objects now exist, which is what we wanted all along.
+            Some("40001") => Ok(()),
+            _ => Err(e),
+        }?;
     }
 
     let db_name = Exasol::db_name(args);

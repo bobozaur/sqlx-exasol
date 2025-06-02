@@ -42,6 +42,7 @@ pub struct ResultStream<'a, F> {
     logger: QueryLogger<'a>,
     result_set_handles: Vec<u16>,
     state: ResultStreamState<F>,
+    had_err: bool,
 }
 
 impl<'a, F> ResultStream<'a, F>
@@ -54,6 +55,32 @@ where
             logger,
             result_set_handles: Vec::new(),
             state: ResultStreamState::Initial(future),
+            had_err: false,
+        }
+    }
+
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
+        loop {
+            match &mut self.state {
+                ResultStreamState::Initial(future) => {
+                    let multi_stream = ready!(future.poll_unpin(cx, self.ws))?;
+                    self.result_set_handles = multi_stream.handles();
+                    self.state = ResultStreamState::Stream(multi_stream);
+                }
+                ResultStreamState::Stream(stream) => {
+                    let Some(either) = ready!(stream.poll_next_unpin(cx, self.ws)).transpose()?
+                    else {
+                        return Poll::Ready(None);
+                    };
+
+                    match &either {
+                        Either::Left(q) => self.logger.increase_rows_affected(q.rows_affected()),
+                        Either::Right(_) => self.logger.increment_rows_returned(),
+                    }
+
+                    return Poll::Ready(Some(Ok(either)));
+                }
+            }
         }
     }
 }
@@ -70,28 +97,20 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
-        loop {
-            match &mut this.state {
-                ResultStreamState::Initial(future) => {
-                    let multi_stream = ready!(future.poll_unpin(cx, this.ws))?;
-                    this.result_set_handles = multi_stream.handles();
-                    this.state = ResultStreamState::Stream(multi_stream);
-                }
-                ResultStreamState::Stream(stream) => {
-                    let Some(either) = ready!(stream.poll_next_unpin(cx, this.ws)).transpose()?
-                    else {
-                        return Poll::Ready(None);
-                    };
-
-                    match &either {
-                        Either::Left(q) => this.logger.increase_rows_affected(q.rows_affected()),
-                        Either::Right(_) => this.logger.increment_rows_returned(),
-                    }
-
-                    return Poll::Ready(Some(Ok(either)));
-                }
-            }
+        // This check is important, especially in multi statement queries.
+        // If one statement fails, an error gets returned, but if the stream keeps getting polled,
+        // the next statement never gets executed, and the stream will pend forever.
+        if this.had_err {
+            return Poll::Ready(None);
         }
+
+        let poll = this.poll(cx);
+
+        if let Poll::Ready(Some(Err(_))) = &poll {
+            this.had_err = true;
+        }
+
+        poll
     }
 }
 
