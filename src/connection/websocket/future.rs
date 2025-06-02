@@ -835,12 +835,18 @@ mod tests {
 
     #[test]
     fn test_leading_semicolon() {
-        assert_eq!(ExecuteBatch::split_query(";SELECT 1;"), vec![";", "SELECT 1;"]);
+        assert_eq!(
+            ExecuteBatch::split_query(";SELECT 1;"),
+            vec![";", "SELECT 1;"]
+        );
     }
 
     #[test]
     fn test_leading_semicolon_and_whitespace() {
-        assert_eq!(ExecuteBatch::split_query("  ; SELECT 1;"), vec![";", "SELECT 1;"]);
+        assert_eq!(
+            ExecuteBatch::split_query("  ; SELECT 1;"),
+            vec![";", "SELECT 1;"]
+        );
     }
 
     #[test]
