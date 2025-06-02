@@ -16,7 +16,7 @@ env:
   EXASOL_VERSION: 7.0.22
   NUM_NODES: 4
   ETL_TEST_THREADS: 4
-  ETL_JOB_TIMEOUT: 15
+  TESTS_TIMEOUT: 15
   EXA_CLUSTER_SETUP_TIMEOUT: 15
 
 jobs:
@@ -147,11 +147,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Connection tests
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: Connection tests with compression
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
@@ -185,11 +187,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: TLS connection tests
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: TLS connection tests with compression
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
@@ -223,7 +227,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: ETL tests
-        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
@@ -267,7 +271,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Native-TLS ETL tests
-        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
@@ -301,7 +305,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Rustls ETL tests
-        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }}
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
