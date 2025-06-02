@@ -15,7 +15,6 @@ use serde::{
 
 use crate::{
     connection::{
-        query_splitter::split_queries,
         stream::MultiResultStream,
         websocket::{
             request::{
@@ -134,9 +133,92 @@ pub struct ExecuteBatch<'a>(ExaRoundtrip<request::ExecuteBatch<'a>, MultiResults
 
 impl<'a> ExecuteBatch<'a> {
     pub fn new(sql: &'a str) -> Self {
-        let request = request::ExecuteBatch(split_queries(sql));
+        let request = request::ExecuteBatch(Self::split_query(sql));
         Self(ExaRoundtrip::new(request))
     }
+
+    pub fn split_query(query: &str) -> Vec<&str> {
+        let query = query.trim();
+        let mut chars = query.char_indices().peekable();
+        let mut state = QueryState::Statement;
+        let mut statements = Vec::new();
+        let mut start = 0;
+
+        while let Some((i, c)) = chars.next() {
+            let peek = chars.peek().map(|(_, c)| *c);
+
+            #[allow(clippy::match_same_arms, reason = "better readability if split")]
+            match (state, c, peek) {
+                // Line comment start
+                (QueryState::Statement, '-', Some('-')) => {
+                    chars.next();
+                    state = QueryState::LineComment;
+                }
+                // Block comment start
+                (QueryState::Statement, '/', Some('*')) => {
+                    chars.next();
+                    state = QueryState::BlockComment;
+                }
+                // Double quote start
+                (QueryState::Statement, '"', _) => state = QueryState::DoubleQuote,
+                // Single quote start
+                (QueryState::Statement, '\'', _) => state = QueryState::SingleQuote,
+                // Statement end
+                (QueryState::Statement, ';', p) => {
+                    statements.push(&query[start..=i]);
+                    start = i + 1;
+
+                    // Whitespace start
+                    if p.is_some_and(char::is_whitespace) {
+                        state = QueryState::Whitespace;
+                    }
+                }
+                // Skip escaped double quote
+                (QueryState::DoubleQuote, '"', Some('"')) => {
+                    chars.next();
+                }
+                // Skip escaped single quote
+                (QueryState::SingleQuote, '\'', Some('\'')) => {
+                    chars.next();
+                }
+                // Double quote end
+                (QueryState::DoubleQuote, '"', _) => state = QueryState::Statement,
+                // Single quote end
+                (QueryState::SingleQuote, '\'', _) => state = QueryState::Statement,
+                // Line comment end
+                (QueryState::LineComment, '\n', _) => state = QueryState::Statement,
+                // Block comment end
+                (QueryState::BlockComment, '*', Some('/')) => {
+                    chars.next();
+                    state = QueryState::Statement;
+                }
+                // Whitespace end
+                (QueryState::Whitespace, _, p) if !p.is_some_and(char::is_whitespace) => {
+                    start = i + 1;
+                    state = QueryState::Statement;
+                }
+                _ => (),
+            }
+        }
+
+        // Add final part if anything remains after the last `;`.
+        let remaining = &query[start..];
+        if !remaining.is_empty() {
+            statements.push(remaining);
+        }
+
+        statements
+    }
+}
+
+#[derive(Clone, Copy)]
+enum QueryState {
+    Statement,
+    LineComment,
+    BlockComment,
+    DoubleQuote,
+    SingleQuote,
+    Whitespace,
 }
 
 impl<'a> WebSocketFuture for ExecuteBatch<'a> {
@@ -678,5 +760,160 @@ where
                 Self::Finished => return Poll::Pending,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ExecuteBatch;
+
+    #[test]
+    fn test_simple_queries() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT * FROM users; SELECT * FROM orders;"),
+            vec!["SELECT * FROM users;", "SELECT * FROM orders;"]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_single_quote() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT ';' AS val; SELECT 'abc;def' AS val2;"),
+            vec!["SELECT ';' AS val;", "SELECT 'abc;def' AS val2;"]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_double_quote() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT \"col;name\" FROM table;"),
+            vec!["SELECT \"col;name\" FROM table;"]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_line_comment() {
+        assert_eq!(
+            ExecuteBatch::split_query(
+                "SELECT 1; -- this is a comment; with a semicolon\nSELECT 2;"
+            ),
+            vec![
+                "SELECT 1;",
+                "-- this is a comment; with a semicolon\nSELECT 2;"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_block_comment() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT 1; /* multi-line ; comment */ SELECT 2;"),
+            vec!["SELECT 1;", "/* multi-line ; comment */ SELECT 2;"]
+        );
+    }
+
+    #[test]
+    fn test_escaped_quotes() {
+        assert_eq!(
+            ExecuteBatch::split_query(
+                "SELECT 'It''s a test; really'; SELECT \"escaped\"\"quote\" FROM dual;"
+            ),
+            vec![
+                "SELECT 'It''s a test; really';",
+                "SELECT \"escaped\"\"quote\" FROM dual;"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_trailing_semicolon_and_whitespace() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT 1;; \n  \n;"),
+            vec!["SELECT 1;", ";", ";"]
+        );
+    }
+
+    #[test]
+    fn test_leading_semicolon() {
+        assert_eq!(ExecuteBatch::split_query(";SELECT 1;"), vec![";", "SELECT 1;"]);
+    }
+
+    #[test]
+    fn test_leading_semicolon_and_whitespace() {
+        assert_eq!(ExecuteBatch::split_query("  ; SELECT 1;"), vec![";", "SELECT 1;"]);
+    }
+
+    #[test]
+    fn test_no_semicolon() {
+        assert_eq!(ExecuteBatch::split_query("SELECT 1"), vec!["SELECT 1"]);
+    }
+
+    #[test]
+    fn test_no_whitespace_between_statements() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT 1;SELECT 2"),
+            vec!["SELECT 1;", "SELECT 2"]
+        );
+    }
+
+    #[test]
+    fn test_no_whitespace_between_stmt_and_comment() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT 1;/*testing*/SELECT 2;"),
+            vec!["SELECT 1;", "/*testing*/SELECT 2;"]
+        );
+    }
+
+    #[test]
+    fn test_trailing_comment() {
+        assert_eq!(
+            ExecuteBatch::split_query("SELECT 1;/*testing*/"),
+            vec!["SELECT 1;", "/*testing*/"]
+        );
+    }
+
+    #[test]
+    fn test_whitespace_between_statements() {
+        let query = "
+            /* Writing some comments */
+            SELECT 1;
+
+            -- Then writing some more comments
+            SELECT 2;
+            ";
+        assert_eq!(
+            ExecuteBatch::split_query(query),
+            vec![
+                "/* Writing some comments */
+            SELECT 1;",
+                "-- Then writing some more comments
+            SELECT 2;"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_empty_input() {
+        assert_eq!(ExecuteBatch::split_query(""), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn test_mixed_content() {
+        let query = r#"
+            SELECT 'test;--'; -- line comment with ;
+            /* block comment ;
+                over lines */
+            SELECT "str;with;semicolons";
+        "#;
+        assert_eq!(
+            ExecuteBatch::split_query(query),
+            vec![
+                "SELECT 'test;--';",
+                r#"-- line comment with ;
+            /* block comment ;
+                over lines */
+            SELECT "str;with;semicolons";"#
+            ]
+        );
     }
 }
