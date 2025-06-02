@@ -13,7 +13,7 @@ use sqlx_core::{
 use super::stream::ResultStream;
 use crate::{
     connection::websocket::future::{
-        self, ClosePrepared, ExecuteBatch, ExecutePrepared, GetOrPrepare, WebSocketFuture,
+        self, ExecuteBatch, ExecutePrepared, GetOrPrepare, WebSocketFuture,
     },
     database::Exasol,
     responses::DescribeStatement,
@@ -195,14 +195,10 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     {
         Box::pin(async move {
             let DescribeStatement {
-                statement_handle,
                 columns,
                 parameters,
+                ..
             } = future::Describe::new(sql).future(&mut self.ws).await?;
-
-            ClosePrepared::new(statement_handle)
-                .future(&mut self.ws)
-                .await?;
 
             let nullable = (0..columns.len()).map(|_| None).collect();
 
