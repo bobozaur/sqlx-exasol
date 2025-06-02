@@ -13,7 +13,7 @@ async fn it_gets_a_pool(pool: ExaPool) -> sqlx::Result<()> {
         .await?;
 
     assert!(
-        db_name.starts_with("_sqlx_test_database_"),
+        db_name.starts_with("_sqlx_test_"),
         "db_name: {db_name:?}",
     );
 

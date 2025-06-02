@@ -194,7 +194,7 @@ mod tests {
     use sqlx::{query, Connection, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
-    use crate::{ExaConnectOptions, Exasol};
+    use crate::{ExaConnectOptions, ExaQueryResult, Exasol};
 
     #[cfg(feature = "compression")]
     #[ignore]
@@ -369,6 +369,22 @@ mod tests {
 
         con.execute("CLOSE SCHEMA").await?;
         assert_eq!(con.attributes().current_schema(), None);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_comment_stmts(
+        pool_opts: PoolOptions<Exasol>,
+        exa_opts: ExaConnectOptions,
+    ) -> Result<(), BoxDynError> {
+        let pool = pool_opts.connect_with(exa_opts).await?;
+        let mut con = pool.acquire().await?;
+
+        con.execute_many("/* this is a comment */")
+            .try_collect::<ExaQueryResult>()
+            .await?;
+        con.execute("-- this is a comment").await?;
 
         Ok(())
     }

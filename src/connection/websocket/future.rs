@@ -202,6 +202,7 @@ impl<'a> ExecuteBatch<'a> {
         }
 
         // Add final part if anything remains after the last `;`.
+        // NOTE: Exasol does not complain about trailing comments, but only empty queries.
         let remaining = &query[start..];
         if !remaining.is_empty() {
             statements.push(remaining);
