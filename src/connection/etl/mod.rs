@@ -79,6 +79,7 @@ mod with_socket;
 
 use std::{
     future::Future,
+    io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
@@ -99,12 +100,12 @@ use crate::{
         ExaWebSocket,
     },
     responses::{QueryResult, SingleResult},
-    ExaQueryResult, IoError, IoResult, SqlxResult,
+    ExaQueryResult, SqlxResult,
 };
 
 /// Type of the future that executes the ETL job.
 type JobFuture<'a> = BoxFuture<'a, SqlxResult<ExaQueryResult>>;
-type WithSocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
+type WithSocketFuture = BoxFuture<'static, io::Result<ExaSocket>>;
 
 #[derive(Debug, Clone, Copy)]
 pub enum RowSeparator {
@@ -146,7 +147,7 @@ impl WebSocketFuture for ExecuteEtl {
         ws: &mut ExaWebSocket,
     ) -> Poll<SqlxResult<Self::Output>> {
         match QueryResult::from(ready!(self.0.poll_unpin(cx, ws))?) {
-            QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,
+            QueryResult::ResultSet { .. } => Err(io::Error::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Poll::Ready(Ok(ExaQueryResult::new(row_count))),
         }
     }
@@ -157,7 +158,7 @@ impl rt::Read for ExaSocket {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: rt::ReadBufCursor<'_>,
-    ) -> Poll<IoResult<()>> {
+    ) -> Poll<io::Result<()>> {
         // SAFETY: The AsyncRead::poll_read call initializes and
         // fills the provided buffer. We do however need to cast it
         // to a mutable byte array first so the argument datatype matches.
@@ -173,15 +174,19 @@ impl rt::Read for ExaSocket {
 }
 
 impl rt::Write for ExaSocket {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         AsyncWrite::poll_write(self, cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         AsyncWrite::poll_flush(self, cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         AsyncWrite::poll_close(self, cx)
     }
 }

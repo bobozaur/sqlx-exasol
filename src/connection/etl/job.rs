@@ -98,7 +98,7 @@ pub trait EtlJob: Sized + Send + Sync {
             let ips = GetHosts::new(socket_addr.ip())
                 .future(&mut conn.ws)
                 .await?
-                .nodes;
+                .into();
 
             let with_tls = conn.attributes().encryption_enabled();
             let with_compression = self

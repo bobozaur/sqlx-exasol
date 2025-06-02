@@ -4,7 +4,7 @@ mod writer;
 
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
@@ -73,7 +73,7 @@ use crate::connection::websocket::socket::ExaSocket;
 /// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[allow(clippy::large_enum_variant)]
 pub enum ExaImport {
-    Setup(BoxFuture<'static, IoResult<ExaSocket>>, usize, bool),
+    Setup(BoxFuture<'static, io::Result<ExaSocket>>, usize, bool),
     Writing(ExaImportWriter),
 }
 
@@ -91,7 +91,7 @@ impl AsyncWrite for ExaImport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
                 Self::Writing(s) => return Pin::new(s).poll_write(cx, buf),
@@ -103,7 +103,7 @@ impl AsyncWrite for ExaImport {
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
                 Self::Writing(s) => return Pin::new(s).poll_flush(cx),
@@ -115,7 +115,7 @@ impl AsyncWrite for ExaImport {
         }
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
                 Self::Writing(s) => return Pin::new(s).poll_close(cx),

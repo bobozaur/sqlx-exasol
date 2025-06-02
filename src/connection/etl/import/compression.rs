@@ -1,6 +1,6 @@
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -33,7 +33,11 @@ impl ExaImportWriter {
 }
 
 impl AsyncWrite for ExaImportWriter {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         match self.get_mut() {
             #[cfg(feature = "compression")]
             Self::Compressed(s) => Pin::new(s).poll_write(cx, buf),
@@ -41,7 +45,7 @@ impl AsyncWrite for ExaImportWriter {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             #[cfg(feature = "compression")]
             Self::Compressed(s) => Pin::new(s).poll_flush(cx),
@@ -49,7 +53,7 @@ impl AsyncWrite for ExaImportWriter {
         }
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             #[cfg(feature = "compression")]
             Self::Compressed(s) => Pin::new(s).poll_close(cx),

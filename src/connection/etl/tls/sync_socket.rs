@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Result as IoResult, Write},
+    io::{self, Read, Write},
     task::{Context, Poll},
 };
 
@@ -13,11 +13,11 @@ impl<S> SyncSocket<S>
 where
     S: Socket,
 {
-    pub fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    pub fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.0.poll_read_ready(cx)
     }
 
-    pub fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    pub fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.0.poll_write_ready(cx)
     }
 }
@@ -26,7 +26,7 @@ impl<S> Read for SyncSocket<S>
 where
     S: Socket,
 {
-    fn read(&mut self, mut buf: &mut [u8]) -> IoResult<usize> {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
         self.0.try_read(&mut buf)
     }
 }
@@ -35,11 +35,11 @@ impl<S> Write for SyncSocket<S>
 where
     S: Socket,
 {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.try_write(buf)
     }
 
-    fn flush(&mut self) -> IoResult<()> {
+    fn flush(&mut self) -> io::Result<()> {
         // NOTE: TCP sockets and unix sockets are both no-ops for flushes
         Ok(())
     }

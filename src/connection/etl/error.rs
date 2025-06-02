@@ -1,8 +1,6 @@
-use std::net::AddrParseError;
+use std::{io, net::AddrParseError};
 
 use thiserror::Error as ThisError;
-
-use crate::{IoError, IoErrorKind};
 
 /// Enum representing ETL errors.
 #[derive(Clone, Debug, ThisError)]
@@ -21,17 +19,17 @@ pub enum ExaEtlError {
     InvalidInternalAddr(#[from] AddrParseError),
 }
 
-impl From<ExaEtlError> for IoError {
+impl From<ExaEtlError> for io::Error {
     fn from(value: ExaEtlError) -> Self {
         let kind = match &value {
             ExaEtlError::ChunkSizeOverflow
             | ExaEtlError::InvalidChunkSizeByte(_)
             | ExaEtlError::InvalidByte(_, _)
             | ExaEtlError::ResultSetFromEtl
-            | ExaEtlError::InvalidInternalAddr(_) => IoErrorKind::InvalidData,
-            ExaEtlError::WriteZero => IoErrorKind::WriteZero,
+            | ExaEtlError::InvalidInternalAddr(_) => io::ErrorKind::InvalidData,
+            ExaEtlError::WriteZero => io::ErrorKind::WriteZero,
         };
 
-        IoError::new(kind, value)
+        io::Error::new(kind, value)
     }
 }

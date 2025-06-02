@@ -6,5 +6,11 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hosts {
-    pub nodes: Vec<IpAddr>,
+    nodes: Vec<IpAddr>,
+}
+
+impl From<Hosts> for Vec<IpAddr> {
+    fn from(value: Hosts) -> Self {
+        value.nodes
+    }
 }

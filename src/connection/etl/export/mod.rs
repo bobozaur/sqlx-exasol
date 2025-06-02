@@ -4,7 +4,7 @@ mod reader;
 
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
@@ -46,7 +46,7 @@ impl AsyncRead for ExaExport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         loop {
             let (socket, with_compression) = match self.as_mut().get_mut() {
                 Self::Reading(r) => return Pin::new(r).poll_read(cx, buf),

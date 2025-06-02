@@ -1,6 +1,6 @@
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -54,7 +54,7 @@ impl AsyncRead for ExaExportReader {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         match self.get_mut() {
             #[cfg(feature = "compression")]
             Self::Compressed(r) => Pin::new(r).poll_read(cx, buf),

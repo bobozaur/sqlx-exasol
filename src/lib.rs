@@ -288,9 +288,6 @@ impl_column_index_for_statement!(ExaStatement);
 // ###################
 type SqlxError = sqlx_core::Error;
 type SqlxResult<T> = sqlx_core::Result<T>;
-type IoError = std::io::Error;
-type IoErrorKind = std::io::ErrorKind;
-type IoResult<T> = std::io::Result<T>;
 
 // ##### CHANGES: #####
 // Added protocolVersion V4

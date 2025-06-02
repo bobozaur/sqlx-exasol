@@ -1,4 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::{
+    io,
+    net::{Ipv4Addr, SocketAddrV4},
+};
 
 use arrayvec::ArrayString;
 use sqlx_core::net::{Socket, WithSocket};
@@ -6,7 +9,7 @@ use sqlx_core::net::{Socket, WithSocket};
 use crate::{
     connection::websocket::socket::WithExaSocket,
     etl::{error::ExaEtlError, WithSocketFuture},
-    IoError, SqlxResult,
+    SqlxResult,
 };
 
 /// Trait used as an interface for constructing a type implementing [`WithSocket`]
@@ -77,7 +80,7 @@ where
         let ip = ip_buf
             .parse::<Ipv4Addr>()
             .map_err(ExaEtlError::from)
-            .map_err(IoError::from)?;
+            .map_err(io::Error::from)?;
         let address = SocketAddrV4::new(ip, port);
 
         self.0.with_socket(socket).await.map(|f| (address, f))

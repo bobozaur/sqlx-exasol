@@ -1,12 +1,10 @@
 use std::{
     future::poll_fn,
-    io::{Read, Write},
-    net::SocketAddrV4,
+    io::{self, Read, Write},
     sync::Arc,
     task::{ready, Context, Poll},
 };
 
-use futures_core::future::BoxFuture;
 use rcgen::{Certificate, KeyPair};
 use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 use sqlx_core::{
@@ -18,8 +16,8 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::{with_socket::WithSocketMaker, SocketFuture},
-    IoError, IoErrorKind, IoResult, SqlxError, SqlxResult,
+    etl::{with_socket::WithSocketMaker, WithSocketFuture},
+    SqlxError, SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
@@ -63,9 +61,9 @@ impl WithRustlsSocket {
         Self { inner, config }
     }
 
-    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
-        let state =
-            ServerConnection::new(self.config).map_err(|e| IoError::new(IoErrorKind::Other, e))?;
+    async fn wrap_socket<S: Socket>(self, socket: S) -> io::Result<ExaSocket> {
+        let state = ServerConnection::new(self.config)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         let mut socket = RustlsSocket {
             inner: SyncSocket(socket),
@@ -83,7 +81,7 @@ impl WithRustlsSocket {
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = SqlxResult<SocketFuture>;
+    type Output = SqlxResult<WithSocketFuture>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         Ok(Box::pin(self.wrap_socket(socket)))
@@ -103,22 +101,22 @@ impl<S> Socket for RustlsSocket<S>
 where
     S: Socket,
 {
-    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
+    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> io::Result<usize> {
         self.state.reader().read(buf.init_mut())
     }
 
-    fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
+    fn try_write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self.state.writer().write(buf) {
             // Returns a zero-length write when the buffer is full.
-            Ok(0) => Err(IoErrorKind::WouldBlock.into()),
+            Ok(0) => Err(io::ErrorKind::WouldBlock.into()),
             other => other,
         }
     }
 
-    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.complete_io(&mut self.inner) {
-                Err(e) if e.kind() == IoErrorKind::WouldBlock => (),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
                 ready => return Poll::Ready(ready.map(|_| ())),
             };
 
@@ -126,10 +124,10 @@ where
         }
     }
 
-    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.complete_io(&mut self.inner) {
-                Err(e) if e.kind() == IoErrorKind::WouldBlock => (),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
                 ready => return Poll::Ready(ready.map(|_| ())),
             };
 
@@ -137,11 +135,11 @@ where
         }
     }
 
-    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.poll_write_ready(cx)
     }
 
-    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if !self.close_notify_sent {
             self.state.send_close_notify();
             self.close_notify_sent = true;
@@ -153,7 +151,7 @@ where
         // Some socket implementations (like `tokio`) try to implicitly shutdown the TCP stream.
         // That results in a sporadic error because `rustls` already initiates the close.
         match ready!(self.inner.0.poll_shutdown(cx)) {
-            Err(e) if e.kind() == IoErrorKind::NotConnected => Poll::Ready(Ok(())),
+            Err(e) if e.kind() == io::ErrorKind::NotConnected => Poll::Ready(Ok(())),
             res => Poll::Ready(res),
         }
     }
