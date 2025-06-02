@@ -96,11 +96,14 @@ use crate::{
         future::{ExaFuture, ExaRoundtrip, WebSocketFuture},
         request::Execute,
         socket::ExaSocket,
+        ExaWebSocket,
     },
     responses::{QueryResult, SingleResult},
     ExaQueryResult, IoError, IoResult, SqlxResult,
 };
 
+/// Type of the future that executes the ETL job.
+type JobFuture<'a> = BoxFuture<'a, SqlxResult<ExaQueryResult>>;
 type WithSocketFuture = BoxFuture<'static, IoResult<ExaSocket>>;
 
 #[derive(Debug, Clone, Copy)]
@@ -140,7 +143,7 @@ impl WebSocketFuture for ExecuteEtl {
     fn poll_unpin(
         &mut self,
         cx: &mut Context<'_>,
-        ws: &mut super::websocket::ExaWebSocket,
+        ws: &mut ExaWebSocket,
     ) -> Poll<SqlxResult<Self::Output>> {
         match QueryResult::from(ready!(self.0.poll_unpin(cx, ws))?) {
             QueryResult::ResultSet { .. } => Err(IoError::from(ExaEtlError::ResultSetFromEtl))?,

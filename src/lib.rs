@@ -312,4 +312,5 @@ type IoResult<T> = std::io::Result<T>;
 // - wrap ExaImport and ExaExport into structs as a breaking change
 //     - this can also come with feature gated enum construction, maybe
 // - make "set_autocommit" private
+// - remove the boxed JobFuture
 // - rename etl feature to maybe http?
