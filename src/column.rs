@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use sqlx_core::{column::Column, database::Database};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
@@ -10,8 +10,21 @@ use crate::{database::Exasol, type_info::ExaTypeInfo};
 pub struct ExaColumn {
     #[serde(skip)]
     pub(crate) ordinal: usize,
+    #[serde(deserialize_with = "ExaColumn::lowercase_name")]
     pub(crate) name: Arc<str>,
     pub(crate) data_type: ExaTypeInfo,
+}
+
+impl ExaColumn {
+    fn lowercase_name<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // NOTE: We can borrow because we always deserialize from an owned buffer.
+        <&str>::deserialize(deserializer)
+            .map(str::to_lowercase)
+            .map(From::from)
+    }
 }
 
 impl Display for ExaColumn {

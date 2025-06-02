@@ -304,7 +304,6 @@ type SqlxResult<T> = sqlx_core::Result<T>;
 // Link statement the issue in the changelog
 // Link the borrow checker issue and close it
 // Document that WithAttributes handles attributes after login sending
-// Check for SqlxError and SqlxResult and use from lib.rs
 // Create semver issue:
 // - wrap ExaImport and ExaExport into structs as a breaking change
 //     - this can also come with feature gated enum construction, maybe
@@ -312,3 +311,8 @@ type SqlxResult<T> = sqlx_core::Result<T>;
 // - remove the boxed JobFuture
 // - rename etl feature to maybe http?
 // - make feedback_interval match between options and attributes
+// - don't make columns lowercase by default?
+//
+// Make columns lowercase again
+// Write query_splitter tests
+// Write execute_many statement failure tests
