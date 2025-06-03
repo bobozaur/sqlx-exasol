@@ -147,13 +147,13 @@ jobs:
 
       - name: Connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: Connection tests with compression
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
@@ -187,13 +187,13 @@ jobs:
 
       - name: TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: TLS connection tests with compression
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
