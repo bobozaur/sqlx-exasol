@@ -288,28 +288,3 @@ impl_column_index_for_statement!(ExaStatement);
 // ###################
 type SqlxError = sqlx_core::Error;
 type SqlxResult<T> = sqlx_core::Result<T>;
-
-// ##### CHANGES: #####
-// Added protocolVersion V4
-// futures based transport refactor
-// etl refactor
-// attributes get sent on changes only
-// cancellation safety
-// removed usage of serde_transcode in favor of a smidge of unsafe
-//
-// ##### TODO: #####
-// do Changelog
-// check version bump
-// Fix README and lib.rs with footnote about execute_many
-// Link statement the issue in the changelog
-// Link the borrow checker issue and close it
-// Create semver issue:
-// - wrap ExaImport and ExaExport into structs as a breaking change
-//     - this can also come with feature gated enum construction, maybe
-// - make "set_autocommit" private
-// - remove the boxed JobFuture
-// - rename etl feature to maybe http?
-// - make feedback_interval match between options and attributes
-// - don't make columns lowercase by default? probably cannot do that due to how [`FromRow`] works;
-//   columns need to be lowercase
-// - remove the inherent doubling of HASHTYPE size.

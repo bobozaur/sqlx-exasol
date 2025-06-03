@@ -1,3 +1,5 @@
+#![expect(deprecated, reason = "will hide enum under a public type")]
+
 mod compression;
 mod options;
 mod reader;
@@ -35,8 +37,10 @@ pub enum ExaExport {
     ///
     /// Therefore we accommodate the worker state until the query gets executed and data gets sent
     /// through the workers, which happens within consumer code.
+    #[deprecated = "will be made private"]
     Setup(WithSocketFuture, bool),
     /// The worker is fully connected and ready for I/O.
+    #[deprecated = "will be made private"]
     Reading(ExaExportReader),
 }
 
