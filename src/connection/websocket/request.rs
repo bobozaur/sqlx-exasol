@@ -7,7 +7,7 @@ use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rand::rngs::OsRng;
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 use serde::{Serialize, Serializer};
-use sqlx_core::types::JsonRawValue;
+use serde_json::value::RawValue;
 
 use crate::{
     arguments::ExaBuffer, options::ProtocolVersion, responses::ExaRwAttributes, ExaAttributes,
@@ -466,11 +466,11 @@ impl Serialize for PreparedStmtData {
         S: Serializer,
     {
         // SAFETY: We are guaranteed that the buffer only contains valid JSON.
-        //         The `transmute` is exactly how `serde_json` converts a str to a raw value as
-        //         well, and the benefit is that we do not go through the `serde` machinery
-        //         to deserialize into a raw value just to serialize it right after.
+        //         The `transmute` is exactly how `serde_json` converts a str to a [`RawValue`] as
+        //         well, and the benefit is that we do not go through the `serde` machinery to
+        //         deserialize into a raw value just to serialize it right after.
         #[allow(clippy::transmute_ptr_to_ptr)]
-        unsafe { std::mem::transmute::<&str, &JsonRawValue>(&self.buffer) }.serialize(serializer)
+        unsafe { std::mem::transmute::<&str, &RawValue>(&self.buffer) }.serialize(serializer)
     }
 }
 
