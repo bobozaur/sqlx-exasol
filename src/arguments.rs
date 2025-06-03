@@ -57,7 +57,7 @@ pub struct ExaBuffer {
     /// of rows.
     pub(crate) col_params_counter: usize,
     /// Storage for the first final value of `col_params_counter`.
-    /// 
+    ///
     /// All subsequent columns are expected to have the same amount of rows.
     pub(crate) first_col_params_num: Option<usize>,
 }

@@ -12,7 +12,7 @@ use futures_io::AsyncWrite;
 use super::writer::ExaWriter;
 use crate::connection::websocket::socket::ExaSocket;
 
-/// Wrapper enum that handles the compression support for the [`ExaWriter`].
+/// Wrapper enum that handles the compression support for [`ExaWriter`].
 #[derive(Debug)]
 pub enum ExaImportWriter {
     Plain(ExaWriter),

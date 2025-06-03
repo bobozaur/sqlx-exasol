@@ -303,7 +303,6 @@ type SqlxResult<T> = sqlx_core::Result<T>;
 // Fix README and lib.rs with footnote about execute_many
 // Link statement the issue in the changelog
 // Link the borrow checker issue and close it
-// Document that WithAttributes handles attributes after login sending
 // Create semver issue:
 // - wrap ExaImport and ExaExport into structs as a breaking change
 //     - this can also come with feature gated enum construction, maybe
@@ -314,7 +313,3 @@ type SqlxResult<T> = sqlx_core::Result<T>;
 // - don't make columns lowercase by default? probably cannot do that due to how [`FromRow`] works;
 //   columns need to be lowercase
 // - remove the inherent doubling of HASHTYPE size.
-//
-// Make columns lowercase again
-// Write query_splitter tests
-// Write execute_many statement failure tests

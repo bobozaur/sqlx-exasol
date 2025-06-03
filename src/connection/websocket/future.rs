@@ -1,3 +1,10 @@
+//! Module providing futures for various database interactions.
+//!
+//! The design had two main objectives:
+//! - infallible future creation, with the request serialization happenning internally to better
+//!   accommodate the [`sqlx_core::executor::Executor`] trait.
+//! - allow composing multiple futures seamlessly, achieved through the [`WebSocketFuture`] trait.
+
 use std::{
     fmt::Debug,
     future::Future,

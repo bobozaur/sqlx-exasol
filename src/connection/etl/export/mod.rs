@@ -28,7 +28,15 @@ use super::WithSocketFuture;
 /// circumvent that other than handling the error in code.
 #[allow(clippy::large_enum_variant)]
 pub enum ExaExport {
+    /// Setup state of the worker. This typically means waiting on the TLS handshake.
+    ///
+    /// This approach is needed because Exasol will issue connections sequentially and thus perform
+    /// TLS handshakes the same way.
+    ///
+    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
+    /// through the workers, which happens within consumer code.
     Setup(WithSocketFuture, bool),
+    /// The worker is fully connected and ready for I/O.
     Reading(ExaExportReader),
 }
 

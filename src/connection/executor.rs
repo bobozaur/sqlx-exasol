@@ -191,10 +191,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     }
 
     /// Exasol does not provide nullability information, unfortunately.
-    fn describe<'e, 'q>(
-        self,
-        sql: &'q str,
-    ) -> BoxFuture<'e, SqlxResult<Describe<Self::Database>>>
+    fn describe<'e, 'q>(self, sql: &'q str) -> BoxFuture<'e, SqlxResult<Describe<Self::Database>>>
     where
         'q: 'e,
         'c: 'e,

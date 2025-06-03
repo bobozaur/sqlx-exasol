@@ -10,6 +10,7 @@ use crate::{
 };
 
 /// A builder for an ETL IMPORT job.
+///
 /// Calling [`build().await`] will ouput a future that drives the IMPORT query execution and a
 /// [`Vec<ExaWriter>`] which must be concurrently used to ingest data into Exasol.
 #[derive(Clone, Debug)]
@@ -51,9 +52,8 @@ impl<'a> ImportBuilder<'a> {
 
     /// Builds the IMPORT job.
     ///
-    /// This implies submitting the IMPORT query.
-    /// The output will be a future to await the result of the job
-    /// and the workers that can be used for ETL IO.
+    /// This implies submitting the IMPORT query. The output will be a future to await the result of
+    /// the job and the workers that can be used for ETL IO.
     ///
     /// # Errors
     ///
@@ -69,8 +69,9 @@ impl<'a> ImportBuilder<'a> {
     }
 
     /// Sets the number of writer jobs that will be started.
-    /// If set to `0`, then as many as possible will be used (one per node).
-    /// Providing a number bigger than the number of nodes is the same as providing `0`.
+    ///
+    /// If set to `0`, then as many as possible will be used (one per node). Providing a number
+    /// bigger than the number of nodes is the same as providing `0`.
     pub fn num_writers(&mut self, num_writers: usize) -> &mut Self {
         self.num_writers = num_writers;
         self

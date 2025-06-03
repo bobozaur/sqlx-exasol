@@ -27,11 +27,11 @@ use crate::connection::websocket::socket::ExaSocket;
 ///
 /// # Atomicity
 ///
-/// `IMPORT` jobs are not atomic by themselves. If an error occurs during the data ingestion,
-/// some of the data might be already sent and written in the database. However, since
-/// `IMPORT` is fundamentally just a query, it *can* be transactional. Therefore,
-/// beginning a transaction and passing that to the [`ImportBuilder::build`] method will result in
-/// the import job needing to be explicitly committed:
+/// `IMPORT` jobs are not atomic by themselves. If an error occurs during the data ingestion, some
+/// of the data might be already sent and written in the database. However, since `IMPORT` is
+/// fundamentally just a query, it *can* be transactional. Therefore, beginning a transaction and
+/// passing that to the [`ImportBuilder::build`] method will result in the import job needing to be
+/// explicitly committed:
 ///
 /// ```rust,no_run
 /// use std::env;
@@ -61,11 +61,10 @@ use crate::connection::websocket::socket::ExaSocket;
 /// will, cause issues; Exasol does not immediately start reading data from all workers but rather
 /// seems to connect to them sequentially after each of them provides some data.
 ///
-/// From what I could gather from the logs, providing no data (although the request is
-/// responded to gracefully) makes Exasol retry the connection. With these workers being
-/// implemented as one-shot HTTP servers, there's nothing to connect to anymore. Even if it
-/// were, the connection would just be re-attempted over and over since we'd still
-/// be sending no data.
+/// From what I could gather from the logs, providing no data (although the request is responded to
+/// gracefully) makes Exasol retry the connection. With these workers being implemented as one-shot
+/// HTTP servers, there's nothing to connect to anymore. Even if it were, the connection would just
+/// be re-attempted over and over since we'd still be sending no data.
 ///
 /// Since not using one or more import workers seems to be treated as an error on Exasol's side,
 /// it's best not to create excess writers that you don't plan on using to avoid such issues.
@@ -73,7 +72,15 @@ use crate::connection::websocket::socket::ExaSocket;
 /// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[allow(clippy::large_enum_variant)]
 pub enum ExaImport {
+    /// Setup state of the worker. This typically means waiting on the TLS handshake.
+    ///
+    /// This approach is needed because Exasol will issue connections sequentially and thus perform
+    /// TLS handshakes the same way.
+    ///
+    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
+    /// through the workers, which happens within consumer code.
     Setup(BoxFuture<'static, io::Result<ExaSocket>>, usize, bool),
+    /// The worker is fully connected and ready for I/O.
     Writing(ExaImportWriter),
 }
 
@@ -128,7 +135,7 @@ impl AsyncWrite for ExaImport {
     }
 }
 
-/// Trim options for IMPORT
+/// Trim options for IMPORT.
 #[derive(Debug, Clone, Copy)]
 pub enum Trim {
     Left,
