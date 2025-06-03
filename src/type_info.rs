@@ -148,7 +148,13 @@ impl ExaDataType {
                     | ExaDataType::Varchar(_)
                     | ExaDataType::Null
             ),
-            ExaDataType::HashType(h) => h.compatible(other),
+            ExaDataType::HashType(_) => matches!(
+                other,
+                ExaDataType::HashType(_)
+                    | ExaDataType::Varchar(_)
+                    | ExaDataType::Char(_)
+                    | ExaDataType::Null
+            ),
         }
     }
 
@@ -175,7 +181,7 @@ impl ExaDataType {
             ExaDataType::IntervalYearToMonth(iym) => {
                 format_args!("INTERVAL YEAR({}) TO MONTH", iym.precision).into()
             }
-            ExaDataType::HashType(h) => format_args!("{}({} BYTE)", self.as_ref(), h.size()).into(),
+            ExaDataType::HashType(_) => format_args!("{}", self.as_ref()).into(),
         }
     }
 }
@@ -501,39 +507,16 @@ impl IntervalYearToMonth {
 }
 
 /// The Exasol `HASHTYPE` data type.
-/// Note that Exasol returns the size doubled, as by default the `HASHTYPE_FORMAT` is HEX. This is
-/// handled internally and should not be a concern for any consumer of this type.
 ///
-/// Therefore, for a datatype such as [`uuid::Uuid`] which is `16` bytes long, the `size` field will
-/// be `32`, but the [`HashType::new()`] or [`HashType::size()`] will accept/return `16` to make it
-/// easier to reason with.
+/// NOTE: Exasol returns the size of the column string representation which depends on the
+/// `HASHTYPE_FORMAT` database parameter. So a UUID could have a size of 32 for HEX, 36 for
+/// UUID, 22 for BASE64, etc.
+///
+/// That makes it impossible to compare a type's predefined size and the size returned for a
+/// column to check for compatibility.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
-pub struct HashType {
-    size: u16,
-}
-
-impl HashType {
-    pub const MAX_HASHTYPE_SIZE: u16 = 1024;
-
-    /// Creates a new instance based on the size provided.
-    /// The size gets doubled internally to accommodate the `HASHTYPE_FORMAT` parameter.
-    pub fn new(size: u16) -> Self {
-        Self { size: size * 2 }
-    }
-
-    pub fn size(self) -> u16 {
-        self.size / 2
-    }
-
-    pub fn compatible(self, ty: &ExaDataType) -> bool {
-        match ty {
-            ExaDataType::HashType(h) => self.size >= h.size,
-            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
-            _ => false,
-        }
-    }
-}
+pub struct HashType {}
 
 /// Mainly adding these so that we ensure the inlined type names won't panic when created with their
 /// max values.
@@ -653,16 +636,6 @@ mod tests {
         assert_eq!(
             data_type.full_name().as_ref(),
             format!("VARCHAR({}) ASCII", StringLike::MAX_VARCHAR_LEN)
-        );
-    }
-
-    #[test]
-    fn test_max_hashtype_name() {
-        let hashtype = HashType::new(HashType::MAX_HASHTYPE_SIZE);
-        let data_type = ExaDataType::HashType(hashtype);
-        assert_eq!(
-            data_type.full_name().as_ref(),
-            format!("HASHTYPE({} BYTE)", HashType::MAX_HASHTYPE_SIZE)
         );
     }
 }

@@ -16,7 +16,7 @@ use crate::{
 
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::HashType(HashType::new(16)).into()
+        ExaDataType::HashType(HashType {}).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -31,7 +31,7 @@ impl Encode<'_, Exasol> for Uuid {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaDataType::HashType(HashType::new(16)).into())
+        Some(ExaDataType::HashType(HashType {}).into())
     }
 
     fn size_hint(&self) -> usize {

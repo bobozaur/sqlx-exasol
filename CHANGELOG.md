@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Cancelling operations now does not leave the connection in an invalid state
   - Removed usage of `serde_transcode` in favor of little `unsafe`
   - Added deprecation warnings to `ExaExport` and `ExaImport` enum variants as well as `ExaAttributes::set_autocommit`.
+  - Removed `HashType::size` field as it could not be reliably be used for data type compatibility checks because it returns the size of the string representation of the column, which depends on the session parameter `HASHTYPE_FORMAT`.
 
 ### Fixed
 
