@@ -145,55 +145,56 @@ impl<'a> ExecuteBatch<'a> {
         let mut start = 0;
 
         while let Some((i, c)) = chars.next() {
-            let peek = chars.peek().map(|(_, c)| *c);
+            let mut peek = || chars.peek().map(|(_, c)| *c);
+            let is_whitespace = |p: Option<char>| p.is_some_and(char::is_whitespace);
 
             #[allow(clippy::match_same_arms, reason = "better readability if split")]
-            match (state, c, peek) {
+            match (state, c) {
                 // Line comment start
-                (QueryState::Statement, '-', Some('-')) => {
+                (QueryState::Statement, '-') if Some('-') == peek() => {
                     chars.next();
                     state = QueryState::LineComment;
                 }
                 // Block comment start
-                (QueryState::Statement, '/', Some('*')) => {
+                (QueryState::Statement, '/') if Some('*') == peek() => {
                     chars.next();
                     state = QueryState::BlockComment;
                 }
                 // Double quote start
-                (QueryState::Statement, '"', _) => state = QueryState::DoubleQuote,
+                (QueryState::Statement, '"') => state = QueryState::DoubleQuote,
                 // Single quote start
-                (QueryState::Statement, '\'', _) => state = QueryState::SingleQuote,
+                (QueryState::Statement, '\'') => state = QueryState::SingleQuote,
                 // Statement end
-                (QueryState::Statement, ';', p) => {
+                (QueryState::Statement, ';') => {
                     statements.push(&query[start..=i]);
                     start = i + 1;
 
-                    // Whitespace start
-                    if p.is_some_and(char::is_whitespace) {
+                    // Whitespace between statements start
+                    if is_whitespace(peek()) {
                         state = QueryState::Whitespace;
                     }
                 }
                 // Skip escaped double quote
-                (QueryState::DoubleQuote, '"', Some('"')) => {
+                (QueryState::DoubleQuote, '"') if Some('"') == peek() => {
                     chars.next();
                 }
                 // Skip escaped single quote
-                (QueryState::SingleQuote, '\'', Some('\'')) => {
+                (QueryState::SingleQuote, '\'') if Some('\'') == peek() => {
                     chars.next();
                 }
                 // Double quote end
-                (QueryState::DoubleQuote, '"', _) => state = QueryState::Statement,
+                (QueryState::DoubleQuote, '"') => state = QueryState::Statement,
                 // Single quote end
-                (QueryState::SingleQuote, '\'', _) => state = QueryState::Statement,
+                (QueryState::SingleQuote, '\'') => state = QueryState::Statement,
                 // Line comment end
-                (QueryState::LineComment, '\n', _) => state = QueryState::Statement,
+                (QueryState::LineComment, '\n') => state = QueryState::Statement,
                 // Block comment end
-                (QueryState::BlockComment, '*', Some('/')) => {
+                (QueryState::BlockComment, '*') if Some('/') == peek() => {
                     chars.next();
                     state = QueryState::Statement;
                 }
-                // Whitespace end
-                (QueryState::Whitespace, _, p) if !p.is_some_and(char::is_whitespace) => {
+                // Whitespace between statements end
+                (QueryState::Whitespace, _) if !is_whitespace(peek()) => {
                     start = i + 1;
                     state = QueryState::Statement;
                 }
