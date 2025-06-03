@@ -158,8 +158,10 @@ impl<'a> ExecuteBatch<'a> {
     /// - trim the query to remove leading and trailing whitespace
     /// - parse each character and store the string slice up to a ';' that is not inside a line or
     ///   block comment and not contained within single or double quotes
-    /// - add the remainder string slice after the last ';' if it is not empty; this could mean that
-    ///   the last statement could be a comment only, but that is okay as Exasol does not complain.
+    /// - register the next statement start as the next non-whitespace character after a split,
+    ///   essentially ignoring whitespace between statements (but retaining comments)
+    /// - add the remainder string slice after the last ';' if it is not empty; this means that the
+    ///   last statement could be a comment only, but that is okay as Exasol does not complain.
     fn split_query(query: &str) -> Vec<&str> {
         #[derive(Clone, Copy)]
         enum Inside {
