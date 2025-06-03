@@ -7,7 +7,7 @@ pub mod websocket;
 use std::net::SocketAddr;
 
 use futures_core::future::BoxFuture;
-use futures_util::SinkExt;
+use futures_util::{FutureExt, SinkExt};
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
@@ -26,7 +26,7 @@ use crate::{
     SqlxError, SqlxResult,
 };
 
-/// A connection to the Exasol database.
+/// A connection to the Exasol database. Implementor of [`Connection`].
 #[derive(Debug)]
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
@@ -35,7 +35,7 @@ pub struct ExaConnection {
 }
 
 impl ExaConnection {
-    /// Returns the socket address that we're connected to.
+    /// Returns the Exasol server socket address that we're connected to.
     pub fn socket_addr(&self) -> SocketAddr {
         self.ws.socket_addr()
     }
@@ -135,14 +135,11 @@ impl Connection for ExaConnection {
     }
 
     fn close_hard(mut self) -> BoxFuture<'static, SqlxResult<()>> {
-        Box::pin(async move {
-            self.ws.close().await?;
-            Ok(())
-        })
+        Box::pin(async move { self.ws.close().await })
     }
 
     fn ping(&mut self) -> BoxFuture<'_, SqlxResult<()>> {
-        Box::pin(self.ws.ping())
+        self.ws.ping().boxed()
     }
 
     fn begin(&mut self) -> BoxFuture<'_, SqlxResult<Transaction<'_, Self::Database>>>
@@ -155,11 +152,21 @@ impl Connection for ExaConnection {
     fn shrink_buffers(&mut self) {}
 
     fn flush(&mut self) -> BoxFuture<'_, SqlxResult<()>> {
-        Box::pin(std::future::ready(Ok(())))
+        Box::pin(async {
+            if let Some(future) = self.ws.pending_close.take() {
+                future.future(&mut self.ws).await?;
+            }
+
+            if let Some(future) = self.ws.pending_rollback.take() {
+                future.future(&mut self.ws).await?;
+            }
+
+            Ok(())
+        })
     }
 
     fn should_flush(&self) -> bool {
-        false
+        self.ws.pending_close.is_some() || self.ws.pending_rollback.is_some()
     }
 
     fn cached_statements_size(&self) -> usize

@@ -21,15 +21,15 @@ use crate::{
     ExaConnection, SqlxError, SqlxResult,
 };
 
-#[allow(clippy::multiple_bound_locations)]
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;
 
-    fn execute<'e, 'q: 'e, E>(
+    fn execute<'e, 'q, E>(
         self,
         mut query: E,
     ) -> BoxFuture<'e, SqlxResult<<Self::Database as Database>::QueryResult>>
     where
+        'q: 'e,
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
     {
@@ -63,11 +63,12 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         }
     }
 
-    fn execute_many<'e, 'q: 'e, E>(
+    fn execute_many<'e, 'q, E>(
         self,
         query: E,
     ) -> BoxStream<'e, SqlxResult<<Self::Database as Database>::QueryResult>>
     where
+        'q: 'e,
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
     {
@@ -81,11 +82,12 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
             .boxed()
     }
 
-    fn fetch<'e, 'q: 'e, E>(
+    fn fetch<'e, 'q, E>(
         self,
         mut query: E,
     ) -> BoxStream<'e, SqlxResult<<Self::Database as Database>::Row>>
     where
+        'q: 'e,
         'c: 'e,
         E: 'q + Execute<'q, Self::Database>,
     {
@@ -113,7 +115,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         }
     }
 
-    fn fetch_many<'e, 'q: 'e, E: 'q>(
+    fn fetch_many<'e, 'q, E>(
         self,
         mut query: E,
     ) -> BoxStream<
@@ -123,8 +125,9 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         >,
     >
     where
+        'q: 'e,
         'c: 'e,
-        E: Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Self::Database>,
     {
         let sql = query.sql();
         let persist = query.persistent();
@@ -143,13 +146,14 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         }
     }
 
-    fn fetch_optional<'e, 'q: 'e, E: 'q>(
+    fn fetch_optional<'e, 'q, E>(
         self,
         query: E,
     ) -> BoxFuture<'e, SqlxResult<Option<<Self::Database as Database>::Row>>>
     where
+        'q: 'e,
         'c: 'e,
-        E: Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Self::Database>,
     {
         let mut s = self.fetch_many(query);
 
@@ -164,12 +168,13 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         })
     }
 
-    fn prepare_with<'e, 'q: 'e>(
+    fn prepare_with<'e, 'q>(
         self,
         sql: &'q str,
         _parameters: &'e [<Self::Database as Database>::TypeInfo],
     ) -> BoxFuture<'e, SqlxResult<<Self::Database as Database>::Statement<'q>>>
     where
+        'q: 'e,
         'c: 'e,
     {
         Box::pin(async move {
@@ -186,11 +191,12 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     }
 
     /// Exasol does not provide nullability information, unfortunately.
-    fn describe<'e, 'q: 'e>(
+    fn describe<'e, 'q>(
         self,
         sql: &'q str,
     ) -> BoxFuture<'e, SqlxResult<Describe<Self::Database>>>
     where
+        'q: 'e,
         'c: 'e,
     {
         Box::pin(async move {
