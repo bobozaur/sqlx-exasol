@@ -157,6 +157,34 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
+  tls_connection_tests:
+    name: TLS connection tests
+    needs: clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Free disk space
+        uses: ./.github/actions/free-space
+
+      - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
+        id: exa-cluster
+        uses: ./.github/actions/exa-cluster
+        with:
+          exasol-version: ${{ env.EXASOL_VERSION }}
+          num-nodes: ${{ env.NUM_NODES }}
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          override: true
+
+      - uses: Swatinem/rust-cache@v2
+
       - name: TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture --test-threads `nproc`
@@ -212,7 +240,7 @@ jobs:
         run: cargo test --features etl_native_tls,etl_rustls || true
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
-          
+
       - name: Native-TLS ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads `nproc`
