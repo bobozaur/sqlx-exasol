@@ -16,14 +16,14 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::{with_socket::WithSocketMaker, WithSocketFuture},
+    etl::{with_worker::WithWorker, WithSocketFuture},
     SqlxError, SqlxResult,
 };
 
-/// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].
-pub struct NativeTlsSocketSpawner(Arc<TlsAcceptor>);
+/// Implementor of [`WithWorker`] used for the creation of [`WithNativeTlsSocket`].
+pub struct WithNativeTlsWorker(Arc<TlsAcceptor>);
 
-impl NativeTlsSocketSpawner {
+impl WithNativeTlsWorker {
     pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'native-tls' socket spawner");
 
@@ -39,7 +39,7 @@ impl NativeTlsSocketSpawner {
     }
 }
 
-impl WithSocketMaker for NativeTlsSocketSpawner {
+impl WithWorker for WithNativeTlsWorker {
     type WithSocket = WithNativeTlsSocket;
 
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
@@ -47,6 +47,7 @@ impl WithSocketMaker for NativeTlsSocketSpawner {
     }
 }
 
+/// Implementor of [`WithSocket`] for [`native_tls`].
 pub struct WithNativeTlsSocket {
     inner: WithExaSocket,
     acceptor: Arc<TlsAcceptor>,

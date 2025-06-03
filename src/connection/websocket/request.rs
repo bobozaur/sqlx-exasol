@@ -1,3 +1,6 @@
+//! Module containing the various requests that can be sent to the Exasol server through its
+//! WebSocket API.
+
 use std::{borrow::Cow, num::NonZeroUsize, sync::Arc};
 
 use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
@@ -11,6 +14,8 @@ use crate::{
     ExaTypeInfo, SqlxError, SqlxResult,
 };
 
+/// Serialization wrapper type that adds the read-write attributes to the database request if needed
+/// and the request kind supports it.
 pub struct WithAttributes<'attr, REQ> {
     needs_send: bool,
     attributes: &'attr ExaRwAttributes<'static>,
@@ -27,6 +32,7 @@ impl<'attr, REQ> WithAttributes<'attr, REQ> {
     }
 }
 
+/// Request to login using credentials.
 #[derive(Clone, Copy, Debug)]
 pub struct LoginCreds(pub ProtocolVersion);
 
@@ -43,6 +49,7 @@ impl Serialize for WithAttributes<'_, LoginCreds> {
     }
 }
 
+/// Request to login using an access/refresh token.
 #[derive(Clone, Copy, Debug)]
 pub struct LoginToken(pub ProtocolVersion);
 
@@ -59,6 +66,7 @@ impl Serialize for WithAttributes<'_, LoginToken> {
     }
 }
 
+/// Request to disconnect from the database.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Disconnect;
 
@@ -71,6 +79,7 @@ impl Serialize for WithAttributes<'_, Disconnect> {
     }
 }
 
+/// Request to fetch all read-write and read-only attributes for the connection.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GetAttributes;
 
@@ -83,6 +92,7 @@ impl Serialize for WithAttributes<'_, GetAttributes> {
     }
 }
 
+/// Request to set the read-write attributes of the connection.
 #[derive(Clone, Debug, Default)]
 pub struct SetAttributes;
 
@@ -99,6 +109,7 @@ impl Serialize for WithAttributes<'_, SetAttributes> {
     }
 }
 
+/// Request to close an array of result sets.
 #[derive(Clone, Debug)]
 pub struct CloseResultSets(pub Vec<u16>);
 
@@ -116,6 +127,7 @@ impl Serialize for WithAttributes<'_, CloseResultSets> {
     }
 }
 
+/// Request to close a prepared statement.
 #[derive(Copy, Clone, Debug)]
 pub struct ClosePreparedStmt(pub u16);
 
@@ -133,6 +145,7 @@ impl Serialize for WithAttributes<'_, ClosePreparedStmt> {
     }
 }
 
+/// Request to retrieve the IP addresses of all nodes in the Exasol cluster.
 #[cfg(feature = "etl")]
 #[derive(Clone, Copy, Debug)]
 pub struct GetHosts(pub std::net::IpAddr);
@@ -151,6 +164,7 @@ impl Serialize for WithAttributes<'_, GetHosts> {
     }
 }
 
+/// Request to fetch a data chunk for an open result set.
 #[derive(Clone, Copy, Debug)]
 pub struct Fetch {
     result_set_handle: u16,
@@ -184,6 +198,10 @@ impl Serialize for WithAttributes<'_, Fetch> {
     }
 }
 
+/// Request to execute a single SQL statement.
+// This is internall used in the IMPORT/EXPORT jobs as well, since they rely on query execution too.
+// However, in these scenarios the query is an owned string, hence the usage of [`Cow`] here to
+// support that.
 #[derive(Clone, Debug)]
 pub struct Execute<'a>(pub Cow<'a, str>);
 
@@ -201,6 +219,7 @@ impl Serialize for WithAttributes<'_, Execute<'_>> {
     }
 }
 
+/// Request to execute a batch of SQL statements.
 #[derive(Clone, Debug)]
 pub struct ExecuteBatch<'a>(pub Vec<&'a str>);
 
@@ -218,6 +237,7 @@ impl Serialize for WithAttributes<'_, ExecuteBatch<'_>> {
     }
 }
 
+/// Request to create a prepared statement.
 #[derive(Clone, Debug)]
 pub struct CreatePreparedStmt<'a>(pub &'a str);
 
@@ -235,6 +255,7 @@ impl Serialize for WithAttributes<'_, CreatePreparedStmt<'_>> {
     }
 }
 
+/// Request to execute a prepared statement.
 #[derive(Clone, Debug)]
 pub struct ExecutePreparedStmt {
     statement_handle: u16,
@@ -274,10 +295,14 @@ impl Serialize for WithAttributes<'_, ExecutePreparedStmt> {
     }
 }
 
-/// A complete login request. This does not conform to the command structure and thus
-/// sits separately. Constructed from a reference of [`crate::ExaConnectOptions`].
-/// The type borrows most of the data from [`crate::ExaConnectOptions`], but uses a
-/// [`std::borrow::Cow`] for the password since it'll get overwritten when encrypted.
+/// A complete login request. This does not conform to the command structure and thus sits
+/// separately.
+///
+/// Constructed from a reference of [`crate::ExaConnectOptions`]. The type borrows most of the data
+/// from [`crate::ExaConnectOptions`], but uses a [`std::borrow::Cow`] for the password since it'll
+/// get overwritten when encrypted.
+///
+/// This type is why [`ExaRwAttributes`] takes a lifetime parameter.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExaLoginRequest<'a> {

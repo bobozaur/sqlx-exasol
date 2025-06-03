@@ -12,14 +12,12 @@ use crate::{
     SqlxResult,
 };
 
-/// Trait used as an interface for constructing a type implementing [`WithSocket`]
-/// that outputs a socket spawning future.
-///
-/// The constructed future can then be awaited regardless of its origin, bridging the TLS/non-TLS
-/// code.
-pub trait WithSocketMaker: Send + Sync {
+/// Trait used as an interface for constructing a type implementing [`WithSocket`] that outputs an
+/// ETL worker. One purpose of this trait is to abstract away the TLS/non-TLS workers.
+pub trait WithWorker: Send + Sync {
     type WithSocket: WithSocket<Output = SqlxResult<WithSocketFuture>> + Send;
 
+    /// Returns a constructed [`WithWorker::WithSocket`] instance.
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket;
 }
 

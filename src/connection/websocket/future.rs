@@ -32,8 +32,8 @@ use crate::{
     ExaArguments, SessionInfo, SqlxError, SqlxResult,
 };
 
-/// Adapter that wraps a type implementing [`WebSocketFuture`] to
-/// allow interacting with it through a regular [`Future`].
+/// Adapter that wraps a type implementing [`WebSocketFuture`] to allow interacting with it through
+/// a regular [`Future`].
 ///
 /// Gets constructed with [`WebSocketFuture::future`].
 #[derive(Debug)]
@@ -54,6 +54,9 @@ where
     }
 }
 
+/// Helper trait for defining a future like interface which also accepts a [`ExaWebSocket`]
+/// argument. This allows nesting types as needed and simply propagating the websocket as an
+/// argument wherever polling is necessary.
 pub trait WebSocketFuture: Unpin + Sized {
     type Output;
 
@@ -68,6 +71,8 @@ pub trait WebSocketFuture: Unpin + Sized {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that executes a prepared statement.
+#[derive(Debug)]
 pub struct ExecutePrepared<'a> {
     arguments: ExaArguments,
     state: ExecutePreparedState<'a>,
@@ -124,11 +129,14 @@ impl<'a> WebSocketFuture for ExecutePrepared<'a> {
     }
 }
 
+#[derive(Debug)]
 enum ExecutePreparedState<'a> {
     GetOrPrepare(GetOrPrepare<'a>),
     ExecutePrepared(ExaRoundtrip<ExecutePreparedStmt, SingleResult>),
 }
 
+/// Implementor of [`WebSocketFuture`] that executes a batch of SQL statements.
+#[derive(Debug)]
 pub struct ExecuteBatch<'a>(ExaRoundtrip<request::ExecuteBatch<'a>, MultiResults>);
 
 impl<'a> ExecuteBatch<'a> {
@@ -137,10 +145,28 @@ impl<'a> ExecuteBatch<'a> {
         Self(ExaRoundtrip::new(request))
     }
 
+    /// Splits a SQL query into individual statements.
+    ///
+    /// The splitting follows the following logic:
+    /// - trim the query to remove leading and trailing whitespace
+    /// - parse each character and store the string slice up to a ';' that is not inside a line or
+    ///   block comment and not contained within single or double quotes
+    /// - add the remainder string slice after the last ';' if it is not empty; this could mean that
+    ///   the last statement could be a comment only, but that is okay as Exasol does not complain.
     fn split_query(query: &str) -> Vec<&str> {
+        #[derive(Clone, Copy)]
+        enum Inside {
+            Statement,
+            LineComment,
+            BlockComment,
+            DoubleQuote,
+            SingleQuote,
+            Whitespace,
+        }
+
         let query = query.trim();
         let mut chars = query.char_indices().peekable();
-        let mut state = QueryState::Statement;
+        let mut state = Inside::Statement;
         let mut statements = Vec::new();
         let mut start = 0;
 
@@ -151,52 +177,52 @@ impl<'a> ExecuteBatch<'a> {
             #[allow(clippy::match_same_arms, reason = "better readability if split")]
             match (state, c) {
                 // Line comment start
-                (QueryState::Statement, '-') if Some('-') == peek() => {
+                (Inside::Statement, '-') if Some('-') == peek() => {
                     chars.next();
-                    state = QueryState::LineComment;
+                    state = Inside::LineComment;
                 }
                 // Block comment start
-                (QueryState::Statement, '/') if Some('*') == peek() => {
+                (Inside::Statement, '/') if Some('*') == peek() => {
                     chars.next();
-                    state = QueryState::BlockComment;
+                    state = Inside::BlockComment;
                 }
                 // Double quote start
-                (QueryState::Statement, '"') => state = QueryState::DoubleQuote,
+                (Inside::Statement, '"') => state = Inside::DoubleQuote,
                 // Single quote start
-                (QueryState::Statement, '\'') => state = QueryState::SingleQuote,
+                (Inside::Statement, '\'') => state = Inside::SingleQuote,
                 // Statement end
-                (QueryState::Statement, ';') => {
+                (Inside::Statement, ';') => {
                     statements.push(&query[start..=i]);
                     start = i + 1;
 
                     // Whitespace between statements start
                     if is_whitespace(peek()) {
-                        state = QueryState::Whitespace;
+                        state = Inside::Whitespace;
                     }
                 }
                 // Skip escaped double quote
-                (QueryState::DoubleQuote, '"') if Some('"') == peek() => {
+                (Inside::DoubleQuote, '"') if Some('"') == peek() => {
                     chars.next();
                 }
                 // Skip escaped single quote
-                (QueryState::SingleQuote, '\'') if Some('\'') == peek() => {
+                (Inside::SingleQuote, '\'') if Some('\'') == peek() => {
                     chars.next();
                 }
                 // Double quote end
-                (QueryState::DoubleQuote, '"') => state = QueryState::Statement,
+                (Inside::DoubleQuote, '"') => state = Inside::Statement,
                 // Single quote end
-                (QueryState::SingleQuote, '\'') => state = QueryState::Statement,
+                (Inside::SingleQuote, '\'') => state = Inside::Statement,
                 // Line comment end
-                (QueryState::LineComment, '\n') => state = QueryState::Statement,
+                (Inside::LineComment, '\n') => state = Inside::Statement,
                 // Block comment end
-                (QueryState::BlockComment, '*') if Some('/') == peek() => {
+                (Inside::BlockComment, '*') if Some('/') == peek() => {
                     chars.next();
-                    state = QueryState::Statement;
+                    state = Inside::Statement;
                 }
                 // Whitespace between statements end
-                (QueryState::Whitespace, _) if !is_whitespace(peek()) => {
+                (Inside::Whitespace, _) if !is_whitespace(peek()) => {
                     start = i + 1;
-                    state = QueryState::Statement;
+                    state = Inside::Statement;
                 }
                 _ => (),
             }
@@ -213,16 +239,6 @@ impl<'a> ExecuteBatch<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
-enum QueryState {
-    Statement,
-    LineComment,
-    BlockComment,
-    DoubleQuote,
-    SingleQuote,
-    Whitespace,
-}
-
 impl<'a> WebSocketFuture for ExecuteBatch<'a> {
     type Output = MultiResultStream;
 
@@ -236,6 +252,8 @@ impl<'a> WebSocketFuture for ExecuteBatch<'a> {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that executes a single SQL statement.
+#[derive(Debug)]
 pub struct Execute<'a>(ExaRoundtrip<request::Execute<'a>, SingleResult>);
 
 impl<'a> Execute<'a> {
@@ -256,6 +274,9 @@ impl<'a> WebSocketFuture for Execute<'a> {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that retrieves a prepared statement from the cache, storing
+/// it first on cache miss.
+#[derive(Debug)]
 pub struct GetOrPrepare<'a> {
     sql: &'a str,
     persist: bool,
@@ -321,12 +342,14 @@ impl<'a> WebSocketFuture for GetOrPrepare<'a> {
     }
 }
 
+#[derive(Debug)]
 enum GetOrPrepareState<'a> {
     GetCached,
     CreatePrepared(CreatePrepared<'a>),
     ClosePrepared(ClosePrepared),
 }
 
+/// Implementor of [`WebSocketFuture`] that fetches a data chunk from an open result set.
 #[derive(Debug)]
 pub struct FetchChunk(ExaRoundtrip<Fetch, DataChunk>);
 
@@ -348,6 +371,9 @@ impl WebSocketFuture for FetchChunk {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] used to describe a SQL statement. In the lack of native
+/// database support, a statement gets prepared and closed right after to retrieve the statement
+/// information.
 #[derive(Debug)]
 pub enum Describe<'a> {
     CreatePrepared(ExaRoundtrip<CreatePreparedStmt<'a>, DescribeStatement>),
@@ -388,6 +414,7 @@ impl<'a> WebSocketFuture for Describe<'a> {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that creates a prepared statement.
 #[derive(Debug)]
 pub struct CreatePrepared<'a>(ExaRoundtrip<CreatePreparedStmt<'a>, PreparedStatement>);
 
@@ -409,6 +436,7 @@ impl<'a> WebSocketFuture for CreatePrepared<'a> {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that closes a prepared statement.
 #[derive(Debug)]
 pub struct ClosePrepared(ExaRoundtrip<ClosePreparedStmt, Option<IgnoredAny>>);
 
@@ -430,6 +458,7 @@ impl WebSocketFuture for ClosePrepared {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that closes an array of result sets.
 #[derive(Debug)]
 pub struct CloseResultSets(ExaRoundtrip<request::CloseResultSets, Option<IgnoredAny>>);
 
@@ -451,6 +480,8 @@ impl WebSocketFuture for CloseResultSets {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that retrieves the IP addresses of the nodes in the Exasol
+/// cluser.
 #[cfg(feature = "etl")]
 #[derive(Debug)]
 pub struct GetHosts(ExaRoundtrip<request::GetHosts, crate::responses::Hosts>);
@@ -475,6 +506,7 @@ impl WebSocketFuture for GetHosts {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that sets the read-write attributes for the connection.
 #[derive(Debug, Default)]
 pub struct SetAttributes(ExaRoundtrip<request::SetAttributes, Option<IgnoredAny>>);
 
@@ -490,6 +522,8 @@ impl WebSocketFuture for SetAttributes {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that retrieves all the read-write and read-only attributes of
+/// the connection.
 #[derive(Debug, Default)]
 pub struct GetAttributes(ExaRoundtrip<request::GetAttributes, Option<IgnoredAny>>);
 
@@ -505,6 +539,7 @@ impl WebSocketFuture for GetAttributes {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that executes a `COMMIT;` statement.
 #[derive(Debug)]
 pub struct Commit(ExaRoundtrip<request::Execute<'static>, Option<IgnoredAny>>);
 
@@ -536,6 +571,7 @@ impl WebSocketFuture for Commit {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that executes a `ROLLBACK;` statement.
 #[derive(Debug)]
 pub struct Rollback(ExaRoundtrip<request::Execute<'static>, Option<IgnoredAny>>);
 
@@ -567,6 +603,7 @@ impl WebSocketFuture for Rollback {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that disconnects the connection.
 #[derive(Default)]
 pub struct Disconnect(ExaRoundtrip<request::Disconnect, Option<IgnoredAny>>);
 
@@ -582,11 +619,13 @@ impl WebSocketFuture for Disconnect {
     }
 }
 
-/// The login process consists of sending the desired login command,
-/// optionally receiving some response data from it, and then
-/// finishing the login by sending the connection options.
+/// Implementor of [`WebSocketFuture`] that authenticates the connection.
+///
+/// The login process consists of sending the desired login command, optionally receiving some
+/// response data from it, and then finishing the login by sending the connection options.
 ///
 /// It is ALWAYS uncompressed.
+#[derive(Debug)]
 pub struct ExaLogin<'a> {
     opts: Option<ExaLoginRequest<'a>>,
     state: LoginState<'a>,
@@ -639,12 +678,19 @@ impl WebSocketFuture for ExaLogin<'_> {
     }
 }
 
+#[derive(Debug)]
 enum LoginState<'a> {
     Token(ExaRoundtrip<LoginToken, Option<IgnoredAny>>),
     Credentials(ExaRoundtrip<LoginCreds, PublicKey>),
     Complete(ExaRoundtrip<ExaLoginRequest<'a>, SessionInfo>),
 }
 
+/// Low-level implementor of [`WebSocketFuture`] that sends a request and awaits its response.
+///
+/// This type contains logic for graceful handling of pending rollbacks, closing currently open
+/// result sets and ignoring pending database responses for futures that were cancelled/dropped.
+///
+/// All I/O interactions with the database should be built on top of this type.
 #[derive(Debug)]
 pub enum ExaRoundtrip<REQ, OUT> {
     Waiting(REQ),
@@ -658,6 +704,8 @@ impl<REQ, OUT> ExaRoundtrip<REQ, OUT> {
         Self::Waiting(request)
     }
 
+    /// Returns whether the request was successfully sent to the database, even if the response was
+    /// not yet received.
     fn has_sent(&self) -> bool {
         match self {
             Self::Waiting(_) | Self::Flushing => false,
@@ -712,17 +760,21 @@ where
                         }
                     }
 
+                    // If there's an active request that we haven't received the response for, await
+                    // the response and ignore it.
                     if ws.active_request {
                         ready!(ws.poll_flush_unpin(cx))?;
                         ready!(ws.poll_next_unpin(cx)).transpose()?;
                         ws.active_request = false;
                     }
 
+                    // Wait until we're ready to send a request.
                     ready!(ws.poll_ready_unpin(cx))?;
                     let with_attrs = WithAttributes::new(request, &ws.attributes);
                     let request = serde_json::to_string(&with_attrs)
                         .map_err(|e| SqlxError::Protocol(e.to_string()))?;
 
+                    // Send the request.
                     tracing::trace!("sending request:\n{request}");
                     ws.start_send_unpin(request)?;
                     ws.attributes.set_needs_send(false);
@@ -735,10 +787,15 @@ where
                     *self = Self::Receiving(PhantomData);
                 }
                 Self::Receiving(_) => {
+                    // Get the next response from the database.
                     let Some(bytes) = ready!(ws.poll_next_unpin(cx)).transpose()? else {
                         return Err(ExaProtocolError::from(None::<CloseFrame>))?;
                     };
 
+                    // There's no way to get here unless a request was also sent, yet the sending
+                    // logic takes into account whether an active request already exists, therefore
+                    // gracefully getting a response means that the current request is no longer
+                    // active.
                     ws.active_request = false;
 
                     let (out, attr_opt) =

@@ -16,14 +16,14 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::{with_socket::WithSocketMaker, WithSocketFuture},
+    etl::{with_worker::WithWorker, WithSocketFuture},
     SqlxError, SqlxResult,
 };
 
-/// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
-pub struct RustlsSocketSpawner(Arc<ServerConfig>);
+/// Implementor of [`WithWorker`] used for the creation of [`WithRustlsSocket`].
+pub struct WithRustlsWorker(Arc<ServerConfig>);
 
-impl RustlsSocketSpawner {
+impl WithRustlsWorker {
     pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'rustls' socket spawner");
 
@@ -43,7 +43,7 @@ impl RustlsSocketSpawner {
     }
 }
 
-impl WithSocketMaker for RustlsSocketSpawner {
+impl WithWorker for WithRustlsWorker {
     type WithSocket = WithRustlsSocket;
 
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
@@ -51,6 +51,7 @@ impl WithSocketMaker for RustlsSocketSpawner {
     }
 }
 
+/// Implementor of [`WithSocket`] for [`rustls`].
 pub struct WithRustlsSocket {
     inner: WithExaSocket,
     config: Arc<ServerConfig>,

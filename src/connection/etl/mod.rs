@@ -75,7 +75,7 @@ mod import;
 mod job;
 mod non_tls;
 mod tls;
-mod with_socket;
+mod with_worker;
 
 use std::{
     future::Future,
@@ -105,8 +105,10 @@ use crate::{
 
 /// Type of the future that executes the ETL job.
 type JobFuture<'a> = BoxFuture<'a, SqlxResult<ExaQueryResult>>;
+// Type alias for a socket spawning future used in ETL worker's setup phase.
 type WithSocketFuture = BoxFuture<'static, io::Result<ExaSocket>>;
 
+// CSV row separator.
 #[derive(Debug, Clone, Copy)]
 pub enum RowSeparator {
     LF,
@@ -124,6 +126,7 @@ impl AsRef<str> for RowSeparator {
     }
 }
 
+/// Future for awaiting an ETL query alongside the worker I/O.
 #[derive(Debug)]
 pub struct EtlQuery<'c>(ExaFuture<'c, ExecuteEtl>);
 
@@ -135,6 +138,7 @@ impl<'c> Future for EtlQuery<'c> {
     }
 }
 
+/// Implementor of [`WebSocketFuture`] that executes an owned ETL query.
 #[derive(Debug)]
 struct ExecuteEtl(ExaRoundtrip<Execute<'static>, SingleResult>);
 

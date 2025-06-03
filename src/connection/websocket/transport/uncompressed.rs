@@ -16,6 +16,7 @@ use crate::{
     SqlxError, SqlxResult,
 };
 
+/// A plain websocket that does not use compression.
 #[derive(Debug)]
 pub struct PlainWebSocket(pub WebSocketStream<BufReader<ExaSocket>>);
 

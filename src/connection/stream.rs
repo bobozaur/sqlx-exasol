@@ -128,7 +128,8 @@ enum ResultStreamState<F> {
 }
 
 /// Helper trait for defining a stream like interface which also accepts a [`ExaWebSocket`]
-/// argument.
+/// argument. This allows nesting types as needed and simply propagating the websocket as an
+/// argument wherever polling is necessary.
 trait WebsocketStream: Unpin {
     type Item;
 

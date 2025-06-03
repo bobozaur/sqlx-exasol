@@ -30,15 +30,22 @@ use crate::{
     SqlxError, SqlxResult,
 };
 
-/// A websocket connected to the Exasol, providing lower level
-/// interaction with the database.
+/// A websocket connected to the Exasol, providing lower level interaction with the database.
 #[derive(Debug)]
 pub struct ExaWebSocket {
+    /// The underlying websocket, potentially using compression.
     pub inner: MaybeCompressedWebSocket,
+    /// The connection attributes.
     pub attributes: ExaAttributes,
+    /// Future to close previously opened result sets.
     pub pending_close: Option<CloseResultSets>,
+    /// Future to rollback a previously started transaction.
     pub pending_rollback: Option<Rollback>,
+    /// Prepared statements cache.
     pub statement_cache: LruCache<String, PreparedStatement>,
+    /// Whether a request has been successfully sent to the database but a response was not yet
+    /// received. This is used for connection consistency, so an upcoming response can be ignored
+    /// if needed, such as when a future gets dropped/cancelled before completion.
     pub active_request: bool,
 }
 
@@ -93,7 +100,10 @@ impl ExaWebSocket {
         // Use compression if indicated to do so and it's enabled through the feature flagged.
         this.inner = this.inner.maybe_compress(use_compression);
 
+        // NOTE: Cannot embed this into [`ExaLogin`] because the streaming might be compressed by
+        //       now, whereas the login flow is always uncompressed.
         GetAttributes::default().future(&mut this).await?;
+
         Ok((this, session_info))
     }
 

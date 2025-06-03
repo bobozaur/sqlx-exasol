@@ -14,9 +14,9 @@ use crate::{
         socket::WithExaSocket,
     },
     etl::{
-        non_tls::NonTlsSocketSpawner,
+        non_tls::WithNonTlsWorker,
         tls,
-        with_socket::{WithSocketAddr, WithSocketMaker},
+        with_worker::{WithSocketAddr, WithWorker},
         EtlQuery, ExecuteEtl, JobFuture, WithSocketFuture,
     },
     ExaConnection, SqlxResult,
@@ -48,7 +48,7 @@ pub trait EtlJob: Sized + Send + Sync {
     /// workers to be used in query generation.
     fn connect_workers(
         &self,
-        make_socket: impl WithSocketMaker,
+        make_socket: impl WithWorker,
         num: usize,
         ips: Vec<IpAddr>,
         port: u16,
@@ -107,10 +107,10 @@ pub trait EtlJob: Sized + Send + Sync {
 
             // Get the internal Exasol node addresses and the workers
             let (addrs, workers) = if with_tls {
-                self.connect_workers(tls::with_socket_maker()?, num, ips, port, with_compression)
+                self.connect_workers(tls::with_worker()?, num, ips, port, with_compression)
                     .await?
             } else {
-                self.connect_workers(NonTlsSocketSpawner, num, ips, port, with_compression)
+                self.connect_workers(WithNonTlsWorker, num, ips, port, with_compression)
                     .await?
             };
 

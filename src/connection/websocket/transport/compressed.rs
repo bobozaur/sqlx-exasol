@@ -17,10 +17,14 @@ use crate::{
     SqlxError, SqlxResult,
 };
 
+/// A websocket that compresses its messages.
 #[derive(Debug)]
 pub struct CompressedWebSocket {
+    /// The underlying websocket.
     pub inner: WebSocketStream<BufReader<ExaSocket>>,
+    /// Future for the currently decoding message.
     decoding: Option<Compression<ZlibDecoder<Vec<u8>>>>,
+    /// Future for the currently encoding message.
     encoding: Option<Compression<ZlibEncoder<Vec<u8>>>>,
 }
 
@@ -61,16 +65,21 @@ impl Sink<String> for CompressedWebSocket {
     type Error = SqlxError;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        // Ensure there's no message being compressed.
+        ready!(self.as_mut().poll_flush(cx))?;
+        // Poll for readiness.
         self.inner
             .poll_ready_unpin(cx)
             .map_err(ToSqlxError::to_sqlx_err)
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
+        // Sanity check
         if self.encoding.is_some() {
             return Err(ExaProtocolError::SendNotReady)?;
         }
 
+        // Register the item for compression.
         let bytes = item.into_bytes().into_boxed_slice().into();
         self.encoding = Some(Compression::new(bytes, 0));
         Ok(())
@@ -79,12 +88,14 @@ impl Sink<String> for CompressedWebSocket {
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         loop {
             if let Some(future) = self.encoding.as_mut() {
+                // Compress the last registered item.
                 let bytes = ready!(future.poll_unpin(cx))?;
                 self.encoding = None;
                 self.inner
                     .start_send_unpin(Message::Binary(bytes))
                     .map_err(ToSqlxError::to_sqlx_err)?;
             } else {
+                // Flush the compressed message.
                 return self
                     .inner
                     .poll_flush_unpin(cx)
@@ -110,6 +121,7 @@ impl From<PlainWebSocket> for CompressedWebSocket {
     }
 }
 
+/// Future for awaiting the compression/decompression of a message.
 #[derive(Debug)]
 struct Compression<T> {
     writer: T,
@@ -165,6 +177,7 @@ where
     }
 }
 
+/// State enum for the [`Compression`] future.
 #[derive(Debug)]
 enum CompressionState {
     Writing,
@@ -172,6 +185,7 @@ enum CompressionState {
     Closing,
 }
 
+/// Helper trait to expose a common interface for the [`Compression`] future.
 trait ExaCompression: AsyncWrite + Unpin {
     fn new(capacity: usize) -> Self;
 

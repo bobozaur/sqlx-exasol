@@ -5,16 +5,17 @@ mod rustls;
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod sync_socket;
 
-use crate::{etl::with_socket::WithSocketMaker, SqlxError, SqlxResult};
+use crate::{etl::with_worker::WithWorker, SqlxError, SqlxResult};
 
 #[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
-pub fn with_socket_maker() -> SqlxResult<impl WithSocketMaker> {
+pub fn with_worker() -> SqlxResult<impl WithWorker> {
     let err = SqlxError::Tls("No ETL TLS feature set".into());
-    Err::<super::non_tls::NonTlsSocketSpawner, _>(err)
+    Err::<super::non_tls::WithNonTlsWorker, _>(err)
 }
 
+/// Returns the dedicated [`impl WithWorker`] for the chosen TLS implementation.
 #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
-pub fn with_socket_maker() -> SqlxResult<impl WithSocketMaker> {
+pub fn with_worker() -> SqlxResult<impl WithWorker> {
     use rcgen::{CertificateParams, KeyPair};
     use rsa::{
         pkcs8::{EncodePrivateKey, LineEnding},
@@ -44,9 +45,9 @@ pub fn with_socket_maker() -> SqlxResult<impl WithSocketMaker> {
         .map_err(ToSqlxError::to_sqlx_err)?;
 
     #[cfg(feature = "etl_native_tls")]
-    return native_tls::NativeTlsSocketSpawner::new(&cert, &key_pair);
+    return native_tls::WithNativeTlsWorker::new(&cert, &key_pair);
     #[cfg(feature = "etl_rustls")]
-    return rustls::RustlsSocketSpawner::new(&cert, &key_pair);
+    return rustls::WithRustlsWorker::new(&cert, &key_pair);
 }
 
 #[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]

@@ -18,8 +18,8 @@ pub use uncompressed::PlainWebSocket;
 
 use crate::{error::ToSqlxError, SqlxError, SqlxResult};
 
-/// Websocket extension enum that wraps the plain and compressed variants
-/// of the websocket used for a connection.
+/// Websocket extension enum that wraps the plain and compressed variants of the websocket used for
+/// a connection.
 #[derive(Debug)]
 pub enum MaybeCompressedWebSocket {
     Plain(PlainWebSocket),
@@ -28,6 +28,8 @@ pub enum MaybeCompressedWebSocket {
 }
 
 impl MaybeCompressedWebSocket {
+    /// Consumes `self` to output a possibly different variant, depending on whether compression is
+    /// wanted and enabled.
     pub fn maybe_compress(self, use_compression: bool) -> Self {
         match (self, use_compression) {
             #[cfg(feature = "compression")]

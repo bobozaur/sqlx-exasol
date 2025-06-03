@@ -6,6 +6,7 @@ use sqlx_core::net::{
 use super::socket::{ExaSocket, WithExaSocket};
 use crate::{options::ExaTlsOptionsRef, ExaSslMode, SqlxResult};
 
+/// Implementor of [`WithSocket`] that encapsulates the TLS/non-TLS decision logic.
 pub struct WithMaybeTlsExaSocket<'a> {
     wrapper: WithExaSocket,
     host: &'a str,

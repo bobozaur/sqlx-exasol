@@ -220,7 +220,10 @@ impl ExaAttributes {
     }
 }
 
-/// Database read-write attributes
+/// Database read-write attributes.
+/// 
+/// The lifetime parameter and usage of [`Cow`] is to support embedding these attributes in a
+/// [`crate::connection::websocket::request::ExaLoginRequest`].
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExaRwAttributes<'a> {
