@@ -1,11 +1,11 @@
 use std::{fmt::Debug, sync::Arc};
 
 use serde_json::Value;
-use sqlx_core::{column::ColumnIndex, database::Database, row::Row, Error as SqlxError, HashMap};
+use sqlx_core::{column::ColumnIndex, database::Database, row::Row, HashMap};
 
-use crate::{column::ExaColumn, database::Exasol, value::ExaValueRef};
+use crate::{column::ExaColumn, database::Exasol, value::ExaValueRef, SqlxError, SqlxResult};
 
-/// Struct representing a result set row.
+/// Struct representing a result set row. Implementor of [`Row`].
 #[derive(Debug)]
 pub struct ExaRow {
     column_names: Arc<HashMap<Arc<str>, usize>>,
@@ -14,6 +14,7 @@ pub struct ExaRow {
 }
 
 impl ExaRow {
+    #[must_use]
     pub fn new(
         data: Vec<Value>,
         columns: Arc<[ExaColumn]>,
@@ -34,10 +35,7 @@ impl Row for ExaRow {
         &self.columns
     }
 
-    fn try_get_raw<I>(
-        &self,
-        index: I,
-    ) -> Result<<Self::Database as Database>::ValueRef<'_>, SqlxError>
+    fn try_get_raw<I>(&self, index: I) -> SqlxResult<<Self::Database as Database>::ValueRef<'_>>
     where
         I: ColumnIndex<Self>,
     {
@@ -56,7 +54,7 @@ impl Row for ExaRow {
 }
 
 impl ColumnIndex<ExaRow> for &'_ str {
-    fn index(&self, container: &ExaRow) -> Result<usize, SqlxError> {
+    fn index(&self, container: &ExaRow) -> SqlxResult<usize> {
         container
             .column_names
             .get(*self)

@@ -67,7 +67,6 @@ runs:
         done
       shell: bash
 
-    # The Exasol cluster is created with this subnet by default
     - name: Create connection strings
       id: connection-strings
       run: |

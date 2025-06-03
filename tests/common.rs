@@ -1,6 +1,8 @@
 #![cfg(feature = "migrate")]
 
-use futures_util::TryStreamExt;
+use std::iter::zip;
+
+use futures_util::{StreamExt, TryStreamExt};
 use sqlx::{
     error::BoxDynError, pool::PoolConnection, Column, Connection, Executor, Row, Statement,
     TypeInfo,
@@ -358,23 +360,22 @@ async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow
 
 // This cannot unfortunately be achieved without some async drop.
 //
-// We can either schedule the rollback to be sent on the next
-// async database interaction or pre-emptively start sending
-// the message, but in this case unless we get to flush it,
-// we're still not going to be getting a response until
-// we have some other database interaction.
+// We can either schedule the rollback to be sent on the next async database interaction or
+// pre-emptively start sending the message, but in this case unless we get to flush it, we're still
+// not going to be getting a response until we have some other database interaction.
 //
-// Therefore, if a transaction is dropped and will be rollbacked
-// but another connection starts a conflicting transaction, a deadlock
-// will occur.
+// Therefore, if a transaction is dropped and scheduled for rollback but another connection starts a
+// conflicting transaction, a deadlock will occur.
 //
 // #[sqlx::test]
 // async fn it_can_drop_transaction_and_not_deadlock(
 //     pool_opts: PoolOptions<Exasol>,
 //     exa_opts: ExaConnectOptions,
-// ) -> anyhow::Result<()> { let pool_opts = pool_opts.max_connections(2); let pool =
-//   pool_opts.connect_with(exa_opts).await?; let mut conn1 = pool.acquire().await?; let mut conn2 =
-//   pool.acquire().await?;
+// ) -> anyhow::Result<()> {
+//     let pool_opts = pool_opts.max_connections(2);
+//     let pool = pool_opts.connect_with(exa_opts).await?;
+//     let mut conn1 = pool.acquire().await?;
+//     let mut conn2 = pool.acquire().await?;
 
 //     conn1
 //         .execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
@@ -414,10 +415,6 @@ async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow
 
 #[sqlx::test]
 async fn test_equal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    use std::iter::zip;
-
-    use sqlx_core::{executor::Executor, query::query, query_as::query_as};
-
     con.execute(
         "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
     )
@@ -427,7 +424,7 @@ async fn test_equal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
     let ints = vec![1, 2, 3];
     let mut strings = vec![Some("one".to_owned()), None, Some(String::new())];
 
-    let query_result = query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
+    let query_result = sqlx::query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
         .bind(&bools)
         .bind(&ints)
         .bind(&strings)
@@ -437,7 +434,7 @@ async fn test_equal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
     assert_eq!(query_result.rows_affected(), 3);
 
     let values: Vec<(bool, u32, Option<String>)> =
-        query_as("SELECT * FROM sqlx_test_type ORDER BY col2;")
+        sqlx::query_as("SELECT * FROM sqlx_test_type ORDER BY col2;")
             .fetch_all(&mut *con)
             .await?;
 
@@ -455,8 +452,6 @@ async fn test_equal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
 
 #[sqlx::test]
 async fn test_unequal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query};
-
     con.execute(
         "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
     )
@@ -466,7 +461,7 @@ async fn test_unequal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxD
     let ints = vec![1, 2, 3, 4];
     let strings = vec![Some("one".to_owned()), Some(String::new())];
 
-    query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
+    sqlx::query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
         .bind(&bools)
         .bind(&ints)
         .bind(&strings)
@@ -479,8 +474,6 @@ async fn test_unequal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxD
 
 #[sqlx::test]
 async fn test_exceeding_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query};
-
     con.execute(
         "CREATE TABLE sqlx_test_type ( col1 BOOLEAN, col2 DECIMAL(10, 0), col3 VARCHAR(100) );",
     )
@@ -490,7 +483,7 @@ async fn test_exceeding_arrays(mut con: PoolConnection<Exasol>) -> Result<(), Bo
     let ints = vec![1, 2, u64::MAX];
     let strings = vec![Some("one".to_owned()), Some(String::new()), None];
 
-    query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
+    sqlx::query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
         .bind(&bools)
         .bind(&ints)
         .bind(&strings)
@@ -503,22 +496,31 @@ async fn test_exceeding_arrays(mut con: PoolConnection<Exasol>) -> Result<(), Bo
 
 #[sqlx::test]
 async fn test_decode_error(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
-
     con.execute("CREATE TABLE sqlx_test_type ( col DECIMAL(10, 0) );")
         .await?;
 
-    query("INSERT INTO sqlx_test_type VALUES (?)")
+    sqlx::query("INSERT INTO sqlx_test_type VALUES (?)")
         .bind(u32::MAX)
         .execute(&mut *con)
         .await?;
 
-    let error = query_scalar::<_, u8>("SELECT col FROM sqlx_test_type")
+    let error = sqlx::query_scalar::<_, u8>("SELECT col FROM sqlx_test_type")
         .fetch_one(&mut *con)
         .await
         .unwrap_err();
 
     eprintln!("{error}");
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_execute_many_fails(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    // Ensure that even if errors are not handled a bad statement in a query will
+    // still result in the stream ending.
+    con.execute_many("SELECT 1; SELECT * FROM some_table_that_does_not_exist; SELECT 2;")
+        .for_each(|_| async {})
+        .await;
 
     Ok(())
 }

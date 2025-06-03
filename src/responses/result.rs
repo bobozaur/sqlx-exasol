@@ -6,17 +6,25 @@ use serde_json::Value;
 use super::{columns::ExaColumns, to_row_major};
 use crate::{column::ExaColumn, error::ExaProtocolError};
 
-/// The `results` field returned by Exasol after executing a query.
-/// We only work with one statement at a time, so we only ever expect a single
-/// result in the array.
+/// The `results` field returned by Exasol after executing statements.
+/// This type is meant to accommodate the circumstance where we're batch executing SQL statements.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Results {
-    results: [QueryResult; 1],
+pub struct MultiResults {
+    pub results: Vec<QueryResult>,
 }
 
-impl From<Results> for QueryResult {
-    fn from(value: Results) -> Self {
+/// The `results` field returned by Exasol after executing a statement.
+/// This type represents a single result originating from a single statement, so we only ever expect
+/// a single item in the array.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleResult {
+    pub results: [QueryResult; 1],
+}
+
+impl From<SingleResult> for QueryResult {
+    fn from(value: SingleResult) -> Self {
         value
             .results
             .into_iter()
@@ -25,9 +33,10 @@ impl From<Results> for QueryResult {
     }
 }
 
-/// Struct representing the result of a single query.
+/// Struct representing the result of a query.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "resultType", rename_all = "camelCase")]
+#[serde(tag = "resultType")]
+#[serde(rename_all = "camelCase")]
 pub enum QueryResult {
     #[serde(rename_all = "camelCase")]
     ResultSet { result_set: ResultSet },
@@ -53,10 +62,10 @@ impl QueryResult {
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "ResultSetDe")]
 pub struct ResultSet {
-    pub(crate) total_rows_num: usize,
-    pub(crate) total_rows_pos: usize,
-    pub(crate) output: ResultSetOutput,
-    pub(crate) columns: Arc<[ExaColumn]>,
+    pub total_rows_num: usize,
+    pub total_rows_pos: usize,
+    pub output: ResultSetOutput,
+    pub columns: Arc<[ExaColumn]>,
 }
 
 impl TryFrom<ResultSetDe> for ResultSet {

@@ -1,23 +1,23 @@
+#![expect(deprecated, reason = "will hide enum under a public type")]
+
 mod compression;
 mod options;
-mod trim;
 mod writer;
 
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
 use compression::ExaImportWriter;
+use futures_core::future::BoxFuture;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
 pub use options::ImportBuilder;
-use pin_project::pin_project;
-pub use trim::Trim;
 
-use super::SocketFuture;
+use crate::connection::websocket::socket::ExaSocket;
 
 /// An ETL IMPORT worker.
 ///
@@ -29,11 +29,11 @@ use super::SocketFuture;
 ///
 /// # Atomicity
 ///
-/// `IMPORT` jobs are not atomic by themselves. If an error occurs during the data ingestion,
-/// some of the data might be already sent and written in the database. However, since
-/// `IMPORT` is fundamentally just a query, it *can* be transactional. Therefore,
-/// beginning a transaction and passing that to the [`ImportBuilder::build`] method will result in
-/// the import job needing to be explicitly committed:
+/// `IMPORT` jobs are not atomic by themselves. If an error occurs during the data ingestion, some
+/// of the data might be already sent and written in the database. However, since `IMPORT` is
+/// fundamentally just a query, it *can* be transactional. Therefore, beginning a transaction and
+/// passing that to the [`ImportBuilder::build`] method will result in the import job needing to be
+/// explicitly committed:
 ///
 /// ```rust,no_run
 /// use std::env;
@@ -63,26 +63,36 @@ use super::SocketFuture;
 /// will, cause issues; Exasol does not immediately start reading data from all workers but rather
 /// seems to connect to them sequentially after each of them provides some data.
 ///
-/// From what I could gather from the logs, providing no data (although the request is
-/// responded to gracefully) makes Exasol retry the connection. With these workers being
-/// implemented as one-shot HTTP servers, there's nothing to connect to anymore. Even if it
-/// were, the connection would just be re-attempted over and over since we'd still
-/// be sending no data.
+/// From what I could gather from the logs, providing no data (although the request is responded to
+/// gracefully) makes Exasol retry the connection. With these workers being implemented as one-shot
+/// HTTP servers, there's nothing to connect to anymore. Even if it were, the connection would just
+/// be re-attempted over and over since we'd still be sending no data.
 ///
 /// Since not using one or more import workers seems to be treated as an error on Exasol's side,
 /// it's best not to create excess writers that you don't plan on using to avoid such issues.
+///
+/// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[allow(clippy::large_enum_variant)]
-#[pin_project(project = ExaImportProj)]
 pub enum ExaImport {
-    Setup(SocketFuture, usize, bool),
-    Writing(#[pin] ExaImportWriter),
+    /// Setup state of the worker. This typically means waiting on the TLS handshake.
+    ///
+    /// This approach is needed because Exasol will issue connections sequentially and thus perform
+    /// TLS handshakes the same way.
+    ///
+    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
+    /// through the workers, which happens within consumer code.
+    #[deprecated = "will be made private"]
+    Setup(BoxFuture<'static, io::Result<ExaSocket>>, usize, bool),
+    /// The worker is fully connected and ready for I/O.
+    #[deprecated = "will be made private"]
+    Writing(ExaImportWriter),
 }
 
 impl Debug for ExaImport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
             Self::Writing(arg0) => f.debug_tuple("Writing").field(arg0).finish(),
+            Self::Setup(..) => f.debug_tuple("Setup").finish(),
         }
     }
 }
@@ -92,11 +102,11 @@ impl AsyncWrite for ExaImport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_write(cx, buf),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
+                Self::Writing(s) => return Pin::new(s).poll_write(cx, buf),
+                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -104,11 +114,11 @@ impl AsyncWrite for ExaImport {
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_flush(cx),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
+                Self::Writing(s) => return Pin::new(s).poll_flush(cx),
+                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
@@ -116,15 +126,33 @@ impl AsyncWrite for ExaImport {
         }
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().project() {
-                ExaImportProj::Writing(s) => return s.poll_close(cx),
-                ExaImportProj::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
+                Self::Writing(s) => return Pin::new(s).poll_close(cx),
+                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
             self.set(Self::Writing(writer));
+        }
+    }
+}
+
+/// Trim options for IMPORT.
+#[derive(Debug, Clone, Copy)]
+pub enum Trim {
+    Left,
+    Right,
+    Both,
+}
+
+impl AsRef<str> for Trim {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Left => "LTRIM",
+            Self::Right => "RTRIM",
+            Self::Both => "TRIM",
         }
     }
 }

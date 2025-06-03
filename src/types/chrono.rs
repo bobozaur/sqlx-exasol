@@ -224,10 +224,12 @@ impl Decode<'_, Exasol> for NaiveDate {
 pub struct Months(i32);
 
 impl Months {
+    #[must_use]
     pub const fn new(num: i32) -> Self {
         Self(num)
     }
 
+    #[must_use]
     pub fn num_months(&self) -> i32 {
         self.0
     }
@@ -282,9 +284,10 @@ impl<'r> Decode<'r, Exasol> for Months {
 
         // The number of months will always get decoded as being positive.
         // So the sign of the years determines how to add up the months.
-        let total_months = match years.is_negative() {
-            true => years * 12 - months,
-            false => years * 12 + months,
+        let total_months = if years.is_negative() {
+            years * 12 - months
+        } else {
+            years * 12 + months
         };
 
         Ok(Months::new(total_months))

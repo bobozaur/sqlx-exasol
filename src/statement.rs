@@ -2,11 +2,14 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use sqlx_core::{
     column::ColumnIndex, database::Database, impl_statement_query, statement::Statement, Either,
-    Error as SqlxError,
 };
 
-use crate::{arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo};
+use crate::{
+    arguments::ExaArguments, column::ExaColumn, database::Exasol, type_info::ExaTypeInfo,
+    SqlxError, SqlxResult,
+};
 
+/// Implementor of [`Statement`].
 #[derive(Debug, Clone)]
 pub struct ExaStatement<'q> {
     pub(crate) sql: Cow<'q, str>,
@@ -15,9 +18,9 @@ pub struct ExaStatement<'q> {
 
 #[derive(Debug, Clone)]
 pub struct ExaStatementMetadata {
-    pub(crate) columns: Arc<[ExaColumn]>,
-    pub(crate) column_names: HashMap<Arc<str>, usize>,
-    pub(crate) parameters: Arc<[ExaTypeInfo]>,
+    pub columns: Arc<[ExaColumn]>,
+    pub column_names: HashMap<Arc<str>, usize>,
+    pub parameters: Arc<[ExaTypeInfo]>,
 }
 
 impl ExaStatementMetadata {
@@ -62,7 +65,7 @@ impl<'q> Statement<'q> for ExaStatement<'q> {
 }
 
 impl ColumnIndex<ExaStatement<'_>> for &'_ str {
-    fn index(&self, statement: &ExaStatement<'_>) -> Result<usize, SqlxError> {
+    fn index(&self, statement: &ExaStatement<'_>) -> SqlxResult<usize> {
         statement
             .metadata
             .column_names

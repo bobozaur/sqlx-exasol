@@ -1,13 +1,10 @@
 use rsa::{errors::Error as RsaError, pkcs1::DecodeRsaPublicKey, RsaPublicKey};
 use serde::Deserialize;
-use sqlx_core::Error as SqlxError;
 
-use crate::error::ExaResultExt;
+use crate::{error::ToSqlxError, SqlxError};
 
-/// The public key Exasol sends during the login process
-/// to be used for encrypting the password.
+/// The public key Exasol sends during the login process to be used for encrypting the password.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 #[serde(try_from = "PublicKeyDe")]
 pub struct PublicKey(RsaPublicKey);
 
@@ -29,7 +26,7 @@ impl TryFrom<PublicKeyDe> for PublicKey {
     fn try_from(value: PublicKeyDe) -> Result<Self, Self::Error> {
         let public_key = RsaPublicKey::from_pkcs1_pem(&value.public_key_pem)
             .map_err(RsaError::from)
-            .to_sqlx_err()?;
+            .map_err(ToSqlxError::to_sqlx_err)?;
 
         Ok(PublicKey(public_key))
     }

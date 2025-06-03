@@ -1,10 +1,10 @@
 use std::{borrow::Cow, error::Error, fmt::Display};
 
 use serde::Deserialize;
-use sqlx_core::error::{self, ErrorKind};
+use sqlx_core::error::{DatabaseError, ErrorKind};
 
-/// An error directly issued by the Exasol database.
-// Represents the [`super::Response::Error`] variant.
+/// An error directly issued by the Exasol database. Implementor of [`DatabaseError`].
+// Represents the [`super::ExaResult::Error`] variant.
 #[derive(Debug, Deserialize)]
 pub struct ExaDatabaseError {
     text: String,
@@ -19,9 +19,8 @@ impl Display for ExaDatabaseError {
 }
 
 impl Error for ExaDatabaseError {}
-impl Error for &mut ExaDatabaseError {}
 
-impl error::DatabaseError for ExaDatabaseError {
+impl DatabaseError for ExaDatabaseError {
     fn message(&self) -> &str {
         &self.text
     }

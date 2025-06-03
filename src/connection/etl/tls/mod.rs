@@ -2,53 +2,53 @@
 mod native_tls;
 #[cfg(feature = "etl_rustls")]
 mod rustls;
+#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
 mod sync_socket;
 
-use rcgen::{CertificateParams, KeyPair};
-use rsa::{
-    pkcs8::{EncodePrivateKey, LineEnding},
-    RsaPrivateKey,
-};
-use sqlx_core::error::Error as SqlxError;
+use crate::{etl::with_worker::WithWorker, SqlxError, SqlxResult};
 
-#[cfg(feature = "etl_native_tls")]
-use self::native_tls::NativeTlsSocketSpawner;
-#[cfg(feature = "etl_rustls")]
-use self::rustls::RustlsSocketSpawner;
-use super::traits::WithSocketMaker;
-use crate::error::ExaResultExt;
-
-#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
-compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
-
-#[allow(unreachable_code)]
-pub fn tls_with_socket_maker() -> Result<impl WithSocketMaker, SqlxError> {
-    let key_pair = make_key()?;
-    let cert = CertificateParams::default()
-        .self_signed(&key_pair)
-        .to_sqlx_err()?;
-
-    #[cfg(feature = "etl_native_tls")]
-    return NativeTlsSocketSpawner::new(&cert, &key_pair);
-    #[cfg(feature = "etl_rustls")]
-    return RustlsSocketSpawner::new(&cert, &key_pair);
+#[cfg(not(any(feature = "etl_native_tls", feature = "etl_rustls")))]
+pub fn with_worker() -> SqlxResult<impl WithWorker> {
+    let err = SqlxError::Tls("No ETL TLS feature set".into());
+    Err::<super::non_tls::WithNonTlsWorker, _>(err)
 }
 
-fn make_key() -> Result<KeyPair, SqlxError> {
+/// Returns the dedicated [`impl WithWorker`] for the chosen TLS implementation.
+#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+pub fn with_worker() -> SqlxResult<impl WithWorker> {
+    use rcgen::{CertificateParams, KeyPair};
+    use rsa::{
+        pkcs8::{EncodePrivateKey, LineEnding},
+        RsaPrivateKey,
+    };
+
+    use crate::error::ToSqlxError;
+
+    impl ToSqlxError for rcgen::Error {
+        fn to_sqlx_err(self) -> SqlxError {
+            SqlxError::Tls(self.into())
+        }
+    }
+
     let mut rng = rand::thread_rng();
     let bits = 2048;
-    let private_key = RsaPrivateKey::new(&mut rng, bits).to_sqlx_err()?;
+    let private_key = RsaPrivateKey::new(&mut rng, bits).map_err(ToSqlxError::to_sqlx_err)?;
 
     let key = private_key
         .to_pkcs8_pem(LineEnding::CRLF)
         .map_err(From::from)
         .map_err(SqlxError::Tls)?;
 
-    KeyPair::from_pem(&key).to_sqlx_err()
+    let key_pair = KeyPair::from_pem(&key).map_err(ToSqlxError::to_sqlx_err)?;
+    let cert = CertificateParams::default()
+        .self_signed(&key_pair)
+        .map_err(ToSqlxError::to_sqlx_err)?;
+
+    #[cfg(feature = "etl_native_tls")]
+    return native_tls::WithNativeTlsWorker::new(&cert, &key_pair);
+    #[cfg(feature = "etl_rustls")]
+    return rustls::WithRustlsWorker::new(&cert, &key_pair);
 }
 
-impl<T> ExaResultExt<T> for Result<T, rcgen::Error> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
-    }
-}
+#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
+compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");

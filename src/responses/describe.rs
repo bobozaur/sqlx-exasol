@@ -5,12 +5,12 @@ use crate::{ExaColumn, ExaTypeInfo};
 
 /// A makeshift type representing the description of a statement.
 /// It is essentially a trimmed down version of a [`super::PreparedStatement`].
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(from = "DescribeStatementDe")]
 pub struct DescribeStatement {
-    pub(crate) statement_handle: u16,
-    pub(crate) columns: Vec<ExaColumn>,
-    pub(crate) parameters: Vec<ExaTypeInfo>,
+    pub statement_handle: u16,
+    pub columns: Vec<ExaColumn>,
+    pub parameters: Vec<ExaTypeInfo>,
 }
 
 impl From<DescribeStatementDe> for DescribeStatement {

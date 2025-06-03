@@ -12,6 +12,7 @@ use crate::{
     value::{ExaValue, ExaValueRef},
 };
 
+/// Implementor of [`Database`].
 #[derive(Debug, Clone, Copy)]
 pub struct Exasol;
 

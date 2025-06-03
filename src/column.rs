@@ -1,11 +1,12 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 use sqlx_core::{column::Column, database::Database};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// Implementor of [`Column`].
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExaColumn {
     #[serde(skip)]
@@ -20,8 +21,10 @@ impl ExaColumn {
     where
         D: Deserializer<'de>,
     {
-        let name = Cow::<str>::deserialize(deserializer)?;
-        Ok(Arc::from(name.to_lowercase()))
+        // NOTE: We can borrow because we always deserialize from an owned buffer.
+        <&str>::deserialize(deserializer)
+            .map(str::to_lowercase)
+            .map(From::from)
     }
 }
 

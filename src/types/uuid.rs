@@ -10,13 +10,13 @@ use uuid::Uuid;
 use crate::{
     arguments::ExaBuffer,
     database::Exasol,
-    type_info::{ExaDataType, ExaTypeInfo, Hashtype},
+    type_info::{ExaDataType, ExaTypeInfo, HashType},
     value::ExaValueRef,
 };
 
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::Hashtype(Hashtype::new(16)).into()
+        ExaDataType::HashType(HashType {}).into()
     }
 
     fn compatible(ty: &ExaTypeInfo) -> bool {
@@ -31,7 +31,7 @@ impl Encode<'_, Exasol> for Uuid {
     }
 
     fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaDataType::Hashtype(Hashtype::new(16)).into())
+        Some(ExaDataType::HashType(HashType {}).into())
     }
 
     fn size_hint(&self) -> usize {

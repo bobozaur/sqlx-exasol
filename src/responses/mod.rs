@@ -13,7 +13,7 @@ mod session_info;
 
 use std::fmt;
 
-pub use attributes::{Attributes, ExaAttributes};
+pub use attributes::{ExaAttributes, ExaAttributesOpt, ExaRwAttributes};
 pub use describe::DescribeStatement;
 pub use error::ExaDatabaseError;
 pub use fetch::DataChunk;
@@ -21,7 +21,7 @@ pub use fetch::DataChunk;
 pub use hosts::Hosts;
 pub use prepared_stmt::PreparedStatement;
 pub use public_key::PublicKey;
-pub use result::{QueryResult, ResultSet, ResultSetOutput, Results};
+pub use result::{MultiResults, QueryResult, ResultSet, ResultSetOutput, SingleResult};
 use serde::{
     de::{DeserializeSeed, SeqAccess, Visitor},
     Deserialize, Deserializer,
@@ -34,28 +34,17 @@ use crate::ExaTypeInfo;
 
 /// A response from the Exasol server.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "status", rename_all = "camelCase")]
-pub enum Response<T> {
+#[serde(tag = "status")]
+#[serde(rename_all = "camelCase")]
+pub enum ExaResult<T> {
     #[serde(rename_all = "camelCase")]
     Ok {
         response_data: T,
-        attributes: Option<Attributes>,
+        attributes: Option<ExaAttributesOpt>,
     },
     Error {
         exception: ExaDatabaseError,
     },
-}
-
-impl<T> From<Response<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> {
-    fn from(value: Response<T>) -> Self {
-        match value {
-            Response::Ok {
-                response_data,
-                attributes,
-            } => Ok((response_data, attributes)),
-            Response::Error { exception } => Err(exception),
-        }
-    }
 }
 
 /// Enum representing the columns output of a [`PreparedStatement`].
@@ -63,7 +52,8 @@ impl<T> From<Response<T>> for Result<(T, Option<Attributes>), ExaDatabaseError> 
 /// construct, but only the columns are relevant.
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
-#[serde(tag = "resultType", rename_all = "camelCase")]
+#[serde(tag = "resultType")]
+#[serde(rename_all = "camelCase")]
 enum OutputColumns {
     #[serde(rename_all = "camelCase")]
     ResultSet {

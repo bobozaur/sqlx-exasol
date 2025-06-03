@@ -1,49 +1,53 @@
 mod builder;
 mod error;
-mod login;
 mod protocol_version;
-mod serializable;
 mod ssl_mode;
 
-use std::{net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
 pub use builder::ExaConnectOptionsBuilder;
 use error::ExaConfigError;
-pub use login::{Credentials, CredentialsRef, Login, LoginRef};
 pub use protocol_version::ProtocolVersion;
-use serde::Serialize;
-use serializable::SerializableConOpts;
 use sqlx_core::{
     connection::{ConnectOptions, LogSettings},
     net::tls::CertificateInput,
-    Error as SqlxError,
 };
 pub use ssl_mode::ExaSslMode;
 use tracing::log;
 use url::Url;
 
-use crate::connection::ExaConnection;
+use crate::{
+    connection::{
+        websocket::request::{ExaLoginRequest, LoginRef},
+        ExaConnection,
+    },
+    responses::ExaRwAttributes,
+    SqlxError, SqlxResult,
+};
 
-pub(crate) const URL_SCHEME: &str = "exa";
+const URL_SCHEME: &str = "exa";
 
-pub(crate) const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
-pub(crate) const DEFAULT_PORT: u16 = 8563;
-pub(crate) const DEFAULT_CACHE_CAPACITY: usize = 100;
+const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
+const DEFAULT_PORT: u16 = 8563;
+const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
+    Some(v) => v,
+    None => unreachable!(),
+};
 
-pub(crate) const PARAM_ACCESS_TOKEN: &str = "access-token";
-pub(crate) const PARAM_REFRESH_TOKEN: &str = "refresh-token";
-pub(crate) const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
-pub(crate) const PARAM_SSL_MODE: &str = "ssl-mode";
-pub(crate) const PARAM_SSL_CA: &str = "ssl-ca";
-pub(crate) const PARAM_SSL_CERT: &str = "ssl-cert";
-pub(crate) const PARAM_SSL_KEY: &str = "ssl-key";
-pub(crate) const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
-pub(crate) const PARAM_FETCH_SIZE: &str = "fetch-size";
-pub(crate) const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
-pub(crate) const PARAM_COMPRESSION: &str = "compression";
-pub(crate) const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
+const PARAM_ACCESS_TOKEN: &str = "access-token";
+const PARAM_REFRESH_TOKEN: &str = "refresh-token";
+const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
+const PARAM_SSL_MODE: &str = "ssl-mode";
+const PARAM_SSL_CA: &str = "ssl-ca";
+const PARAM_SSL_CERT: &str = "ssl-cert";
+const PARAM_SSL_KEY: &str = "ssl-key";
+const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
+const PARAM_FETCH_SIZE: &str = "fetch-size";
+const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
+const PARAM_COMPRESSION: &str = "compression";
+const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
-/// Options for connecting to the Exasol database.
+/// Options for connecting to the Exasol database. Implementor of [`ConnectOptions`].
 ///
 /// While generally automatically created through a connection string,
 /// [`ExaConnectOptions::builder()`] can be used to get a [`ExaConnectOptionsBuilder`].
@@ -67,6 +71,7 @@ pub struct ExaConnectOptions {
 }
 
 impl ExaConnectOptions {
+    #[must_use]
     pub fn builder() -> ExaConnectOptionsBuilder {
         ExaConnectOptionsBuilder::default()
     }
@@ -86,7 +91,7 @@ impl FromStr for ExaConnectOptions {
 impl ConnectOptions for ExaConnectOptions {
     type Connection = ExaConnection;
 
-    fn from_url(url: &Url) -> Result<Self, SqlxError> {
+    fn from_url(url: &Url) -> SqlxResult<Self> {
         let scheme = url.scheme();
 
         if URL_SCHEME != scheme {
@@ -195,11 +200,11 @@ impl ConnectOptions for ExaConnectOptions {
         builder.build()
     }
 
-    fn connect(&self) -> futures_util::future::BoxFuture<'_, Result<Self::Connection, SqlxError>>
+    fn connect(&self) -> futures_util::future::BoxFuture<'_, SqlxResult<Self::Connection>>
     where
         Self::Connection: Sized,
     {
-        Box::pin(async move { ExaConnection::establish(self).await })
+        Box::pin(ExaConnection::establish(self))
     }
 
     fn log_statements(mut self, level: log::LevelFilter) -> Self {
@@ -217,37 +222,49 @@ impl ConnectOptions for ExaConnectOptions {
     }
 }
 
-/// Serialization helper that borrows as much data as possible.
-/// This type cannot be [`Copy`] because of [`LoginRef`].
-//
-// We use a single set of connection options to create a connections pool,
-// yet each connection's password is encrypted individually with a
-// public key specific to that connection, so it will be different and is
-// stored as such.
-#[derive(Debug, Clone, Serialize)]
-#[serde(into = "SerializableConOpts<'_>")]
-pub(crate) struct ExaConnectOptionsRef<'a> {
-    pub(crate) login: LoginRef<'a>,
-    pub(crate) protocol_version: ProtocolVersion,
-    pub(crate) schema: Option<&'a str>,
-    pub(crate) fetch_size: usize,
-    pub(crate) query_timeout: u64,
-    pub(crate) compression: bool,
-    pub(crate) feedback_interval: u8,
-    pub(crate) statement_cache_capacity: NonZeroUsize,
+impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
+    fn from(value: &'a ExaConnectOptions) -> Self {
+        let crate_version = option_env!("CARGO_PKG_VERSION").unwrap_or("UNKNOWN");
+
+        let attributes = ExaRwAttributes::new(
+            value.schema.as_deref().map(Cow::Borrowed),
+            value.feedback_interval.into(),
+            value.query_timeout,
+        );
+
+        Self {
+            protocol_version: value.protocol_version,
+            fetch_size: value.fetch_size,
+            statement_cache_capacity: value.statement_cache_capacity,
+            login: (&value.login).into(),
+            use_compression: value.compression,
+            client_name: "sqlx-exasol",
+            client_version: crate_version,
+            client_os: std::env::consts::OS,
+            client_runtime: "RUST",
+            attributes,
+        }
+    }
 }
 
-impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
-    fn from(value: &'a ExaConnectOptions) -> Self {
-        Self {
-            login: LoginRef::from(&value.login),
-            protocol_version: value.protocol_version,
-            schema: value.schema.as_deref(),
-            fetch_size: value.fetch_size,
-            query_timeout: value.query_timeout,
-            compression: value.compression,
-            feedback_interval: value.feedback_interval,
-            statement_cache_capacity: value.statement_cache_capacity,
+/// Enum representing the possible ways of authenticating a connection.
+/// The variant chosen dictates which login process is called.
+#[derive(Clone, Debug)]
+pub enum Login {
+    Credentials { username: String, password: String },
+    AccessToken { access_token: String },
+    RefreshToken { refresh_token: String },
+}
+
+impl<'a> From<&'a Login> for LoginRef<'a> {
+    fn from(value: &'a Login) -> Self {
+        match value {
+            Login::Credentials { username, password } => LoginRef::Credentials {
+                username,
+                password: Cow::Borrowed(password),
+            },
+            Login::AccessToken { access_token } => LoginRef::AccessToken { access_token },
+            Login::RefreshToken { refresh_token } => LoginRef::RefreshToken { refresh_token },
         }
     }
 }
@@ -256,10 +273,10 @@ impl<'a> From<&'a ExaConnectOptions> for ExaConnectOptionsRef<'a> {
 #[derive(Debug, Clone, Copy)]
 #[allow(clippy::struct_field_names)]
 pub struct ExaTlsOptionsRef<'a> {
-    pub(crate) ssl_mode: ExaSslMode,
-    pub(crate) ssl_ca: Option<&'a CertificateInput>,
-    pub(crate) ssl_client_cert: Option<&'a CertificateInput>,
-    pub(crate) ssl_client_key: Option<&'a CertificateInput>,
+    pub ssl_mode: ExaSslMode,
+    pub ssl_ca: Option<&'a CertificateInput>,
+    pub ssl_client_cert: Option<&'a CertificateInput>,
+    pub ssl_client_key: Option<&'a CertificateInput>,
 }
 
 impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {

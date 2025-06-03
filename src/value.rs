@@ -8,12 +8,14 @@ use sqlx_core::{
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
+/// Implementor of [`Value`].
 #[derive(Clone, Debug)]
 pub struct ExaValue {
     pub(crate) value: JsonValue,
     type_info: ExaTypeInfo,
 }
 
+/// Implementor of [`ValueRef`].
 #[derive(Clone, Debug)]
 pub struct ExaValueRef<'r> {
     pub(crate) value: &'r JsonValue,
@@ -45,7 +47,7 @@ impl<'r> ValueRef<'r> for ExaValueRef<'r> {
     fn to_owned(&self) -> <Self::Database as Database>::Value {
         ExaValue {
             value: self.value.clone(),
-            type_info: self.type_info.clone(),
+            type_info: *self.type_info,
         }
     }
 

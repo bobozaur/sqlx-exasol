@@ -1,7 +1,7 @@
 use std::{
     future::Future,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
-    pin::{pin, Pin},
+    io,
+    pin::Pin,
     sync::Mutex,
     task::{ready, Context, Poll},
 };
@@ -21,7 +21,6 @@ use hyper::{
     service::Service,
     Request, Response, StatusCode,
 };
-use pin_project::pin_project;
 
 use crate::connection::websocket::socket::ExaSocket;
 
@@ -29,14 +28,13 @@ type ExportResponse = Response<Empty<&'static [u8]>>;
 pub type ExportConnection = Fuse<Connection<ExaSocket, ExportService>>;
 pub type ExportReader = IntoAsyncRead<ReaderStream>;
 
-#[pin_project]
-struct ExportStream(#[pin] Incoming);
+struct ExportStream(Incoming);
 
 impl Stream for ExportStream {
-    type Item = IoResult<Bytes>;
+    type Item = io::Result<Bytes>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match ready!(self.project().0.poll_frame(cx)) {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match ready!(Pin::new(&mut self.0).poll_frame(cx)) {
             Some(Ok(f)) => Poll::Ready(f.into_data().ok().map(Ok)),
             Some(Err(e)) => Poll::Ready(Some(Err(map_hyper_err(e)))),
             None => Poll::Ready(None),
@@ -47,7 +45,7 @@ impl Stream for ExportStream {
 pub struct ExportSink(Sender<Bytes>);
 
 impl Sink<Bytes> for ExportSink {
-    type Error = IoError;
+    type Error = io::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.0.poll_ready_unpin(cx).map_err(map_send_error)
@@ -69,7 +67,7 @@ impl Sink<Bytes> for ExportSink {
 pub struct ExportFuture(Forward<ExportStream, ExportSink>);
 
 impl Future for ExportFuture {
-    type Output = IoResult<ExportResponse>;
+    type Output = io::Result<ExportResponse>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(self.0.poll_unpin(cx)) {
@@ -97,7 +95,7 @@ impl ExportService {
 impl Service<Request<Incoming>> for ExportService {
     type Response = ExportResponse;
 
-    type Error = IoError;
+    type Error = io::Error;
 
     type Future = ExportFuture;
 
@@ -111,7 +109,7 @@ impl Service<Request<Incoming>> for ExportService {
 pub struct ReaderStream(Receiver<Bytes>);
 
 impl Stream for ReaderStream {
-    type Item = IoResult<Bytes>;
+    type Item = io::Result<Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match ready!(self.0.poll_next_unpin(cx)) {
@@ -122,9 +120,7 @@ impl Stream for ReaderStream {
 }
 
 #[derive(Debug)]
-#[pin_project]
 pub struct ExaReader {
-    #[pin]
     reader: ExportReader,
     conn: ExportConnection,
     state: ExaReaderState,
@@ -144,7 +140,7 @@ impl ExaReader {
         }
     }
 
-    fn poll_conn(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_conn(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if !self.conn.is_terminated() {
             ready!(self.conn.poll_unpin(cx)).map_err(map_hyper_err)?;
         }
@@ -154,74 +150,79 @@ impl ExaReader {
     }
 
     fn poll_read_internal(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<IoResult<usize>> {
-        if !self.conn.is_terminated() {
-            let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+
+        if !this.conn.is_terminated() {
+            let _ = this.conn.poll_unpin(cx).map_err(map_hyper_err)?;
         }
 
-        let res = ready!(self.as_mut().project().reader.poll_read(cx, buf));
+        let res = ready!(Pin::new(&mut this.reader).poll_read(cx, buf));
 
         match res {
             Ok(0) => {
-                self.state = ExaReaderState::Responding;
-                self.poll_conn(cx).map_ok(|()| 0)
+                this.state = ExaReaderState::Responding;
+                this.poll_conn(cx).map_ok(|()| 0)
             }
             Ok(n) => Poll::Ready(Ok(n)),
             Err(e) => {
-                self.state = ExaReaderState::Done;
+                this.state = ExaReaderState::Done;
                 Poll::Ready(Err(e))
             }
         }
     }
 
     fn poll_read_vectored_internal(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        bufs: &mut [std::io::IoSliceMut<'_>],
-    ) -> Poll<IoResult<usize>> {
-        if !self.conn.is_terminated() {
-            let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
+        bufs: &mut [io::IoSliceMut<'_>],
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+
+        if !this.conn.is_terminated() {
+            let _ = this.conn.poll_unpin(cx).map_err(map_hyper_err)?;
         }
 
-        let res = ready!(self.as_mut().project().reader.poll_read_vectored(cx, bufs));
+        let res = ready!(Pin::new(&mut this.reader).poll_read_vectored(cx, bufs));
 
         match res {
             Ok(0) => {
-                self.state = ExaReaderState::Responding;
-                self.poll_conn(cx).map_ok(|()| 0)
+                this.state = ExaReaderState::Responding;
+                this.poll_conn(cx).map_ok(|()| 0)
             }
             Ok(n) => Poll::Ready(Ok(n)),
             Err(e) => {
-                self.state = ExaReaderState::Done;
+                this.state = ExaReaderState::Done;
                 Poll::Ready(Err(e))
             }
         }
     }
 
     fn poll_fill_buf_internal<'a>(
-        mut self: Pin<&'a mut Self>,
+        self: Pin<&'a mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<IoResult<&'a [u8]>> {
-        if !self.conn.is_terminated() {
-            let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
+    ) -> Poll<io::Result<&'a [u8]>> {
+        let this = self.get_mut();
+
+        if !this.conn.is_terminated() {
+            let _ = this.conn.poll_unpin(cx).map_err(map_hyper_err)?;
         }
 
-        let this = self.project();
-        let res = ready!(this.reader.poll_fill_buf(cx));
+        let res = ready!(Pin::new(&mut this.reader).poll_fill_buf(cx));
 
         match res {
             Ok(&[]) => {
-                *this.state = ExaReaderState::Responding;
+                this.state = ExaReaderState::Responding;
                 ready!(this.conn.poll_unpin(cx)).map_err(map_hyper_err)?;
-                *this.state = ExaReaderState::Done;
+                this.state = ExaReaderState::Done;
                 Poll::Ready(Ok(&[]))
             }
             Ok(buf) => Poll::Ready(Ok(buf)),
             Err(e) => {
-                *this.state = ExaReaderState::Done;
+                this.state = ExaReaderState::Done;
                 Poll::Ready(Err(e))
             }
         }
@@ -240,7 +241,7 @@ impl AsyncRead for ExaReader {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         match self.state {
             ExaReaderState::Reading => self.poll_read_internal(cx, buf),
             ExaReaderState::Responding => self.poll_conn(cx).map_ok(|()| 0),
@@ -251,8 +252,8 @@ impl AsyncRead for ExaReader {
     fn poll_read_vectored(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        bufs: &mut [std::io::IoSliceMut<'_>],
-    ) -> Poll<IoResult<usize>> {
+        bufs: &mut [io::IoSliceMut<'_>],
+    ) -> Poll<io::Result<usize>> {
         match self.state {
             ExaReaderState::Reading => self.poll_read_vectored_internal(cx, bufs),
             ExaReaderState::Responding => self.poll_conn(cx).map_ok(|()| 0),
@@ -262,7 +263,7 @@ impl AsyncRead for ExaReader {
 }
 
 impl AsyncBufRead for ExaReader {
-    fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<&[u8]>> {
+    fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         match self.state {
             ExaReaderState::Reading => self.poll_fill_buf_internal(cx),
             ExaReaderState::Responding => self.poll_conn(cx).map_ok(|()| [].as_slice()),
@@ -270,27 +271,27 @@ impl AsyncBufRead for ExaReader {
         }
     }
 
-    fn consume(self: Pin<&mut Self>, amt: usize) {
-        self.project().reader.consume(amt);
+    fn consume(mut self: Pin<&mut Self>, amt: usize) {
+        Pin::new(&mut self.reader).consume(amt);
     }
 }
 
-fn map_hyper_err(err: hyper::Error) -> IoError {
+fn map_hyper_err(err: hyper::Error) -> io::Error {
     let kind = if err.is_timeout() {
-        IoErrorKind::TimedOut
+        io::ErrorKind::TimedOut
     } else if err.is_parse_too_large() {
-        IoErrorKind::InvalidData
+        io::ErrorKind::InvalidData
     } else {
-        IoErrorKind::BrokenPipe
+        io::ErrorKind::BrokenPipe
     };
 
-    IoError::new(kind, err)
+    io::Error::new(kind, err)
 }
 
-fn map_send_error(err: SendError) -> IoError {
-    IoError::new(IoErrorKind::BrokenPipe, err)
+fn map_send_error(err: SendError) -> io::Error {
+    io::Error::new(io::ErrorKind::BrokenPipe, err)
 }
 
-fn map_http_error(err: hyper::http::Error) -> IoError {
-    IoError::new(IoErrorKind::BrokenPipe, err)
+fn map_http_error(err: hyper::http::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::BrokenPipe, err)
 }

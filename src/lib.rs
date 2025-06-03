@@ -1,7 +1,5 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
-//! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.  
-//!
-//! **MSRV**: `1.74`
+//! A database driver for Exasol to be used with the Rust [sqlx](https://github.com/launchbadge/sqlx) framework.
 //!
 //! ## Crate Features flags
 //! * `etl` - enables the usage ETL jobs without TLS encryption.
@@ -19,12 +17,10 @@
 //! Since the driver is used through `sqlx` and it implements the interfaces there, it can do all
 //! the drivers shipped with `sqlx` do, with some caveats:
 //! - Limitations
-//!     - no compile-time query check support<sup>[1](#sqlx_limitations)</sup>
-//!     - no `sqlx-cli` support<sup>[1](#sqlx_limitations)</sup>
-//!     - no locking migrations support<sup>[2](#no_locks)</sup>
-//!     - no column nullability checks<sup>[3](#nullable)</sup>
-//!     - apart from migrations, only a single query per statement is allowed (including in
-//!       fixtures)<sup>[4](#single_query)</sup>
+//!     - no compile-time query check support<sup>[2](#sqlx_limitations)</sup>
+//!     - no `sqlx-cli` support<sup>[2](#sqlx_limitations)</sup>
+//!     - no locking migrations support<sup>[3](#no_locks)</sup>
+//!     - no column nullability checks<sup>[4](#nullable)</sup>
 //!
 //! - Additions
 //!     - array-like parameter binding in queries, thanks to the columnar nature of the Exasol
@@ -49,7 +45,7 @@
 //! - `query-timeout`: The query timeout amount, in seconds. 0 means no timeout
 //! - `compression`: Boolean representing whether use compression
 //! - `feedback-interval`: Interval at which Exasol sends keep-alive Pong frames
-//!  
+//!
 //! [`ExaConnectOptions`] can also be constructed in code through its builder method,
 //! which returns a [`ExaConnectOptionsBuilder`].
 //!
@@ -220,18 +216,10 @@
 //! <a name="nullable">4</a>: Exasol does not provide the information of whether a column is
 //! nullable or not, so the driver cannot implicitly decide whether a `NULL` value can go into a
 //! certain database column or not until it actually tries.
-//!
-//! <a name="single_query">5</a>: I didn't even know this (as I never even thought of doing it), but
-//! `sqlx` allows running multiple queries in a single statement. Due to limitations with the
-//! websocket API this driver is based on, `sqlx-exasol` can only run one query at a time. <br>This
-//! is only circumvented in migrations through a somewhat limited, convoluted and possibly costly
-//! workaround that tries to split queries by `;`, which does not make it applicable for runtime
-//! queries at all.<br>
 
 /// Gets rid of unused dependencies warning from dev-dependencies.
 mod arguments;
 mod column;
-mod command;
 mod connection;
 mod database;
 mod error;
@@ -285,3 +273,9 @@ impl_into_arguments_for_arguments!(ExaArguments);
 impl_acquire!(Exasol, ExaConnection);
 impl_column_index_for_row!(ExaRow);
 impl_column_index_for_statement!(ExaStatement);
+
+// ###################
+// ##### Aliases #####
+// ###################
+type SqlxError = sqlx_core::Error;
+type SqlxResult<T> = sqlx_core::Result<T>;

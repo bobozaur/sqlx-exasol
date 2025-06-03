@@ -1,23 +1,22 @@
+#![expect(deprecated, reason = "will hide enum under a public type")]
+
 mod compression;
-mod export_source;
 mod options;
 mod reader;
 
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
 use compression::ExaExportReader;
-pub use export_source::ExportSource;
 use futures_io::AsyncRead;
 use futures_util::FutureExt;
 pub use options::ExportBuilder;
-use pin_project::pin_project;
 
-use super::SocketFuture;
+use super::WithSocketFuture;
 
 /// An ETL EXPORT worker.
 ///
@@ -30,17 +29,26 @@ use super::SocketFuture;
 /// While not necessarily a problem if you're not interested in the whole export, there's no way to
 /// circumvent that other than handling the error in code.
 #[allow(clippy::large_enum_variant)]
-#[pin_project(project = ExaExportProj)]
 pub enum ExaExport {
-    Setup(SocketFuture, bool),
-    Reading(#[pin] ExaExportReader),
+    /// Setup state of the worker. This typically means waiting on the TLS handshake.
+    ///
+    /// This approach is needed because Exasol will issue connections sequentially and thus perform
+    /// TLS handshakes the same way.
+    ///
+    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
+    /// through the workers, which happens within consumer code.
+    #[deprecated = "will be made private"]
+    Setup(WithSocketFuture, bool),
+    /// The worker is fully connected and ready for I/O.
+    #[deprecated = "will be made private"]
+    Reading(ExaExportReader),
 }
 
 impl Debug for ExaExport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
             Self::Reading(arg0) => f.debug_tuple("Reading").field(arg0).finish(),
+            Self::Setup(..) => f.debug_tuple("Setup").finish(),
         }
     }
 }
@@ -50,15 +58,22 @@ impl AsyncRead for ExaExport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         loop {
-            let (socket, with_compression) = match self.as_mut().project() {
-                ExaExportProj::Reading(r) => return r.poll_read(cx, buf),
-                ExaExportProj::Setup(f, c) => (ready!(f.poll_unpin(cx))?, *c),
+            let (socket, with_compression) = match self.as_mut().get_mut() {
+                Self::Reading(r) => return Pin::new(r).poll_read(cx, buf),
+                Self::Setup(f, c) => (ready!(f.poll_unpin(cx))?, *c),
             };
 
             let reader = ExaExportReader::new(socket, with_compression);
             self.set(Self::Reading(reader));
         }
     }
+}
+
+/// The EXPORT source type, which can either directly be a table or an entire query.
+#[derive(Clone, Copy, Debug)]
+pub enum ExportSource<'a> {
+    Query(&'a str),
+    Table(&'a str),
 }

@@ -1,16 +1,16 @@
 use std::{fmt::Write, net::SocketAddrV4};
 
 use arrayvec::ArrayString;
-use sqlx_core::Error as SqlxError;
 
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
-    ExaConnection,
+    etl::{job::EtlJob, JobFuture, WithSocketFuture},
+    ExaConnection, SqlxResult,
 };
 
 /// A builder for an ETL IMPORT job.
+///
 /// Calling [`build().await`] will ouput a future that drives the IMPORT query execution and a
 /// [`Vec<ExaWriter>`] which must be concurrently used to ingest data into Exasol.
 #[derive(Clone, Debug)]
@@ -31,6 +31,7 @@ pub struct ImportBuilder<'a> {
 }
 
 impl<'a> ImportBuilder<'a> {
+    #[must_use]
     pub fn new(dest_table: &'a str) -> Self {
         Self {
             num_writers: 0,
@@ -51,9 +52,8 @@ impl<'a> ImportBuilder<'a> {
 
     /// Builds the IMPORT job.
     ///
-    /// This implies submitting the IMPORT query.
-    /// The output will be a future to await the result of the job
-    /// and the workers that can be used for ETL IO.
+    /// This implies submitting the IMPORT query. The output will be a future to await the result of
+    /// the job and the workers that can be used for ETL IO.
     ///
     /// # Errors
     ///
@@ -61,16 +61,17 @@ impl<'a> ImportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> Result<(JobFuture<'c>, Vec<ExaImport>), SqlxError>
+    ) -> SqlxResult<(JobFuture<'c>, Vec<ExaImport>)>
     where
         'c: 'a,
     {
-        build_etl(self, con).await
+        self.build_etl(con).await
     }
 
     /// Sets the number of writer jobs that will be started.
-    /// If set to `0`, then as many as possible will be used (one per node).
-    /// Providing a number bigger than the number of nodes is the same as providing `0`.
+    ///
+    /// If set to `0`, then as many as possible will be used (one per node). Providing a number
+    /// bigger than the number of nodes is the same as providing `0`.
     pub fn num_writers(&mut self, num_writers: usize) -> &mut Self {
         self.num_writers = num_writers;
         self
@@ -146,15 +147,8 @@ impl<'a> EtlJob for ImportBuilder<'a> {
         self.num_writers
     }
 
-    fn create_workers(
-        &self,
-        socket_futures: Vec<SocketFuture>,
-        with_compression: bool,
-    ) -> Vec<Self::Worker> {
-        socket_futures
-            .into_iter()
-            .map(|f| ExaImport::Setup(f, self.buffer_size, with_compression))
-            .collect()
+    fn create_worker(&self, future: WithSocketFuture, with_compression: bool) -> Self::Worker {
+        ExaImport::Setup(future, self.buffer_size, with_compression)
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

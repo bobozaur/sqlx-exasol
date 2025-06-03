@@ -1,6 +1,6 @@
 use std::{
     fmt::Debug,
-    io::Result as IoResult,
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -8,18 +8,16 @@ use std::{
 #[cfg(feature = "compression")]
 use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
-use pin_project::pin_project;
 
 use super::writer::ExaWriter;
 use crate::connection::websocket::socket::ExaSocket;
 
-/// Wrapper enum that handles the compression support for the [`ExaWriter`].
-#[pin_project(project = ExaExaWriterProj)]
+/// Wrapper enum that handles the compression support for [`ExaWriter`].
 #[derive(Debug)]
 pub enum ExaImportWriter {
-    Plain(#[pin] ExaWriter),
+    Plain(ExaWriter),
     #[cfg(feature = "compression")]
-    Compressed(#[pin] GzipEncoder<ExaWriter>),
+    Compressed(GzipEncoder<ExaWriter>),
 }
 
 impl ExaImportWriter {
@@ -35,27 +33,31 @@ impl ExaImportWriter {
 }
 
 impl AsyncWrite for ExaImportWriter {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
-        match self.project() {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
             #[cfg(feature = "compression")]
-            ExaExaWriterProj::Compressed(s) => s.poll_write(cx, buf),
-            ExaExaWriterProj::Plain(s) => s.poll_write(cx, buf),
+            Self::Compressed(s) => Pin::new(s).poll_write(cx, buf),
+            Self::Plain(s) => Pin::new(s).poll_write(cx, buf),
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.project() {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
             #[cfg(feature = "compression")]
-            ExaExaWriterProj::Compressed(s) => s.poll_flush(cx),
-            ExaExaWriterProj::Plain(s) => s.poll_flush(cx),
+            Self::Compressed(s) => Pin::new(s).poll_flush(cx),
+            Self::Plain(s) => Pin::new(s).poll_flush(cx),
         }
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.project() {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
             #[cfg(feature = "compression")]
-            ExaExaWriterProj::Compressed(s) => s.poll_close(cx),
-            ExaExaWriterProj::Plain(s) => s.poll_close(cx),
+            Self::Compressed(s) => Pin::new(s).poll_close(cx),
+            Self::Plain(s) => Pin::new(s).poll_close(cx),
         }
     }
 }

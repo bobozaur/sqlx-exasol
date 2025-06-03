@@ -1,4 +1,3 @@
-# yaml-language-server: $schema=./main.yaml
 name: CI
 
 on:
@@ -12,17 +11,16 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUST_TOOLCHAIN: 1.74.0
+  RUST_TOOLCHAIN: 1.82.0
   EXASOL_VERSION: 7.0.22
   NUM_NODES: 4
-  ETL_TEST_THREADS: 4
-  ETL_JOB_TIMEOUT: 15
+  TESTS_TIMEOUT: 15
   EXA_CLUSTER_SETUP_TIMEOUT: 15
 
 jobs:
   format:
     name: Format
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
@@ -42,7 +40,7 @@ jobs:
   clippy:
     name: Clippy
     needs: format
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         etl:
@@ -60,7 +58,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           override: true
           components: clippy
 
@@ -84,7 +82,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           override: true
 
       - uses: Swatinem/rust-cache@v2
@@ -108,7 +106,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           override: true
 
       - uses: Swatinem/rust-cache@v2
@@ -121,7 +119,7 @@ jobs:
   connection_tests:
     name: Connection tests
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -147,11 +145,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Connection tests
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: Connection tests with compression
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
@@ -159,7 +159,7 @@ jobs:
   tls_connection_tests:
     name: TLS connection tests
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -185,11 +185,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: TLS connection tests
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: TLS connection tests with compression
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
@@ -197,7 +199,7 @@ jobs:
   etl_tests:
     name: ETL tests
     needs: clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -223,13 +225,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: ETL tests
-        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features migrate,compression,etl -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: ETL without TLS feature but TLS connection (should fail)
-        run: cargo test --features migrate,etl -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }} || true
+        run: cargo test --features migrate,etl -- --ignored --nocapture --test-threads `nproc` || true
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -238,70 +240,14 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
-  native_tls_etl_tests:
-    name: ETL tests with native-tls
-    needs: clippy
-    runs-on: ubuntu-20.04
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Free disk space
-        uses: ./.github/actions/free-space
-
-      - name: Create Exasol cluster
-        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
-        id: exa-cluster
-        uses: ./.github/actions/exa-cluster
-        with:
-          exasol-version: ${{ env.EXASOL_VERSION }}
-          num-nodes: ${{ env.NUM_NODES }}
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
       - name: Native-TLS ETL tests
-        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture  --test-threads ${{ env.ETL_TEST_THREADS }}
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
-  rustls_etl_tests:
-    name: ETL tests with rustls
-    needs: clippy
-    runs-on: ubuntu-20.04
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Free disk space
-        uses: ./.github/actions/free-space
-
-      - name: Create Exasol cluster
-        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
-        id: exa-cluster
-        uses: ./.github/actions/exa-cluster
-        with:
-          exasol-version: ${{ env.EXASOL_VERSION }}
-          num-nodes: ${{ env.NUM_NODES }}
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
-      - uses: Swatinem/rust-cache@v2
-
       - name: Rustls ETL tests
-        timeout-minutes: ${{ fromJSON(env.ETL_JOB_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads ${{ env.ETL_TEST_THREADS }}
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}

@@ -1,16 +1,13 @@
 use std::{
     future::poll_fn,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write},
-    net::SocketAddrV4,
+    io::{self, Read, Write},
     sync::Arc,
     task::{ready, Context, Poll},
 };
 
-use futures_core::future::BoxFuture;
 use rcgen::{Certificate, KeyPair};
 use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 use sqlx_core::{
-    error::Error as SqlxError,
     io::ReadBuf,
     net::{Socket, WithSocket},
 };
@@ -18,15 +15,16 @@ use sqlx_core::{
 use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
-    error::ExaResultExt,
-    etl::{get_etl_addr, traits::WithSocketMaker, SocketFuture, WithSocketFuture},
+    error::ToSqlxError,
+    etl::{with_worker::WithWorker, WithSocketFuture},
+    SqlxError, SqlxResult,
 };
 
-/// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
-pub struct RustlsSocketSpawner(Arc<ServerConfig>);
+/// Implementor of [`WithWorker`] used for the creation of [`WithRustlsSocket`].
+pub struct WithRustlsWorker(Arc<ServerConfig>);
 
-impl RustlsSocketSpawner {
-    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> Result<Self, SqlxError> {
+impl WithRustlsWorker {
+    pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'rustls' socket spawner");
 
         let tls_cert = cert.der().clone();
@@ -37,7 +35,7 @@ impl RustlsSocketSpawner {
                 ServerConfig::builder()
                     .with_no_client_auth()
                     .with_single_cert(vec![tls_cert], key)
-                    .to_sqlx_err()?,
+                    .map_err(ToSqlxError::to_sqlx_err)?,
             )
         };
 
@@ -45,30 +43,29 @@ impl RustlsSocketSpawner {
     }
 }
 
-impl WithSocketMaker for RustlsSocketSpawner {
+impl WithWorker for WithRustlsWorker {
     type WithSocket = WithRustlsSocket;
 
-    fn make_with_socket(&self, wrapper: WithExaSocket) -> Self::WithSocket {
-        WithRustlsSocket::new(wrapper, self.0.clone())
+    fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
+        WithRustlsSocket::new(with_socket, self.0.clone())
     }
 }
 
+/// Implementor of [`WithSocket`] for [`rustls`].
 pub struct WithRustlsSocket {
-    wrapper: WithExaSocket,
+    inner: WithExaSocket,
     config: Arc<ServerConfig>,
 }
 
 impl WithRustlsSocket {
-    fn new(wrapper: WithExaSocket, config: Arc<ServerConfig>) -> Self {
-        Self { wrapper, config }
+    fn new(inner: WithExaSocket, config: Arc<ServerConfig>) -> Self {
+        Self { inner, config }
     }
 
-    fn map_tls_error(e: rustls::Error) -> IoError {
-        IoError::new(IoErrorKind::Other, e)
-    }
+    async fn wrap_socket<S: Socket>(self, socket: S) -> io::Result<ExaSocket> {
+        let state = ServerConnection::new(self.config)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    async fn wrap_socket<S: Socket>(self, socket: S) -> IoResult<ExaSocket> {
-        let state = ServerConnection::new(self.config).map_err(Self::map_tls_error)?;
         let mut socket = RustlsSocket {
             inner: SyncSocket(socket),
             state,
@@ -79,22 +76,16 @@ impl WithRustlsSocket {
         poll_fn(|cx| socket.poll_read_ready(cx)).await?;
         poll_fn(|cx| socket.poll_write_ready(cx)).await?;
 
-        let socket = self.wrapper.with_socket(socket);
+        let socket = self.inner.with_socket(socket).await;
         Ok(socket)
-    }
-
-    async fn work<S: Socket>(self, socket: S) -> Result<(SocketAddrV4, SocketFuture), SqlxError> {
-        let (socket, address) = get_etl_addr(socket).await?;
-        let future: BoxFuture<'_, IoResult<ExaSocket>> = Box::pin(self.wrap_socket(socket));
-        Ok((address, future))
     }
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = WithSocketFuture;
+    type Output = SqlxResult<WithSocketFuture>;
 
-    fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        Box::pin(self.work(socket))
+    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        Ok(Box::pin(self.wrap_socket(socket)))
     }
 }
 
@@ -111,22 +102,22 @@ impl<S> Socket for RustlsSocket<S>
 where
     S: Socket,
 {
-    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> IoResult<usize> {
+    fn try_read(&mut self, buf: &mut dyn ReadBuf) -> io::Result<usize> {
         self.state.reader().read(buf.init_mut())
     }
 
-    fn try_write(&mut self, buf: &[u8]) -> IoResult<usize> {
+    fn try_write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self.state.writer().write(buf) {
             // Returns a zero-length write when the buffer is full.
-            Ok(0) => Err(IoErrorKind::WouldBlock.into()),
+            Ok(0) => Err(io::ErrorKind::WouldBlock.into()),
             other => other,
         }
     }
 
-    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_read_ready(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.complete_io(&mut self.inner) {
-                Err(e) if e.kind() == IoErrorKind::WouldBlock => (),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
                 ready => return Poll::Ready(ready.map(|_| ())),
             };
 
@@ -134,10 +125,10 @@ where
         }
     }
 
-    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_write_ready(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.complete_io(&mut self.inner) {
-                Err(e) if e.kind() == IoErrorKind::WouldBlock => (),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
                 ready => return Poll::Ready(ready.map(|_| ())),
             };
 
@@ -145,11 +136,11 @@ where
         }
     }
 
-    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.poll_write_ready(cx)
     }
 
-    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if !self.close_notify_sent {
             self.state.send_close_notify();
             self.close_notify_sent = true;
@@ -161,14 +152,14 @@ where
         // Some socket implementations (like `tokio`) try to implicitly shutdown the TCP stream.
         // That results in a sporadic error because `rustls` already initiates the close.
         match ready!(self.inner.0.poll_shutdown(cx)) {
-            Err(e) if e.kind() == IoErrorKind::NotConnected => Poll::Ready(Ok(())),
+            Err(e) if e.kind() == io::ErrorKind::NotConnected => Poll::Ready(Ok(())),
             res => Poll::Ready(res),
         }
     }
 }
 
-impl<T> ExaResultExt<T> for Result<T, rustls::Error> {
-    fn to_sqlx_err(self) -> Result<T, SqlxError> {
-        self.map_err(|e| SqlxError::Tls(e.into()))
+impl ToSqlxError for rustls::Error {
+    fn to_sqlx_err(self) -> SqlxError {
+        SqlxError::Tls(self.into())
     }
 }

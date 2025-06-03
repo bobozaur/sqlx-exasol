@@ -1,14 +1,12 @@
 use std::{net::ToSocketAddrs, num::NonZeroUsize};
 
-use sqlx_core::{connection::LogSettings, net::tls::CertificateInput, Error as SqlxError};
+use sqlx_core::{connection::LogSettings, net::tls::CertificateInput};
 
 use super::{
-    error::ExaConfigError,
-    login::{AccessToken, RefreshToken},
-    ssl_mode::ExaSslMode,
-    Credentials, ExaConnectOptions, Login, ProtocolVersion, DEFAULT_CACHE_CAPACITY,
-    DEFAULT_FETCH_SIZE, DEFAULT_PORT,
+    error::ExaConfigError, ssl_mode::ExaSslMode, ExaConnectOptions, Login, ProtocolVersion,
+    DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
+use crate::SqlxResult;
 
 /// Builder for [`ExaConnectOptions`].
 #[derive(Clone, Debug)]
@@ -41,7 +39,7 @@ impl Default for ExaConnectOptionsBuilder {
             ssl_ca: None,
             ssl_client_cert: None,
             ssl_client_key: None,
-            statement_cache_capacity: NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
+            statement_cache_capacity: DEFAULT_CACHE_CAPACITY,
             username: None,
             password: None,
             access_token: None,
@@ -62,19 +60,19 @@ impl ExaConnectOptionsBuilder {
     /// # Errors
     ///
     /// Will return an error if resolving the hostname to [`std::net::SocketAddr`] fails.
-    pub fn build(self) -> Result<ExaConnectOptions, SqlxError> {
+    pub fn build(self) -> SqlxResult<ExaConnectOptions> {
         let hostname = self.host.ok_or(ExaConfigError::MissingHost)?;
         let password = self.password.unwrap_or_default();
 
         // Only one authentication method can be used at once
         let login = match (self.username, self.access_token, self.refresh_token) {
-            (Some(user), None, None) => Login::Credentials(Credentials::new(user, password)),
-            (None, Some(token), None) => Login::AccessToken(AccessToken::new(token)),
-            (None, None, Some(token)) => Login::RefreshToken(RefreshToken::new(token)),
+            (Some(username), None, None) => Login::Credentials { username, password },
+            (None, Some(access_token), None) => Login::AccessToken { access_token },
+            (None, None, Some(refresh_token)) => Login::RefreshToken { refresh_token },
             _ => return Err(ExaConfigError::MultipleAuthMethods.into()),
         };
 
-        let hosts = Self::generate_hosts(hostname);
+        let hosts = Self::parse_hostname(hostname);
         let mut hosts_details = Vec::with_capacity(hosts.len());
 
         for host in hosts {
@@ -212,22 +210,21 @@ impl ExaConnectOptionsBuilder {
     }
 
     /// Exasol supports host ranges, e.g: hostname4..1.com.
-    /// This method parses the provided host in the connection string
-    /// and generates one for each possible entry in the range.
+    /// This method parses the provided host in the connection string and generates one for each
+    /// possible entry in the range.
     ///
-    /// We do expect the range to be in the ascending order though,
-    /// so `hostname4..1.com` won't work.
-    fn generate_hosts(hostname: String) -> Vec<String> {
+    /// We do expect the range to be in the ascending order though, so `hostname4..1.com` won't
+    /// work.
+    fn parse_hostname(hostname: String) -> Vec<String> {
         // If multiple hosts could not be generated, then the given hostname is the only one.
-        Self::_generate_hosts(&hostname).unwrap_or_else(|| vec![hostname])
+        Self::_parse_hostname(&hostname).unwrap_or_else(|| vec![hostname])
     }
 
-    /// This method is used to attempt to generate multiple hosts
-    /// out of the given hostname.
+    /// This method is used to attempt to generate multiple hosts out of the given hostname.
     ///
     /// If that fails, we'll bail early and unwrap the option in a wrapper.
     #[inline]
-    fn _generate_hosts(hostname: &str) -> Option<Vec<String>> {
+    fn _parse_hostname(hostname: &str) -> Option<Vec<String>> {
         let mut index_accum = 0;
 
         // We loop through occurences of ranges (..) and try to find one surrounded by digits.
@@ -238,9 +235,8 @@ impl ExaConnectOptionsBuilder {
             // No range? No problem! Return early.
             let idx = search_str.find("..")?;
 
-            // While if someone actually uses some "..thisismyhostname" host in the connection
-            // string would be absolutely insane, it's still somewhat nicer not have
-            // this overflow.
+            // While someone actually using something like "..thisismyhostname" in the connection
+            // string would be absolutely insane, it's still somewhat nicer not have this overflow.
             //
             // But really, if you read this and your host looks like that, you really should
             // re-evaluate your taste in domain names.
@@ -268,9 +264,9 @@ impl ExaConnectOptionsBuilder {
         let before_range = &hostname[..range_idx];
         let after_range = &hostname[range_idx + 2..];
 
-        // We wanna find the last non-digit character before the range index in the first
-        // part of the hostname and the first non-digit character right after the range dots,
-        // in the second part of the hostname.
+        // We wanna find the last non-digit character before the range index in the first part of
+        // the hostname and the first non-digit character right after the range dots, in the
+        // second part of the hostname.
         //
         // The start is incremented as the index is for the last non-numeric character.
         //
@@ -307,7 +303,7 @@ mod tests {
     fn test_simple_ip() {
         let hostname = "10.10.10.10";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec!(hostname));
     }
 
@@ -316,7 +312,7 @@ mod tests {
         let hostname = "10.10.10.1..3";
         let expected = vec!["10.10.10.1", "10.10.10.2", "10.10.10.3"];
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, expected);
     }
 
@@ -325,7 +321,7 @@ mod tests {
         let hostname = "1..3.10.10.10";
         let expected = vec!["1.10.10.10", "2.10.10.10", "3.10.10.10"];
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, expected);
     }
 
@@ -333,7 +329,7 @@ mod tests {
     fn test_simple_hostname() {
         let hostname = "myhost.com";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec!(hostname));
     }
 
@@ -342,7 +338,7 @@ mod tests {
         let hostname = "myhost1..4.com";
         let expected = vec!["myhost1.com", "myhost2.com", "myhost3.com", "myhost4.com"];
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, expected);
     }
 
@@ -351,7 +347,7 @@ mod tests {
         let hostname = "myhost125..127.com";
         let expected = vec!["myhost125.com", "myhost126.com", "myhost127.com"];
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, expected);
     }
 
@@ -359,7 +355,7 @@ mod tests {
     fn test_hostname_with_inverse_range() {
         let hostname = "myhost127..125.com";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert!(generated.is_empty());
     }
 
@@ -367,7 +363,7 @@ mod tests {
     fn test_hostname_with_numbers_no_range() {
         let hostname = "myhost1.4.com";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec![hostname]);
     }
 
@@ -375,7 +371,7 @@ mod tests {
     fn test_hostname_with_range_one_numbers() {
         let hostname = "myhost1..b.com";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec![hostname]);
     }
 
@@ -383,7 +379,7 @@ mod tests {
     fn test_hostname_with_range_no_numbers() {
         let hostname = "myhosta..b.com";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec![hostname]);
     }
 
@@ -391,7 +387,7 @@ mod tests {
     fn test_hostname_starts_with_range() {
         let hostname = "..myhost.com";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec![hostname]);
     }
 
@@ -399,7 +395,7 @@ mod tests {
     fn test_hostname_ends_with_range() {
         let hostname = "myhost.com..";
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, vec![hostname]);
     }
 
@@ -412,7 +408,7 @@ mod tests {
             "myhosta..bcdef3.com",
         ];
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, expected);
     }
 
@@ -425,7 +421,7 @@ mod tests {
             "myhost3cdef4..7.com",
         ];
 
-        let generated = ExaConnectOptionsBuilder::generate_hosts(hostname.to_owned());
+        let generated = ExaConnectOptionsBuilder::parse_hostname(hostname.to_owned());
         assert_eq!(generated, expected);
     }
 }

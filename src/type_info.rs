@@ -7,13 +7,15 @@ use arrayvec::ArrayString;
 use serde::{Deserialize, Serialize};
 use sqlx_core::type_info::TypeInfo;
 
-/// Information about an Exasol data type.
+/// Information about an Exasol data type and implementor of [`TypeInfo`].
 // Note that the [`DataTypeName`] is automatically constructed from the provided [`ExaDataType`].
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(from = "ExaDataType")]
+#[serde(rename_all = "camelCase")]
 pub struct ExaTypeInfo {
-    name: DataTypeName,
-    datatype: ExaDataType,
+    #[serde(skip_serializing)]
+    pub(crate) name: DataTypeName,
+    data_type: ExaDataType,
 }
 
 impl ExaTypeInfo {
@@ -21,30 +23,22 @@ impl ExaTypeInfo {
     ///
     /// Returns true if the [`ExaTypeInfo`] instance is compatible/bigger/able to
     /// accommodate the `other` instance.
+    #[must_use]
     pub fn compatible(&self, other: &Self) -> bool {
-        self.datatype.compatible(&other.datatype)
+        self.data_type.compatible(&other.data_type)
     }
 }
 
 impl From<ExaDataType> for ExaTypeInfo {
-    fn from(datatype: ExaDataType) -> Self {
-        let name = datatype.full_name();
-        Self { name, datatype }
-    }
-}
-
-impl Serialize for ExaTypeInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.datatype.serialize(serializer)
+    fn from(data_type: ExaDataType) -> Self {
+        let name = data_type.full_name();
+        Self { name, data_type }
     }
 }
 
 impl PartialEq for ExaTypeInfo {
     fn eq(&self, other: &Self) -> bool {
-        self.datatype == other.datatype
+        self.data_type == other.data_type
     }
 }
 
@@ -56,7 +50,7 @@ impl Display for ExaTypeInfo {
 
 impl TypeInfo for ExaTypeInfo {
     fn is_null(&self) -> bool {
-        false
+        matches!(self.data_type, ExaDataType::Null)
     }
 
     /// We're going against `sqlx` here, but knowing the full data type definition
@@ -72,9 +66,8 @@ impl TypeInfo for ExaTypeInfo {
 
 /// Datatype definitions enum, as Exasol sees them.
 ///
-/// If you manually construct them, be aware that there is a [`DataTypeName`]
-/// automatically constructed when converting to [`ExaTypeInfo`] and there
-/// are compatibility checks set in place.
+/// If you manually construct them, be aware that there is a [`DataTypeName`] automatically
+/// constructed when converting to [`ExaTypeInfo`] and there are compatibility checks set in place.
 ///
 /// In case of incompatibility, the definition is displayed for troubleshooting.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
@@ -96,7 +89,7 @@ pub enum ExaDataType {
     #[serde(rename = "TIMESTAMP WITH LOCAL TIME ZONE")]
     TimestampWithLocalTimeZone,
     Varchar(StringLike),
-    Hashtype(Hashtype),
+    HashType(HashType),
 }
 
 impl ExaDataType {
@@ -116,8 +109,8 @@ impl ExaDataType {
 
     /// Returns `true` if this instance is compatible with the other one provided.
     ///
-    /// Compatibility means that the [`self`] instance is bigger/able to accommodate
-    /// the other instance.
+    /// Compatibility means that the [`self`] instance is bigger/able to accommodate the other
+    /// instance.
     pub fn compatible(&self, other: &Self) -> bool {
         match self {
             ExaDataType::Null => true,
@@ -155,7 +148,13 @@ impl ExaDataType {
                     | ExaDataType::Varchar(_)
                     | ExaDataType::Null
             ),
-            ExaDataType::Hashtype(h) => h.compatible(other),
+            ExaDataType::HashType(_) => matches!(
+                other,
+                ExaDataType::HashType(_)
+                    | ExaDataType::Varchar(_)
+                    | ExaDataType::Char(_)
+                    | ExaDataType::Null
+            ),
         }
     }
 
@@ -182,7 +181,7 @@ impl ExaDataType {
             ExaDataType::IntervalYearToMonth(iym) => {
                 format_args!("INTERVAL YEAR({}) TO MONTH", iym.precision).into()
             }
-            ExaDataType::Hashtype(h) => format_args!("{}({} BYTE)", self.as_ref(), h.size()).into(),
+            ExaDataType::HashType(_) => format_args!("{}", self.as_ref()).into(),
         }
     }
 }
@@ -202,19 +201,18 @@ impl AsRef<str> for ExaDataType {
             ExaDataType::Timestamp => Self::TIMESTAMP,
             ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
             ExaDataType::Varchar(_) => Self::VARCHAR,
-            ExaDataType::Hashtype(_) => Self::HASHTYPE,
+            ExaDataType::HashType(_) => Self::HASHTYPE,
         }
     }
 }
 
-/// A data type's name, composed from an instance of [`ExaDataType`].
-/// For performance's sake, since data type names are small,
-/// we either store them statically or as inlined strings.
+/// A data type's name, composed from an instance of [`ExaDataType`]. For performance's sake, since
+/// data type names are small, we either store them statically or as inlined strings.
 ///
-/// *IMPORTANT*: Creating absurd [`ExaDataType`] can result in panics
-/// if the name exceeds the inlined strings max capacity. Valid values always fit.
-#[derive(Debug, Clone)]
-enum DataTypeName {
+/// *IMPORTANT*: Creating absurd [`ExaDataType`] can result in panics if the name exceeds the
+/// inlined strings max capacity. Valid values always fit.
+#[derive(Debug, Clone, Copy)]
+pub enum DataTypeName {
     Static(&'static str),
     Inline(ArrayString<30>),
 }
@@ -246,6 +244,7 @@ impl From<Arguments<'_>> for DataTypeName {
     }
 }
 
+/// Common inner type for string like data types, such as `VARCHAR` or `CHAR`.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StringLike {
@@ -285,7 +284,7 @@ impl StringLike {
                 | ExaDataType::Null
                 | ExaDataType::Date
                 | ExaDataType::Geometry(_)
-                | ExaDataType::Hashtype(_)
+                | ExaDataType::HashType(_)
                 | ExaDataType::IntervalDayToSecond(_)
                 | ExaDataType::IntervalYearToMonth(_)
                 | ExaDataType::Timestamp
@@ -294,6 +293,7 @@ impl StringLike {
     }
 }
 
+/// Exasol supported character sets.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Charset {
@@ -316,6 +316,7 @@ impl Display for Charset {
     }
 }
 
+/// The `DECIMAL` data type.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Decimal {
@@ -338,17 +339,17 @@ impl Decimal {
         Self { precision, scale }
     }
 
-    pub fn precision(&self) -> u32 {
+    pub fn precision(self) -> u32 {
         self.precision
     }
 
-    pub fn scale(&self) -> u32 {
+    pub fn scale(self) -> u32 {
         self.scale
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::Decimal(d) => self >= d,
+            ExaDataType::Decimal(d) => self >= *d,
             ExaDataType::Double => self.scale > 0,
             ExaDataType::Null => true,
             _ => false,
@@ -356,8 +357,8 @@ impl Decimal {
     }
 }
 
-/// The purpose of this is to be able to tell if some [`Decimal`] fits
-/// inside another [`Decimal`].
+#[rustfmt::skip] // just to skip rules formatting
+/// The purpose of this is to be able to tell if some [`Decimal`] fits inside another [`Decimal`].
 ///
 /// Therefore, we consider cases such as:
 /// - DECIMAL(10, 1) != DECIMAL(9, 2)
@@ -371,8 +372,7 @@ impl Decimal {
 ///
 /// So, our rule will be:
 /// - if a.scale > b.scale, a > b if and only if (a.precision - a.scale) >= (b.precision - b.scale)
-/// - if a.scale == b.scale, a == b if and only if (a.precision - a.scale) == (b.precision -
-///   b.scale)
+/// - if a.scale == b.scale, a == b if and only if (a.precision - a.scale) == (b.precision - b.scale)
 /// - if a.scale < b.scale, a < b if and only if (a.precision - a.scale) <= (b.precision - b.scale)
 impl PartialOrd for Decimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -394,6 +394,7 @@ impl PartialOrd for Decimal {
     }
 }
 
+/// The `GEOMETRY` data type.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Geometry {
@@ -405,11 +406,11 @@ impl Geometry {
         Self { srid }
     }
 
-    pub fn srid(&self) -> u16 {
+    pub fn srid(self) -> u16 {
         self.srid
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
             ExaDataType::Geometry(g) => self.srid == g.srid,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
@@ -418,6 +419,7 @@ impl Geometry {
     }
 }
 
+/// The `INTERVAL DAY TO SECOND` data type.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalDayToSecond {
@@ -442,14 +444,14 @@ impl PartialOrd for IntervalDayToSecond {
 }
 
 impl IntervalDayToSecond {
-    /// The fraction has the weird behavior of shifting the milliseconds up
-    /// the value and mixing it with the seconds, minutes, hours or even the days
-    /// when the value exceeds 3 (the max milliseconds digits limit).
+    /// The fraction has the weird behavior of shifting the milliseconds up the value and mixing it
+    /// with the seconds, minutes, hours or even the days when the value exceeds 3 (the max
+    /// milliseconds digits limit).
     ///
     /// See: <`https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval`>
     ///
-    /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't
-    /// even know how to handle values above that
+    /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't even know how
+    /// to handle values above that.
     pub const MAX_SUPPORTED_FRACTION: u32 = 3;
     pub const MAX_PRECISION: u32 = 9;
 
@@ -460,23 +462,24 @@ impl IntervalDayToSecond {
         }
     }
 
-    pub fn precision(&self) -> u32 {
+    pub fn precision(self) -> u32 {
         self.precision
     }
 
-    pub fn fraction(&self) -> u32 {
+    pub fn fraction(self) -> u32 {
         self.fraction
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::IntervalDayToSecond(i) => self >= i,
+            ExaDataType::IntervalDayToSecond(i) => self >= *i,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
     }
 }
 
+/// The `INTERVAL YEAR TO MONTH` data type.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub struct IntervalYearToMonth {
@@ -490,13 +493,13 @@ impl IntervalYearToMonth {
         Self { precision }
     }
 
-    pub fn precision(&self) -> u32 {
+    pub fn precision(self) -> u32 {
         self.precision
     }
 
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
+    pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::IntervalYearToMonth(i) => self >= i,
+            ExaDataType::IntervalYearToMonth(i) => self >= *i,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
@@ -504,41 +507,19 @@ impl IntervalYearToMonth {
 }
 
 /// The Exasol `HASHTYPE` data type.
-/// Note that Exasol returns the size doubled, as by default the `HASHTYPE_FORMAT` is HEX.
-/// This is handled internally and should not be a concern for any consumer
-/// of this type.
 ///
-/// Therefore, for a datatype such as [`uuid::Uuid`] which is `16` bytes long,
-/// the `size` field will be `32`, but the [`HashType::new()`] or [`HashType::size()`]
-/// will accept/return `16` to make it easier to reason with.
+/// NOTE: Exasol returns the size of the column string representation which depends on the
+/// `HASHTYPE_FORMAT` database parameter. So a UUID could have a size of 32 for HEX, 36 for
+/// UUID, 22 for BASE64, etc.
+///
+/// That makes it impossible to compare a type's predefined size and the size returned for a
+/// column to check for compatibility.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
-pub struct Hashtype {
-    size: u16,
-}
+pub struct HashType {}
 
-impl Hashtype {
-    pub const MAX_HASHTYPE_SIZE: u16 = 1024;
-
-    pub fn new(size: u16) -> Self {
-        Self { size: size * 2 }
-    }
-
-    pub fn size(&self) -> u16 {
-        self.size / 2
-    }
-
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
-        match ty {
-            ExaDataType::Hashtype(h) => self.size >= h.size,
-            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
-            _ => false,
-        }
-    }
-}
-
-/// Mainly adding these so that we ensure the inlined type names
-/// won't panic when created with their max values.
+/// Mainly adding these so that we ensure the inlined type names won't panic when created with their
+/// max values.
 ///
 /// If the max values work, the lower ones inherently will too.
 #[cfg(test)]
@@ -655,16 +636,6 @@ mod tests {
         assert_eq!(
             data_type.full_name().as_ref(),
             format!("VARCHAR({}) ASCII", StringLike::MAX_VARCHAR_LEN)
-        );
-    }
-
-    #[test]
-    fn test_max_hashtype_name() {
-        let hashtype = Hashtype::new(Hashtype::MAX_HASHTYPE_SIZE);
-        let data_type = ExaDataType::Hashtype(hashtype);
-        assert_eq!(
-            data_type.full_name().as_ref(),
-            format!("HASHTYPE({} BYTE)", Hashtype::MAX_HASHTYPE_SIZE)
         );
     }
 }

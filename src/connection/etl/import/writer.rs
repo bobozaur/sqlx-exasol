@@ -1,12 +1,11 @@
 use std::{
     future::Future,
-    io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult},
+    io,
     pin::Pin,
     sync::Mutex,
     task::{ready, Context, Poll},
 };
 
-use bytes::BytesMut;
 use futures_channel::mpsc::{Receiver, SendError, Sender};
 use futures_io::{AsyncWrite, IoSlice};
 use futures_util::{future::Fuse, FutureExt, SinkExt, Stream, StreamExt};
@@ -17,6 +16,7 @@ use hyper::{
     service::Service,
     Request, Response, StatusCode,
 };
+use sqlx_core::bytes::BytesMut;
 
 use crate::connection::websocket::socket::ExaSocket;
 
@@ -53,7 +53,7 @@ impl ImportFuture {
 }
 
 impl Future for ImportFuture {
-    type Output = IoResult<ImportResponse>;
+    type Output = io::Result<ImportResponse>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         ready!(self.inner.poll_unpin(cx)).map_err(map_hyper_err)?;
@@ -78,7 +78,7 @@ impl ImportService {
 impl Service<Request<Incoming>> for ImportService {
     type Response = ImportResponse;
 
-    type Error = IoError;
+    type Error = io::Error;
 
     type Future = Fuse<ImportFuture>;
 
@@ -116,7 +116,7 @@ impl ExaWriter {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         if self.max_buf_size == self.buffer.len() {
             ready!(self.as_mut().poll_flush(cx))?;
         }
@@ -131,7 +131,7 @@ impl ExaWriter {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         if self.max_buf_size == self.buffer.len() {
             ready!(self.as_mut().poll_flush(cx))?;
         }
@@ -153,7 +153,11 @@ impl ExaWriter {
 }
 
 impl AsyncWrite for ExaWriter {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         self.poll_write_internal(cx, buf)
     }
 
@@ -161,11 +165,11 @@ impl AsyncWrite for ExaWriter {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
-    ) -> Poll<IoResult<usize>> {
+    ) -> Poll<io::Result<usize>> {
         self.poll_write_vectored_internal(cx, bufs)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
 
         if !self.buffer.is_empty() {
@@ -178,7 +182,7 @@ impl AsyncWrite for ExaWriter {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if !self.sink.is_closed() {
             ready!(self.as_mut().poll_flush(cx))?;
             ready!(self.sink.poll_close_unpin(cx)).map_err(map_send_error)?;
@@ -189,22 +193,22 @@ impl AsyncWrite for ExaWriter {
     }
 }
 
-fn map_hyper_err(err: hyper::Error) -> IoError {
+fn map_hyper_err(err: hyper::Error) -> io::Error {
     let kind = if err.is_timeout() {
-        IoErrorKind::TimedOut
+        io::ErrorKind::TimedOut
     } else if err.is_parse_too_large() {
-        IoErrorKind::InvalidData
+        io::ErrorKind::InvalidData
     } else {
-        IoErrorKind::BrokenPipe
+        io::ErrorKind::BrokenPipe
     };
 
-    IoError::new(kind, err)
+    io::Error::new(kind, err)
 }
 
-fn map_send_error(err: SendError) -> IoError {
-    IoError::new(IoErrorKind::BrokenPipe, err)
+fn map_send_error(err: SendError) -> io::Error {
+    io::Error::new(io::ErrorKind::BrokenPipe, err)
 }
 
-fn map_http_error(err: hyper::http::Error) -> IoError {
-    IoError::new(IoErrorKind::BrokenPipe, err)
+fn map_http_error(err: hyper::http::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::BrokenPipe, err)
 }

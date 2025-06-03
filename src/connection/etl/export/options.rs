@@ -1,15 +1,14 @@
 use std::{fmt::Debug, net::SocketAddrV4};
 
-use sqlx_core::Error as SqlxError;
-
 use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{build_etl, traits::EtlJob, JobFuture, SocketFuture},
-    ExaConnection,
+    etl::{job::EtlJob, JobFuture, WithSocketFuture},
+    ExaConnection, SqlxResult,
 };
 
 /// A builder for an ETL EXPORT job.
+///
 /// Calling [`build().await`] will ouput a future that drives the EXPORT query execution and a
 /// [`Vec<ExaReader>`] which must be concurrently used to read data from Exasol.
 #[derive(Debug)]
@@ -27,6 +26,7 @@ pub struct ExportBuilder<'a> {
 }
 
 impl<'a> ExportBuilder<'a> {
+    #[must_use]
     pub fn new(source: ExportSource<'a>) -> Self {
         Self {
             num_readers: 0,
@@ -44,9 +44,8 @@ impl<'a> ExportBuilder<'a> {
 
     /// Builds the EXPORT job.
     ///
-    /// This implies submitting the EXPORT query.
-    /// The output will be a future to await the result of the job
-    /// and the workers that can be used for ETL IO.
+    /// This implies submitting the EXPORT query. The output will be a future to await the result of
+    /// the job and the workers that can be used for ETL IO.
     ///
     /// # Errors
     ///
@@ -54,16 +53,17 @@ impl<'a> ExportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> Result<(JobFuture<'c>, Vec<ExaExport>), SqlxError>
+    ) -> SqlxResult<(JobFuture<'c>, Vec<ExaExport>)>
     where
         'c: 'a,
     {
-        build_etl(self, con).await
+        self.build_etl(con).await
     }
 
     /// Sets the number of reader jobs that will be started.
-    /// If set to `0`, then as many as possible will be used (one per node).
-    /// Providing a number bigger than the number of nodes is the same as providing `0`.
+    ///
+    /// If set to `0`, then as many as possible will be used (one per node). Providing a number
+    /// bigger than the number of nodes is the same as providing `0`.
     pub fn num_readers(&mut self, num_readers: usize) -> &mut Self {
         self.num_readers = num_readers;
         self
@@ -124,15 +124,8 @@ impl<'a> EtlJob for ExportBuilder<'a> {
         self.num_readers
     }
 
-    fn create_workers(
-        &self,
-        socket_futures: Vec<SocketFuture>,
-        with_compression: bool,
-    ) -> Vec<Self::Worker> {
-        socket_futures
-            .into_iter()
-            .map(|f| ExaExport::Setup(f, with_compression))
-            .collect()
+    fn create_worker(&self, future: WithSocketFuture, with_compression: bool) -> Self::Worker {
+        ExaExport::Setup(future, with_compression)
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
