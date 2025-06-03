@@ -14,7 +14,6 @@ env:
 jobs:
   connection_tests:
     name: Connection tests
-    needs: clippy
     runs-on: ubuntu-latest
 
     steps:
@@ -48,7 +47,6 @@ jobs:
 
   tls_connection_tests:
     name: TLS connection tests
-    needs: clippy
     runs-on: ubuntu-latest
 
     steps:
@@ -82,7 +80,6 @@ jobs:
 
   etl_tests:
     name: ETL tests
-    needs: clippy
     runs-on: ubuntu-latest
 
     steps:
@@ -132,7 +129,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: tests
+    needs: [connection_tests, tls_connection_tests, etl_tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
