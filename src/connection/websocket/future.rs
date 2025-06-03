@@ -137,7 +137,7 @@ impl<'a> ExecuteBatch<'a> {
         Self(ExaRoundtrip::new(request))
     }
 
-    pub fn split_query(query: &str) -> Vec<&str> {
+    fn split_query(query: &str) -> Vec<&str> {
         let query = query.trim();
         let mut chars = query.char_indices().peekable();
         let mut state = QueryState::Statement;
@@ -769,7 +769,7 @@ mod tests {
     use super::ExecuteBatch;
 
     #[test]
-    fn test_simple_queries() {
+    fn test_simple_statements() {
         assert_eq!(
             ExecuteBatch::split_query("SELECT * FROM users; SELECT * FROM orders;"),
             vec!["SELECT * FROM users;", "SELECT * FROM orders;"]
