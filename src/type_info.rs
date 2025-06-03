@@ -89,7 +89,7 @@ pub enum ExaDataType {
     #[serde(rename = "TIMESTAMP WITH LOCAL TIME ZONE")]
     TimestampWithLocalTimeZone,
     Varchar(StringLike),
-    Hashtype(Hashtype),
+    HashType(HashType),
 }
 
 impl ExaDataType {
@@ -148,7 +148,7 @@ impl ExaDataType {
                     | ExaDataType::Varchar(_)
                     | ExaDataType::Null
             ),
-            ExaDataType::Hashtype(h) => h.compatible(other),
+            ExaDataType::HashType(h) => h.compatible(other),
         }
     }
 
@@ -175,7 +175,7 @@ impl ExaDataType {
             ExaDataType::IntervalYearToMonth(iym) => {
                 format_args!("INTERVAL YEAR({}) TO MONTH", iym.precision).into()
             }
-            ExaDataType::Hashtype(h) => format_args!("{}({} BYTE)", self.as_ref(), h.size()).into(),
+            ExaDataType::HashType(h) => format_args!("{}({} BYTE)", self.as_ref(), h.size()).into(),
         }
     }
 }
@@ -195,7 +195,7 @@ impl AsRef<str> for ExaDataType {
             ExaDataType::Timestamp => Self::TIMESTAMP,
             ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
             ExaDataType::Varchar(_) => Self::VARCHAR,
-            ExaDataType::Hashtype(_) => Self::HASHTYPE,
+            ExaDataType::HashType(_) => Self::HASHTYPE,
         }
     }
 }
@@ -278,7 +278,7 @@ impl StringLike {
                 | ExaDataType::Null
                 | ExaDataType::Date
                 | ExaDataType::Geometry(_)
-                | ExaDataType::Hashtype(_)
+                | ExaDataType::HashType(_)
                 | ExaDataType::IntervalDayToSecond(_)
                 | ExaDataType::IntervalYearToMonth(_)
                 | ExaDataType::Timestamp
@@ -509,11 +509,11 @@ impl IntervalYearToMonth {
 /// easier to reason with.
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
-pub struct Hashtype {
+pub struct HashType {
     size: u16,
 }
 
-impl Hashtype {
+impl HashType {
     pub const MAX_HASHTYPE_SIZE: u16 = 1024;
 
     /// Creates a new instance based on the size provided.
@@ -528,7 +528,7 @@ impl Hashtype {
 
     pub fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::Hashtype(h) => self.size >= h.size,
+            ExaDataType::HashType(h) => self.size >= h.size,
             ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
             _ => false,
         }
@@ -658,11 +658,11 @@ mod tests {
 
     #[test]
     fn test_max_hashtype_name() {
-        let hashtype = Hashtype::new(Hashtype::MAX_HASHTYPE_SIZE);
-        let data_type = ExaDataType::Hashtype(hashtype);
+        let hashtype = HashType::new(HashType::MAX_HASHTYPE_SIZE);
+        let data_type = ExaDataType::HashType(hashtype);
         assert_eq!(
             data_type.full_name().as_ref(),
-            format!("HASHTYPE({} BYTE)", Hashtype::MAX_HASHTYPE_SIZE)
+            format!("HASHTYPE({} BYTE)", HashType::MAX_HASHTYPE_SIZE)
         );
     }
 }
