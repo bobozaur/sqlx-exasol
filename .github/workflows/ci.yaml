@@ -11,7 +11,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUST_TOOLCHAIN: 1.82.0
   EXASOL_VERSION: 7.0.22
   NUM_NODES: 4
   TESTS_TIMEOUT: 15
@@ -22,20 +21,14 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@nightly
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
           components: rustfmt
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      - name: Check format
+        run: cargo +nightly fmt --check
 
   clippy:
     name: Clippy
@@ -52,22 +45,15 @@ jobs:
           ]
         other: ["--features compression,migrate,rust_decimal,uuid,chrono", ""]
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-          components: clippy
-
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions-rs/cargo@v1
+      - uses: dtolnay/rust-toolchain@1.82.0
         with:
-          command: clippy
-          args: --tests ${{ matrix.etl }} ${{ matrix.other }}
+          components: clippy
+
+      - name: Run clippy
+        run: cargo clippy --tests ${{ matrix.etl }} ${{ matrix.other }}
         env:
           RUSTFLAGS: -D warnings
 
@@ -76,23 +62,18 @@ jobs:
     needs: clippy
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions-rs/cargo@v1
+      - uses: dtolnay/rust-toolchain@1.82.0
         with:
-          command: check
-          args: --tests --features compression,migrate,etl,rust_decimal,uuid,chrono
-        # See: https://aws.github.io/aws-lc-rs/resources.html#troubleshooting
+          components: clippy
+
+      - name: Run clippy
+        run: cargo clippy --tests --features compression,migrate,etl,rust_decimal,uuid,chrono
         env:
+          RUSTFLAGS: -D warnings
+          # See: https://aws.github.io/aws-lc-rs/resources.html#troubleshooting
           AWS_LC_SYS_NO_ASM: 1
 
   check_mac_os:
@@ -100,21 +81,17 @@ jobs:
     needs: clippy
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions-rs/cargo@v1
+      - uses: dtolnay/rust-toolchain@1.82.0
         with:
-          command: check
-          args: --tests --features compression,migrate,etl,rust_decimal,uuid,chrono
+          components: clippy
+
+      - name: Run clippy
+        run: cargo clippy --tests --features compression,migrate,etl,rust_decimal,uuid,chrono
+        env:
+          RUSTFLAGS: -D warnings
 
   connection_tests:
     name: Connection tests
@@ -122,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Free disk space
         uses: ./.github/actions/free-space
@@ -135,13 +112,7 @@ jobs:
           exasol-version: ${{ env.EXASOL_VERSION }}
           num-nodes: ${{ env.NUM_NODES }}
 
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
+      - uses: dtolnay/rust-toolchain@1.82.0
       - uses: Swatinem/rust-cache@v2
 
       - name: Connection tests
@@ -162,7 +133,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Free disk space
         uses: ./.github/actions/free-space
@@ -175,13 +146,7 @@ jobs:
           exasol-version: ${{ env.EXASOL_VERSION }}
           num-nodes: ${{ env.NUM_NODES }}
 
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
+      - uses: dtolnay/rust-toolchain@1.82.0
       - uses: Swatinem/rust-cache@v2
 
       - name: TLS connection tests
@@ -202,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Free disk space
         uses: ./.github/actions/free-space
@@ -215,13 +180,7 @@ jobs:
           exasol-version: ${{ env.EXASOL_VERSION }}
           num-nodes: ${{ env.NUM_NODES }}
 
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-
+      - uses: dtolnay/rust-toolchain@1.82.0
       - uses: Swatinem/rust-cache@v2
 
       - name: ETL tests
