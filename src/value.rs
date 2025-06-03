@@ -8,12 +8,14 @@ use sqlx_core::{
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
+/// Implementor of [`Value`].
 #[derive(Clone, Debug)]
 pub struct ExaValue {
     pub(crate) value: JsonValue,
     type_info: ExaTypeInfo,
 }
 
+/// Implementor of [`ValueRef`].
 #[derive(Clone, Debug)]
 pub struct ExaValueRef<'r> {
     pub(crate) value: &'r JsonValue,

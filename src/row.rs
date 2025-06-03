@@ -5,7 +5,7 @@ use sqlx_core::{column::ColumnIndex, database::Database, row::Row, HashMap};
 
 use crate::{column::ExaColumn, database::Exasol, value::ExaValueRef, SqlxError, SqlxResult};
 
-/// Struct representing a result set row.
+/// Struct representing a result set row. Implementor of [`Row`].
 #[derive(Debug)]
 pub struct ExaRow {
     column_names: Arc<HashMap<Arc<str>, usize>>,

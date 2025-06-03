@@ -9,6 +9,7 @@ use crate::{
     SqlxError, SqlxResult,
 };
 
+/// Implementor of [`Statement`].
 #[derive(Debug, Clone)]
 pub struct ExaStatement<'q> {
     pub(crate) sql: Cow<'q, str>,

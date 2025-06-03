@@ -146,7 +146,10 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
             // Multiple tests concurrenclty trying to create the test schema and table can cause a
             // `GlobalTransactionRollback`, where the objects did not exist when creating them was
             // attempted but they got created by another test before the current one could create
-            // them. This means that the objects now exist, which is what we wanted all along.
+            // them.
+            //
+            // This means that, in spite of the failure, the objects now exist, which is what we
+            // wanted all along.
             Some("40001") => Ok(()),
             _ => Err(e),
         }?;

@@ -11,6 +11,7 @@ use crate::{
     ExaConnection, SqlxResult,
 };
 
+/// Implementor of [`TransactionManager`].
 #[derive(Debug, Clone, Copy)]
 pub struct ExaTransactionManager;
 

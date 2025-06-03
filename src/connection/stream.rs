@@ -187,13 +187,7 @@ impl MultiResultStream {
 
 impl From<SingleResult> for MultiResultStream {
     fn from(value: SingleResult) -> Self {
-        let first_result = value
-            .results
-            .into_iter()
-            .next()
-            .expect("query result array must have one element");
-
-        Self::new(first_result, Vec::new().into_iter())
+        Self::new(value.into(), Vec::new().into_iter())
     }
 }
 

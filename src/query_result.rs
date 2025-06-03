@@ -1,5 +1,6 @@
 use std::ops::{Add, AddAssign};
 
+/// A query result containing the number of affected rows.
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ExaQueryResult {
     rows_affected: u64,

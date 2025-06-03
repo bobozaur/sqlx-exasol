@@ -47,7 +47,7 @@ const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
 const PARAM_COMPRESSION: &str = "compression";
 const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
 
-/// Options for connecting to the Exasol database.
+/// Options for connecting to the Exasol database. Implementor of [`ConnectOptions`].
 ///
 /// While generally automatically created through a connection string,
 /// [`ExaConnectOptions::builder()`] can be used to get a [`ExaConnectOptionsBuilder`].

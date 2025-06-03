@@ -3,14 +3,16 @@ use std::{
     str::FromStr,
 };
 
-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use super::{error::ExaConfigError, PARAM_PROTOCOL_VERSION};
 
 /// Enum listing the protocol versions that can be used when establishing a websocket connection to
 /// Exasol. Defaults to the highest defined protocol version and falls back to the highest protocol
 /// version supported by the server.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(try_from = "u8")]
+#[serde(into = "u8")]
 #[repr(u8)]
 pub enum ProtocolVersion {
     V1 = 1,
@@ -33,6 +35,12 @@ impl FromStr for ProtocolVersion {
     }
 }
 
+impl From<ProtocolVersion> for u8 {
+    fn from(value: ProtocolVersion) -> Self {
+        value as Self
+    }
+}
+
 impl TryFrom<u8> for ProtocolVersion {
     type Error = ExaConfigError;
 
@@ -50,25 +58,5 @@ impl TryFrom<u8> for ProtocolVersion {
 impl Display for ProtocolVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", *self as u8)
-    }
-}
-
-impl Serialize for ProtocolVersion {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let val = *self as u8;
-        val.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ProtocolVersion {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let val = u8::deserialize(deserializer)?;
-        val.try_into().map_err(D::Error::custom)
     }
 }

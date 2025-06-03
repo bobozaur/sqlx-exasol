@@ -3,10 +3,8 @@ use serde::Deserialize;
 
 use crate::{error::ToSqlxError, SqlxError};
 
-/// The public key Exasol sends during the login process
-/// to be used for encrypting the password.
+/// The public key Exasol sends during the login process to be used for encrypting the password.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 #[serde(try_from = "PublicKeyDe")]
 pub struct PublicKey(RsaPublicKey);
 

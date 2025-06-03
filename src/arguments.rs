@@ -4,6 +4,7 @@ use sqlx_core::{arguments::Arguments, encode::Encode, error::BoxDynError, types:
 
 use crate::{database::Exasol, error::ExaProtocolError, type_info::ExaTypeInfo};
 
+/// Implementor of [`Arguments`].
 #[derive(Debug, Default)]
 pub struct ExaArguments {
     pub buf: ExaBuffer,
@@ -41,11 +42,24 @@ impl<'q> Arguments<'q> for ExaArguments {
     }
 }
 
+/// Prepared statement parameters serialization buffer.
 #[derive(Debug)]
 pub struct ExaBuffer {
+    /// JSON buffer where we serialize data.
+    ///
+    /// Storing this as a [`String`] allows for zero cost serialization of the buffer in the
+    /// containing types.
     pub(crate) buffer: String,
-    pub(crate) current_set_params: usize,
-    pub(crate) first_set_params: Option<usize>,
+    /// Counter for the number of parameters we are serializing for a column.
+    ///
+    /// While typically `1`, the columnar nature of Exasol allows us to pass parameter arrays for
+    /// multiple rows. However, we must ensure that all parameter columns have the same number
+    /// of rows.
+    pub(crate) col_params_counter: usize,
+    /// Storage for the first final value of `col_params_counter`.
+    /// 
+    /// All subsequent columns are expected to have the same amount of rows.
+    pub(crate) first_col_params_num: Option<usize>,
 }
 
 impl ExaBuffer {
@@ -54,7 +68,7 @@ impl ExaBuffer {
     where
         T: Serialize,
     {
-        self.current_set_params += 1;
+        self.col_params_counter += 1;
         // SAFETY: `serde_json` will only write valid UTF-8.
         serde_json::to_writer(unsafe { self.buffer.as_mut_vec() }, &value)
     }
@@ -81,7 +95,7 @@ impl ExaBuffer {
 
     /// Outputs the numbers of parameter sets in the buffer.
     pub(crate) fn num_param_sets(&self) -> usize {
-        self.first_set_params.unwrap_or_default()
+        self.first_col_params_num.unwrap_or_default()
     }
 
     /// Ends the main sequence serialization and returns the JSON [`String`] buffer.
@@ -109,21 +123,20 @@ impl ExaBuffer {
 
     /// Registers the number of rows we bound parameters for.
     ///
-    /// The first time we add an argument, we store the number of rows
-    /// we pass parameters for. This is useful for when arrays of
-    /// parameters get passed for each column.
+    /// The first time we add an argument, we store the number of rows we pass parameters for. This
+    /// is useful for when arrays of parameters get passed for each column.
     ///
     /// All subsequent calls will check that the number of rows is the same.
     fn check_param_count(&mut self) -> Result<(), ExaProtocolError> {
-        let count = self.current_set_params;
+        let count = self.col_params_counter;
 
         // We must reset the count in preparation for the next parameter.
-        self.current_set_params = 0;
+        self.col_params_counter = 0;
 
-        match self.first_set_params {
+        match self.first_col_params_num {
             Some(n) if n == count => (),
             Some(n) => Err(ExaProtocolError::ParameterLengthMismatch(count, n))?,
-            None => self.first_set_params = Some(count),
+            None => self.first_col_params_num = Some(count),
         };
 
         Ok(())
@@ -134,8 +147,8 @@ impl Default for ExaBuffer {
     fn default() -> Self {
         let mut buffer = Self {
             buffer: String::with_capacity(1),
-            current_set_params: 0,
-            first_set_params: None,
+            col_params_counter: 0,
+            first_col_params_num: None,
         };
 
         buffer.start_seq();

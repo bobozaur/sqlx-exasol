@@ -5,6 +5,7 @@ use sqlx_core::{column::Column, database::Database};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
+/// Implementor of [`Column`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExaColumn {

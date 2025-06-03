@@ -4,8 +4,8 @@ use serde::Deserialize;
 
 use crate::ExaColumn;
 
-/// Helper type for deserializing columns ready for shared ownership
-/// while also setting the ordinal value of the column in the array.
+/// Helper type for deserializing columns ready for shared ownership while also setting the ordinal
+/// value of the column in the array.
 #[derive(Debug, Deserialize)]
 #[serde(transparent)]
 pub struct ExaColumns(pub Vec<ExaColumn>);

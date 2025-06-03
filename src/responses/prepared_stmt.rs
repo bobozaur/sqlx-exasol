@@ -14,6 +14,7 @@ pub struct PreparedStatement {
     pub parameters: Arc<[ExaTypeInfo]>,
 }
 
+/// Deserialization helper.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PreparedStatementDe {

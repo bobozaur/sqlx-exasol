@@ -311,7 +311,9 @@ type SqlxResult<T> = sqlx_core::Result<T>;
 // - remove the boxed JobFuture
 // - rename etl feature to maybe http?
 // - make feedback_interval match between options and attributes
-// - don't make columns lowercase by default?
+// - don't make columns lowercase by default? probably cannot do that due to how [`FromRow`] works;
+//   columns need to be lowercase
+// - remove the inherent doubling of HASHTYPE size.
 //
 // Make columns lowercase again
 // Write query_splitter tests
