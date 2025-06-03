@@ -1,4 +1,3 @@
-# yaml-language-server: $schema=./main.yaml
 name: CI
 
 on:
