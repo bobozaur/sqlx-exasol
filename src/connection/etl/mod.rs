@@ -103,8 +103,6 @@ use crate::{
     ExaQueryResult, SqlxResult,
 };
 
-/// Type of the future that executes the ETL job.
-type JobFuture<'a> = BoxFuture<'a, SqlxResult<ExaQueryResult>>;
 // Type alias for a socket spawning future used in ETL worker's setup phase.
 type WithSocketFuture = BoxFuture<'static, io::Result<ExaSocket>>;
 

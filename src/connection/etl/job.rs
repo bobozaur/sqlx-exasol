@@ -5,7 +5,6 @@ use std::{
 };
 
 use arrayvec::ArrayString;
-use futures_util::FutureExt;
 
 use crate::{
     connection::websocket::{
@@ -17,7 +16,7 @@ use crate::{
         non_tls::WithNonTlsWorker,
         tls,
         with_worker::{WithSocketAddr, WithWorker},
-        EtlQuery, ExecuteEtl, JobFuture, WithSocketFuture,
+        EtlQuery, ExecuteEtl, WithSocketFuture,
     },
     ExaConnection, SqlxResult,
 };
@@ -86,7 +85,7 @@ pub trait EtlJob: Sized + Send + Sync {
     fn build_etl<'a, 'c>(
         &'a self,
         conn: &'c mut ExaConnection,
-    ) -> impl Future<Output = SqlxResult<(JobFuture<'c>, Vec<Self::Worker>)>> + Send
+    ) -> impl Future<Output = SqlxResult<(EtlQuery<'c>, Vec<Self::Worker>)>> + Send
     where
         'c: 'a,
     {
@@ -118,7 +117,7 @@ pub trait EtlJob: Sized + Send + Sync {
             let query = self.query(addrs, with_tls, with_compression);
             let future = ExecuteEtl(ExaRoundtrip::new(Execute(query.into()))).future(&mut conn.ws);
 
-            Ok((EtlQuery(future).boxed(), workers))
+            Ok((EtlQuery(future), workers))
         }
     }
 

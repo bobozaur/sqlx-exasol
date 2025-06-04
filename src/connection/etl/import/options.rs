@@ -5,7 +5,7 @@ use arrayvec::ArrayString;
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{job::EtlJob, JobFuture, WithSocketFuture},
+    etl::{job::EtlJob, EtlQuery, WithSocketFuture},
     ExaConnection, SqlxResult,
 };
 
@@ -61,7 +61,7 @@ impl<'a> ImportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> SqlxResult<(JobFuture<'c>, Vec<ExaImport>)>
+    ) -> SqlxResult<(EtlQuery<'c>, Vec<ExaImport>)>
     where
         'c: 'a,
     {

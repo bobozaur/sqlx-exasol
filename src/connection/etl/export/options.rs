@@ -3,7 +3,7 @@ use std::{fmt::Debug, net::SocketAddrV4};
 use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{job::EtlJob, JobFuture, WithSocketFuture},
+    etl::{job::EtlJob, EtlQuery, WithSocketFuture},
     ExaConnection, SqlxResult,
 };
 
@@ -53,7 +53,7 @@ impl<'a> ExportBuilder<'a> {
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
-    ) -> SqlxResult<(JobFuture<'c>, Vec<ExaExport>)>
+    ) -> SqlxResult<(EtlQuery<'c>, Vec<ExaExport>)>
     where
         'c: 'a,
     {
