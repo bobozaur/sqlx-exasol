@@ -36,8 +36,8 @@ pub struct ExaConnection {
 
 impl ExaConnection {
     /// Returns the Exasol server socket address that we're connected to.
-    pub fn socket_addr(&self) -> SocketAddr {
-        self.ws.socket_addr()
+    pub fn server(&self) -> SocketAddr {
+        self.ws.server()
     }
 
     /// Returns a reference of the [`ExaAttributes`] used in this connection.

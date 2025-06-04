@@ -50,14 +50,14 @@ impl MaybeCompressedWebSocket {
             .map_err(ToSqlxError::to_sqlx_err)
     }
 
-    pub fn socket_addr(&self) -> SocketAddr {
+    pub fn server(&self) -> SocketAddr {
         let ws = match self {
             MaybeCompressedWebSocket::Plain(ws) => &ws.0,
             #[cfg(feature = "compression")]
             MaybeCompressedWebSocket::Compressed(ws) => &ws.inner,
         };
 
-        ws.get_ref().get_ref().sock_addr
+        ws.get_ref().get_ref().server
     }
 }
 

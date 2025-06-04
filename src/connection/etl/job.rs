@@ -91,7 +91,7 @@ pub trait EtlJob: Sized + Send + Sync {
         'c: 'a,
     {
         async {
-            let socket_addr = conn.socket_addr();
+            let socket_addr = conn.server();
             let port = socket_addr.port();
             let num = self.num_workers();
 
