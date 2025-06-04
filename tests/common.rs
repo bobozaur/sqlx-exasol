@@ -2,12 +2,12 @@
 
 use std::iter::zip;
 
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::TryStreamExt;
 use sqlx::{
     error::BoxDynError, pool::PoolConnection, Column, Connection, Executor, Row, Statement,
     TypeInfo,
 };
-use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaRow, Exasol};
+use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaQueryResult, ExaRow, Exasol};
 
 #[sqlx::test]
 async fn it_connects(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
@@ -515,12 +515,54 @@ async fn test_decode_error(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
 }
 
 #[sqlx::test]
-async fn test_execute_many_fails(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+async fn test_execute_many_works(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    con.execute_many("SELECT 1; SELECT 2; SELECT 3;")
+        .try_collect::<ExaQueryResult>()
+        .await?;
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_execute_many_fails_bad_query(
+    mut con: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     // Ensure that even if errors are not handled a bad statement in a query will
     // still result in the stream ending.
     con.execute_many("SELECT 1; SELECT * FROM some_table_that_does_not_exist; SELECT 2;")
-        .for_each(|_| async {})
-        .await;
+        .try_collect::<ExaQueryResult>()
+        .await?;
+
+    Ok(())
+}
+
+#[expect(deprecated, reason = "testing deprecation")]
+#[sqlx::test]
+async fn test_execute_many_fails_params(
+    mut con: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
+    let is_err = sqlx::query("SELECT 1; SELECT * FROM some_table_that_does_not_exist; SELECT 2;")
+        .execute_many(&mut *con)
+        .await
+        .try_collect::<ExaQueryResult>()
+        .await
+        .is_err();
+
+    assert!(is_err);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_fetch_many_works(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    let mut stream = con.fetch_many(
+        "
+        CREATE TABLE FETCH_TEST (col VARCHAR(20));
+        INSERT INTO FETCH_TEST VALUES ('test');
+        SELECT * FROM FETCH_TEST;",
+    );
+
+    while stream.try_next().await?.is_some() {}
 
     Ok(())
 }

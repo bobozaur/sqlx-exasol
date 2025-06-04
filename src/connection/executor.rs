@@ -1,9 +1,8 @@
-use std::{borrow::Cow, future::ready};
+use std::borrow::Cow;
 
 use futures_core::{future::BoxFuture, stream::BoxStream};
 use futures_util::{FutureExt, StreamExt, TryStreamExt};
 use sqlx_core::{
-    database::Database,
     describe::Describe,
     executor::{Execute, Executor},
     logger::QueryLogger,
@@ -18,161 +17,94 @@ use crate::{
     database::Exasol,
     responses::DescribeStatement,
     statement::{ExaStatement, ExaStatementMetadata},
-    ExaConnection, SqlxError, SqlxResult,
+    ExaConnection, ExaQueryResult, ExaRow, ExaTypeInfo, SqlxError, SqlxResult,
 };
 
 impl<'c> Executor<'c> for &'c mut ExaConnection {
     type Database = Exasol;
 
-    fn execute<'e, 'q, E>(
-        self,
-        mut query: E,
-    ) -> BoxFuture<'e, SqlxResult<<Self::Database as Database>::QueryResult>>
+    fn execute<'e, 'q, E>(self, query: E) -> BoxFuture<'e, SqlxResult<ExaQueryResult>>
     where
         'q: 'e,
         'c: 'e,
-        E: 'q + Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Exasol>,
     {
-        let sql = query.sql();
-        let persist = query.persistent();
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
-        let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
-            Ok(a) => a,
-            Err(e) => return Box::pin(ready(Err(e))),
-        };
-
-        let filter_fn = |step| async move {
-            Ok(match step {
-                Either::Left(rows) => Some(rows),
-                Either::Right(_) => None,
-            })
-        };
-
-        if let Some(arguments) = arguments {
-            let future = ExecutePrepared::new(sql, persist, arguments);
-            ResultStream::new(&mut self.ws, logger, future)
-                .try_filter_map(filter_fn)
+        match self._fetch(query) {
+            Ok(stream) => stream
+                .try_filter_map(|v| std::future::ready(Ok(v.left())))
                 .try_collect()
-                .boxed()
-        } else {
-            let future = future::Execute::new(sql);
-            ResultStream::new(&mut self.ws, logger, future)
-                .try_filter_map(filter_fn)
-                .try_collect()
-                .boxed()
+                .boxed(),
+            Err(e) => std::future::ready(Err(e)).boxed(),
         }
     }
 
-    fn execute_many<'e, 'q, E>(
-        self,
-        query: E,
-    ) -> BoxStream<'e, SqlxResult<<Self::Database as Database>::QueryResult>>
+    fn execute_many<'e, 'q, E>(self, query: E) -> BoxStream<'e, SqlxResult<ExaQueryResult>>
     where
         'q: 'e,
         'c: 'e,
-        E: 'q + Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Exasol>,
     {
-        self.fetch_many(query)
-            .try_filter_map(|step| async move {
-                Ok(match step {
-                    Either::Left(rows) => Some(rows),
-                    Either::Right(_) => None,
-                })
-            })
-            .boxed()
+        match self._fetch_many(query) {
+            Ok(stream) => stream
+                .try_filter_map(|step| std::future::ready(Ok(step.left())))
+                .boxed(),
+            Err(e) => return std::future::ready(Err(e)).into_stream().boxed(),
+        }
     }
 
-    fn fetch<'e, 'q, E>(
-        self,
-        mut query: E,
-    ) -> BoxStream<'e, SqlxResult<<Self::Database as Database>::Row>>
+    fn fetch<'e, 'q, E>(self, query: E) -> BoxStream<'e, SqlxResult<ExaRow>>
     where
         'q: 'e,
         'c: 'e,
-        E: 'q + Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Exasol>,
     {
-        let sql = query.sql();
-        let persist = query.persistent();
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
-        let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
-            Ok(a) => a,
-            Err(e) => return Box::pin(ready(Err(e)).into_stream()),
-        };
-
-        let filter_fn = |step| async move {
-            Ok(match step {
-                Either::Left(_) => None,
-                Either::Right(row) => Some(row),
-            })
-        };
-
-        if let Some(arguments) = arguments {
-            let future = ExecutePrepared::new(sql, persist, arguments);
-            Box::pin(ResultStream::new(&mut self.ws, logger, future).try_filter_map(filter_fn))
-        } else {
-            let future = future::Execute::new(sql);
-            Box::pin(ResultStream::new(&mut self.ws, logger, future).try_filter_map(filter_fn))
+        match self._fetch(query) {
+            Ok(stream) => stream
+                .try_filter_map(|v| std::future::ready(Ok(v.right())))
+                .boxed(),
+            Err(e) => std::future::ready(Err(e)).into_stream().boxed(),
         }
     }
 
     fn fetch_many<'e, 'q, E>(
         self,
-        mut query: E,
-    ) -> BoxStream<
-        'e,
-        SqlxResult<
-            Either<<Self::Database as Database>::QueryResult, <Self::Database as Database>::Row>,
-        >,
-    >
+        query: E,
+    ) -> BoxStream<'e, SqlxResult<Either<ExaQueryResult, ExaRow>>>
     where
         'q: 'e,
         'c: 'e,
-        E: 'q + Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Exasol>,
     {
-        let sql = query.sql();
-        let persist = query.persistent();
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
-        let arguments = match query.take_arguments().map_err(SqlxError::Encode) {
-            Ok(a) => a,
-            Err(e) => return Box::pin(ready(Err(e)).into_stream()),
-        };
-
-        if let Some(arguments) = arguments {
-            let future = ExecutePrepared::new(sql, persist, arguments);
-            Box::pin(ResultStream::new(&mut self.ws, logger, future))
-        } else {
-            let future = ExecuteBatch::new(sql);
-            Box::pin(ResultStream::new(&mut self.ws, logger, future))
+        match self._fetch_many(query) {
+            Ok(stream) => stream.boxed(),
+            Err(e) => return std::future::ready(Err(e)).into_stream().boxed(),
         }
     }
 
-    fn fetch_optional<'e, 'q, E>(
-        self,
-        query: E,
-    ) -> BoxFuture<'e, SqlxResult<Option<<Self::Database as Database>::Row>>>
+    fn fetch_optional<'e, 'q, E>(self, query: E) -> BoxFuture<'e, SqlxResult<Option<ExaRow>>>
     where
         'q: 'e,
         'c: 'e,
-        E: 'q + Execute<'q, Self::Database>,
+        E: 'q + Execute<'q, Exasol>,
     {
-        let mut s = self.fetch_many(query);
+        let stream = match self._fetch(query) {
+            Ok(stream) => stream,
+            Err(e) => return std::future::ready(Err(e)).boxed(),
+        };
 
         Box::pin(async move {
-            while let Some(v) = s.try_next().await? {
-                if let Either::Right(r) = v {
-                    return Ok(Some(r));
-                }
-            }
-
-            Ok(None)
+            stream
+                .try_filter_map(|v| std::future::ready(Ok(v.right())))
+                .try_next()
+                .await
         })
     }
 
     fn prepare_with<'e, 'q>(
         self,
         sql: &'q str,
-        _parameters: &'e [<Self::Database as Database>::TypeInfo],
-    ) -> BoxFuture<'e, SqlxResult<<Self::Database as Database>::Statement<'q>>>
+        _parameters: &'e [ExaTypeInfo],
+    ) -> BoxFuture<'e, SqlxResult<ExaStatement<'q>>>
     where
         'q: 'e,
         'c: 'e,
@@ -191,7 +123,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     }
 
     /// Exasol does not provide nullability information, unfortunately.
-    fn describe<'e, 'q>(self, sql: &'q str) -> BoxFuture<'e, SqlxResult<Describe<Self::Database>>>
+    fn describe<'e, 'q>(self, sql: &'q str) -> BoxFuture<'e, SqlxResult<Describe<Exasol>>>
     where
         'q: 'e,
         'c: 'e,
@@ -211,5 +143,47 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
                 nullable,
             })
         })
+    }
+}
+
+impl ExaConnection {
+    fn _fetch<'c, 'e, 'q, E>(&'c mut self, mut query: E) -> SqlxResult<ResultStream<'e>>
+    where
+        'q: 'e,
+        'c: 'e,
+        E: 'q + Execute<'q, Exasol>,
+    {
+        let sql = query.sql();
+        let persist = query.persistent();
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
+        let arguments = query.take_arguments().map_err(SqlxError::Encode)?;
+
+        if let Some(arguments) = arguments {
+            let future = ExecutePrepared::new(sql, persist, arguments);
+            Ok(ResultStream::new(&mut self.ws, logger, future))
+        } else {
+            let future = future::Execute::new(sql);
+            Ok(ResultStream::new(&mut self.ws, logger, future))
+        }
+    }
+
+    fn _fetch_many<'c, 'e, 'q, E>(&'c mut self, mut query: E) -> SqlxResult<ResultStream<'e>>
+    where
+        'q: 'e,
+        'c: 'e,
+        E: 'q + Execute<'q, Exasol>,
+    {
+        let sql = query.sql();
+        let persist = query.persistent();
+        let logger = QueryLogger::new(sql, self.log_settings.clone());
+        let arguments = query.take_arguments().map_err(SqlxError::Encode)?;
+
+        if let Some(arguments) = arguments {
+            let future = ExecutePrepared::new(sql, persist, arguments);
+            Ok(ResultStream::new(&mut self.ws, logger, future))
+        } else {
+            let future = ExecuteBatch::new(sql);
+            Ok(ResultStream::new(&mut self.ws, logger, future))
+        }
     }
 }
