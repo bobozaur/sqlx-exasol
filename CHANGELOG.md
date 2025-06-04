@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - [#33](https://github.com/bobozaur/sqlx-exasol/pull/33): Avoid nested boxing in Executor impl
 - [#31](https://github.com/bobozaur/sqlx-exasol/pull/31):
   - Renamed `ExaConnection::socket_addr` to `ExaConnection::server`
+  - Made `feedback_interval` match between options and attributes
 
 ## [0.8.6] - 2025-06-03
 
