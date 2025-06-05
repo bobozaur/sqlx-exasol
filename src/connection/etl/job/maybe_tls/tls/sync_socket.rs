@@ -5,6 +5,8 @@ use std::{
 
 use sqlx_core::net::Socket;
 
+use crate::connection::websocket::socket::ExaSocket;
+
 /// Wrapper emulating a synchronous socket from an async one.
 /// Needed by the TLS backends as they need a type implementing [`Read`] and [`Write`].
 pub struct SyncSocket<S: Socket>(pub S);
@@ -37,6 +39,23 @@ where
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.try_write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        // NOTE: TCP sockets and unix sockets are both no-ops for flushes
+        Ok(())
+    }
+}
+
+impl Read for ExaSocket {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.try_read(&mut buf)
+    }
+}
+
+impl Write for ExaSocket {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.try_write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {

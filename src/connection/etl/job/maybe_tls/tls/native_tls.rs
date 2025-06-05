@@ -5,6 +5,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use futures_util::FutureExt;
 use native_tls::{HandshakeError, Identity, TlsAcceptor, TlsStream};
 use rcgen::{Certificate, KeyPair};
 use sqlx_core::{
@@ -12,18 +13,17 @@ use sqlx_core::{
     net::{Socket, WithSocket},
 };
 
-use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::{with_worker::WithWorker, WithSocketFuture},
+    etl::job::{maybe_tls::tls::sync_socket::SyncSocket, SocketSetup, WithSocketMaker},
     SqlxError, SqlxResult,
 };
 
-/// Implementor of [`WithWorker`] used for the creation of [`WithNativeTlsSocket`].
-pub struct WithNativeTlsWorker(Arc<TlsAcceptor>);
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithNativeTlsSocket`].
+pub struct WithNativeTlsSocketMaker(Arc<TlsAcceptor>);
 
-impl WithNativeTlsWorker {
+impl WithNativeTlsSocketMaker {
     pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'native-tls' socket spawner");
 
@@ -39,7 +39,7 @@ impl WithNativeTlsWorker {
     }
 }
 
-impl WithWorker for WithNativeTlsWorker {
+impl WithSocketMaker for WithNativeTlsSocketMaker {
     type WithSocket = WithNativeTlsSocket;
 
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
@@ -78,10 +78,10 @@ impl WithNativeTlsSocket {
 }
 
 impl WithSocket for WithNativeTlsSocket {
-    type Output = SqlxResult<WithSocketFuture>;
+    type Output = SocketSetup;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        Ok(Box::pin(self.wrap_socket(socket)))
+        self.wrap_socket(socket).boxed()
     }
 }
 

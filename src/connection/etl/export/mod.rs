@@ -14,7 +14,7 @@ use futures_io::AsyncRead;
 use futures_util::FutureExt;
 pub use options::ExportBuilder;
 
-use super::WithSocketFuture;
+use crate::etl::job::SocketSetup;
 
 /// An ETL EXPORT worker.
 ///
@@ -36,13 +36,14 @@ impl AsyncRead for ExaExport {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            let (socket, with_compression) = match &mut self.0 {
+            match &mut self.0 {
                 ExaExportState::Poll(r) => return Pin::new(r).poll_read(cx, buf),
-                ExaExportState::Handshake(f, c) => (ready!(f.poll_unpin(cx))?, *c),
+                ExaExportState::Setup(f, with_compression) => {
+                    let socket = ready!(f.poll_unpin(cx))?;
+                    let reader = ExaExportReader::new(socket, *with_compression);
+                    self.set(Self(ExaExportState::Poll(reader)));
+                }
             };
-
-            let reader = ExaExportReader::new(socket, with_compression);
-            self.set(Self(ExaExportState::Poll(reader)));
         }
     }
 }
@@ -55,23 +56,23 @@ pub enum ExportSource<'a> {
 }
 
 pub enum ExaExportState {
-    /// TLS handshake is being performed.
+    /// The worker is fully connected and ready for I/O.
+    Poll(ExaExportReader),
+    /// Worker is being set up. Typically means that a TLS handshake is being performed.
     ///
     /// This approach is needed because Exasol will issue connections sequentially and thus perform
     /// TLS handshakes the same way.
     ///
     /// Therefore we accommodate the worker state until the query gets executed and data gets sent
     /// through the workers, which happens within consumer code.
-    Handshake(WithSocketFuture, bool),
-    /// The worker is fully connected and ready for I/O.
-    Poll(ExaExportReader),
+    Setup(SocketSetup, bool),
 }
 
 impl Debug for ExaExportState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Poll(arg0) => f.debug_tuple("Poll").field(arg0).finish(),
-            Self::Handshake(..) => f.debug_tuple("Handshake").finish(),
+            Self::Setup(..) => f.debug_tuple("Setup").finish(),
         }
     }
 }

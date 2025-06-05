@@ -4,7 +4,6 @@
 use std::{borrow::Cow, num::NonZeroUsize, sync::Arc};
 
 use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
-use rand::rngs::OsRng;
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
@@ -333,7 +332,11 @@ impl ExaLoginRequest<'_> {
         };
 
         let enc_pass = key
-            .encrypt(&mut OsRng, Pkcs1v15Encrypt, password.as_bytes())
+            .encrypt(
+                &mut rand::thread_rng(),
+                Pkcs1v15Encrypt,
+                password.as_bytes(),
+            )
             .map(|pass| STD_BASE64_ENGINE.encode(pass))
             .map(Cow::Owned)
             .map_err(|e| SqlxError::Protocol(e.to_string()))?;

@@ -3,7 +3,11 @@ use std::{fmt::Debug, net::SocketAddrV4};
 use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{export::ExaExportState, job::EtlJob, EtlQuery, WithSocketFuture},
+    etl::{
+        export::ExaExportState,
+        job::{EtlJob, SocketSetup},
+        EtlQuery,
+    },
     ExaConnection, SqlxResult,
 };
 
@@ -57,7 +61,7 @@ impl<'a> ExportBuilder<'a> {
     where
         'c: 'a,
     {
-        self.build_etl(con).await
+        self.build_job(con).await
     }
 
     /// Sets the number of reader jobs that will be started.
@@ -124,8 +128,8 @@ impl EtlJob for ExportBuilder<'_> {
         self.num_readers
     }
 
-    fn create_worker(&self, future: WithSocketFuture, with_compression: bool) -> Self::Worker {
-        ExaExport(ExaExportState::Handshake(future, with_compression))
+    fn create_worker(&self, setup_future: SocketSetup, with_compression: bool) -> Self::Worker {
+        ExaExport(ExaExportState::Setup(setup_future, with_compression))
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

@@ -5,7 +5,11 @@ use arrayvec::ArrayString;
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{import::ExaImportState, job::EtlJob, EtlQuery, WithSocketFuture},
+    etl::{
+        import::ExaImportState,
+        job::{EtlJob, SocketSetup},
+        EtlQuery,
+    },
     ExaConnection, SqlxResult,
 };
 
@@ -65,7 +69,7 @@ impl<'a> ImportBuilder<'a> {
     where
         'c: 'a,
     {
-        self.build_etl(con).await
+        self.build_job(con).await
     }
 
     /// Sets the number of writer jobs that will be started.
@@ -147,9 +151,9 @@ impl EtlJob for ImportBuilder<'_> {
         self.num_writers
     }
 
-    fn create_worker(&self, future: WithSocketFuture, with_compression: bool) -> Self::Worker {
-        ExaImport(ExaImportState::Handshake(
-            future,
+    fn create_worker(&self, setup_future: SocketSetup, with_compression: bool) -> Self::Worker {
+        ExaImport(ExaImportState::Setup(
+            setup_future,
             self.buffer_size,
             with_compression,
         ))

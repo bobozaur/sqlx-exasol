@@ -5,6 +5,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use futures_util::FutureExt;
 use rcgen::{Certificate, KeyPair};
 use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 use sqlx_core::{
@@ -16,14 +17,14 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::{with_worker::WithWorker, WithSocketFuture},
+    etl::job::{SocketSetup, WithSocketMaker},
     SqlxError, SqlxResult,
 };
 
-/// Implementor of [`WithWorker`] used for the creation of [`WithRustlsSocket`].
-pub struct WithRustlsWorker(Arc<ServerConfig>);
+/// Implementor of [`WithSocketMaker`] used for the creation of [`WithRustlsSocket`].
+pub struct WithRustlsSocketMaker(Arc<ServerConfig>);
 
-impl WithRustlsWorker {
+impl WithRustlsSocketMaker {
     pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'rustls' socket spawner");
 
@@ -43,7 +44,7 @@ impl WithRustlsWorker {
     }
 }
 
-impl WithWorker for WithRustlsWorker {
+impl WithSocketMaker for WithRustlsSocketMaker {
     type WithSocket = WithRustlsSocket;
 
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
@@ -82,13 +83,14 @@ impl WithRustlsSocket {
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = SqlxResult<WithSocketFuture>;
+    type Output = SocketSetup;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        Ok(Box::pin(self.wrap_socket(socket)))
+        self.wrap_socket(socket).boxed()
     }
 }
 
+/// A [`rustls`] specific implementor of [`Socket`].
 struct RustlsSocket<S>
 where
     S: Socket,

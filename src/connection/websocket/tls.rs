@@ -6,7 +6,8 @@ use sqlx_core::net::{
 use super::socket::{ExaSocket, WithExaSocket};
 use crate::{options::ExaTlsOptionsRef, ExaSslMode, SqlxResult};
 
-/// Implementor of [`WithSocket`] that encapsulates the TLS/non-TLS decision logic.
+/// Implementor of [`WithSocket`] that encapsulates the TLS/non-TLS decision logic and returns,
+/// alongside the socket, whether TLS is being used.
 pub struct WithMaybeTlsExaSocket<'a> {
     wrapper: WithExaSocket,
     host: &'a str,
@@ -24,6 +25,7 @@ impl<'a> WithMaybeTlsExaSocket<'a> {
 }
 
 impl WithSocket for WithMaybeTlsExaSocket<'_> {
+    /// The output will be the socket and whether TLS is used.
     type Output = SqlxResult<(ExaSocket, bool)>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {

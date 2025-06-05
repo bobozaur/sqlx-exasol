@@ -73,9 +73,6 @@ mod error;
 mod export;
 mod import;
 mod job;
-mod non_tls;
-mod tls;
-mod with_worker;
 
 use std::{
     future::Future,
@@ -85,7 +82,6 @@ use std::{
 };
 
 pub use export::{ExaExport, ExportBuilder, ExportSource};
-use futures_core::future::BoxFuture;
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::FutureExt;
 use hyper::rt;
@@ -102,9 +98,6 @@ use crate::{
     responses::{QueryResult, SingleResult},
     ExaQueryResult, SqlxResult,
 };
-
-// Type alias for a socket spawning future used in ETL worker's setup phase.
-type WithSocketFuture = BoxFuture<'static, io::Result<ExaSocket>>;
 
 // CSV row separator.
 #[derive(Debug, Clone, Copy)]
