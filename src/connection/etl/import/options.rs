@@ -5,7 +5,7 @@ use arrayvec::ArrayString;
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{job::EtlJob, EtlQuery, WithSocketFuture},
+    etl::{import::ExaImportState, job::EtlJob, EtlQuery, WithSocketFuture},
     ExaConnection, SqlxResult,
 };
 
@@ -148,7 +148,11 @@ impl EtlJob for ImportBuilder<'_> {
     }
 
     fn create_worker(&self, future: WithSocketFuture, with_compression: bool) -> Self::Worker {
-        ExaImport::Setup(future, self.buffer_size, with_compression)
+        ExaImport(ExaImportState::Handshake(
+            future,
+            self.buffer_size,
+            with_compression,
+        ))
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

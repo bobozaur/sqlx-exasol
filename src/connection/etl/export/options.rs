@@ -3,7 +3,7 @@ use std::{fmt::Debug, net::SocketAddrV4};
 use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
-    etl::{job::EtlJob, EtlQuery, WithSocketFuture},
+    etl::{export::ExaExportState, job::EtlJob, EtlQuery, WithSocketFuture},
     ExaConnection, SqlxResult,
 };
 
@@ -125,7 +125,7 @@ impl EtlJob for ExportBuilder<'_> {
     }
 
     fn create_worker(&self, future: WithSocketFuture, with_compression: bool) -> Self::Worker {
-        ExaExport::Setup(future, with_compression)
+        ExaExport(ExaExportState::Handshake(future, with_compression))
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

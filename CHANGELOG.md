@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Made `feedback_interval` match between options and attributes
   - Removed the boxing of `EtlQuery` future
   - Made `ExaAttributes::set_autocommit` private
+  - Created wrapper structs `ExaImport` and `ExaExport` to avoid exposing enum variants
 
 ## [0.8.6] - 2025-06-03
 

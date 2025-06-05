@@ -1,5 +1,3 @@
-#![expect(deprecated, reason = "will hide enum under a public type")]
-
 mod compression;
 mod options;
 mod writer;
@@ -12,12 +10,11 @@ use std::{
 };
 
 use compression::ExaImportWriter;
-use futures_core::future::BoxFuture;
 use futures_io::AsyncWrite;
 use futures_util::FutureExt;
 pub use options::ImportBuilder;
 
-use crate::connection::websocket::socket::ExaSocket;
+use crate::etl::WithSocketFuture;
 
 /// An ETL IMPORT worker.
 ///
@@ -72,30 +69,8 @@ use crate::connection::websocket::socket::ExaSocket;
 /// it's best not to create excess writers that you don't plan on using to avoid such issues.
 ///
 /// See <https://github.com/exasol/websocket-api/issues/33> for more details.
-#[allow(clippy::large_enum_variant)]
-pub enum ExaImport {
-    /// Setup state of the worker. This typically means waiting on the TLS handshake.
-    ///
-    /// This approach is needed because Exasol will issue connections sequentially and thus perform
-    /// TLS handshakes the same way.
-    ///
-    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
-    /// through the workers, which happens within consumer code.
-    #[deprecated = "will be made private"]
-    Setup(BoxFuture<'static, io::Result<ExaSocket>>, usize, bool),
-    /// The worker is fully connected and ready for I/O.
-    #[deprecated = "will be made private"]
-    Writing(ExaImportWriter),
-}
-
-impl Debug for ExaImport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Writing(arg0) => f.debug_tuple("Writing").field(arg0).finish(),
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
-        }
-    }
-}
+#[derive(Debug)]
+pub struct ExaImport(ExaImportState);
 
 impl AsyncWrite for ExaImport {
     fn poll_write(
@@ -104,37 +79,37 @@ impl AsyncWrite for ExaImport {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
-                Self::Writing(s) => return Pin::new(s).poll_write(cx, buf),
-                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match &mut self.0 {
+                ExaImportState::Poll(s) => return Pin::new(s).poll_write(cx, buf),
+                ExaImportState::Handshake(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer));
+            self.set(Self(ExaImportState::Poll(writer)));
         }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
-                Self::Writing(s) => return Pin::new(s).poll_flush(cx),
-                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match &mut self.0 {
+                ExaImportState::Poll(s) => return Pin::new(s).poll_flush(cx),
+                ExaImportState::Handshake(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer));
+            self.set(Self(ExaImportState::Poll(writer)));
         }
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
-            let (socket, buffer_size, with_compression) = match self.as_mut().get_mut() {
-                Self::Writing(s) => return Pin::new(s).poll_close(cx),
-                Self::Setup(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
+            let (socket, buffer_size, with_compression) = match &mut self.0 {
+                ExaImportState::Poll(s) => return Pin::new(s).poll_close(cx),
+                ExaImportState::Handshake(f, s, c) => (ready!(f.poll_unpin(cx))?, *s, *c),
             };
 
             let writer = ExaImportWriter::new(socket, buffer_size, with_compression);
-            self.set(Self::Writing(writer));
+            self.set(Self(ExaImportState::Poll(writer)));
         }
     }
 }
@@ -153,6 +128,29 @@ impl AsRef<str> for Trim {
             Self::Left => "LTRIM",
             Self::Right => "RTRIM",
             Self::Both => "TRIM",
+        }
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+pub enum ExaImportState {
+    /// TLS handshake is being performed.
+    ///
+    /// This approach is needed because Exasol will issue connections sequentially and thus perform
+    /// TLS handshakes the same way.
+    ///
+    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
+    /// through the workers, which happens within consumer code.
+    Handshake(WithSocketFuture, usize, bool),
+    /// The worker is fully connected and ready for I/O.
+    Poll(ExaImportWriter),
+}
+
+impl Debug for ExaImportState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Poll(arg0) => f.debug_tuple("Poll").field(arg0).finish(),
+            Self::Handshake(..) => f.debug_tuple("Handshake").finish(),
         }
     }
 }
