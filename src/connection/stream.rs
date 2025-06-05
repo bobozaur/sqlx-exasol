@@ -97,7 +97,7 @@ impl<'a> ResultStream<'a> {
 
 /// The [`Stream`] implementation here encapsulates end-stages actions such as using the
 /// [`QueryLogger`] or taking note of whether an error occurred (and stop streaming if it did).
-impl<'a> Stream for ResultStream<'a> {
+impl Stream for ResultStream<'_> {
     type Item = SqlxResult<Either<ExaQueryResult, ExaRow>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -120,7 +120,7 @@ impl<'a> Stream for ResultStream<'a> {
     }
 }
 
-impl<'a> Drop for ResultStream<'a> {
+impl Drop for ResultStream<'_> {
     fn drop(&mut self) {
         let handles = std::mem::take(&mut self.result_set_handles);
         if !handles.is_empty() {

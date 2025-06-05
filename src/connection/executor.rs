@@ -29,7 +29,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        match self._fetch(query) {
+        match self.fetch_impl(query) {
             Ok(stream) => stream
                 .try_filter_map(|v| std::future::ready(Ok(v.left())))
                 .try_collect()
@@ -44,11 +44,11 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        match self._fetch_many(query) {
+        match self.fetch_many_impl(query) {
             Ok(stream) => stream
                 .try_filter_map(|step| std::future::ready(Ok(step.left())))
                 .boxed(),
-            Err(e) => return std::future::ready(Err(e)).into_stream().boxed(),
+            Err(e) => std::future::ready(Err(e)).into_stream().boxed(),
         }
     }
 
@@ -58,7 +58,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        match self._fetch(query) {
+        match self.fetch_impl(query) {
             Ok(stream) => stream
                 .try_filter_map(|v| std::future::ready(Ok(v.right())))
                 .boxed(),
@@ -75,9 +75,9 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        match self._fetch_many(query) {
+        match self.fetch_many_impl(query) {
             Ok(stream) => stream.boxed(),
-            Err(e) => return std::future::ready(Err(e)).into_stream().boxed(),
+            Err(e) => std::future::ready(Err(e)).into_stream().boxed(),
         }
     }
 
@@ -87,7 +87,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        let stream = match self._fetch(query) {
+        let stream = match self.fetch_impl(query) {
             Ok(stream) => stream,
             Err(e) => return std::future::ready(Err(e)).boxed(),
         };
@@ -147,7 +147,7 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
 }
 
 impl ExaConnection {
-    fn _fetch<'c, 'e, 'q, E>(&'c mut self, mut query: E) -> SqlxResult<ResultStream<'e>>
+    fn fetch_impl<'c, 'e, 'q, E>(&'c mut self, mut query: E) -> SqlxResult<ResultStream<'e>>
     where
         'q: 'e,
         'c: 'e,
@@ -167,7 +167,7 @@ impl ExaConnection {
         }
     }
 
-    fn _fetch_many<'c, 'e, 'q, E>(&'c mut self, mut query: E) -> SqlxResult<ResultStream<'e>>
+    fn fetch_many_impl<'c, 'e, 'q, E>(&'c mut self, mut query: E) -> SqlxResult<ResultStream<'e>>
     where
         'q: 'e,
         'c: 'e,

@@ -322,7 +322,7 @@ pub struct ExaLoginRequest<'a> {
     pub attributes: ExaRwAttributes<'a>,
 }
 
-impl<'a> ExaLoginRequest<'a> {
+impl ExaLoginRequest<'_> {
     /// Encrypts the password with the provided key.
     ///
     /// When connecting using [`Login::Credentials`], Exasol first sends out a public key to encrypt

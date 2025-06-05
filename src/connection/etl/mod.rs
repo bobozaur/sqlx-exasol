@@ -130,7 +130,7 @@ impl AsRef<str> for RowSeparator {
 #[derive(Debug)]
 pub struct EtlQuery<'c>(ExaFuture<'c, ExecuteEtl>);
 
-impl<'c> Future for EtlQuery<'c> {
+impl Future for EtlQuery<'_> {
     type Output = SqlxResult<ExaQueryResult>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

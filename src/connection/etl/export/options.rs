@@ -111,7 +111,7 @@ impl<'a> ExportBuilder<'a> {
     }
 }
 
-impl<'a> EtlJob for ExportBuilder<'a> {
+impl EtlJob for ExportBuilder<'_> {
     const JOB_TYPE: &'static str = "export";
 
     type Worker = ExaExport;

@@ -24,6 +24,7 @@ pub fn with_worker() -> SqlxResult<impl WithWorker> {
 
     use crate::error::ToSqlxError;
 
+    #[expect(non_local_definitions, reason = "conditionally compiled")]
     impl ToSqlxError for rcgen::Error {
         fn to_sqlx_err(self) -> SqlxError {
             SqlxError::Tls(self.into())

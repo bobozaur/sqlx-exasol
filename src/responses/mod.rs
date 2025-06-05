@@ -120,7 +120,7 @@ impl Parameters {
 fn to_row_major<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Vec<Value>>, D::Error> {
     struct ColumnVisitor<'a>(&'a mut Vec<Vec<Value>>);
 
-    impl<'de, 'a> Visitor<'de> for ColumnVisitor<'a> {
+    impl<'de> Visitor<'de> for ColumnVisitor<'_> {
         type Value = ();
 
         fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -148,7 +148,7 @@ fn to_row_major<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Vec<Va
 
     struct Columns<'a>(&'a mut Vec<Vec<Value>>);
 
-    impl<'de, 'a> DeserializeSeed<'de> for Columns<'a> {
+    impl<'de> DeserializeSeed<'de> for Columns<'_> {
         type Value = ();
 
         fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>

@@ -19,7 +19,7 @@ impl<T> Type<Exasol> for Text<T> {
     }
 }
 
-impl<'q, T> Encode<'q, Exasol> for Text<T>
+impl<T> Encode<'_, Exasol> for Text<T>
 where
     T: Display,
 {

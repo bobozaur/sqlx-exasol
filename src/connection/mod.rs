@@ -449,7 +449,7 @@ mod tests {
             .await?;
 
         query("INSERT INTO CLOSE_RESULTS_TEST VALUES(?)")
-            .bind([1; 10000])
+            .bind(vec![1; 10000])
             .execute(&mut *conn)
             .await?;
 
