@@ -2,12 +2,12 @@
 
 use std::iter::zip;
 
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::TryStreamExt;
 use sqlx::{
-    error::BoxDynError, pool::PoolConnection, Column, Connection, Executor, Row, Statement,
-    TypeInfo,
+    error::BoxDynError, pool::PoolConnection, prelude::FromRow, Column, Connection, Execute,
+    Executor, Row, Statement, TypeInfo,
 };
-use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaRow, Exasol};
+use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaQueryResult, ExaRow, Exasol};
 
 #[sqlx::test]
 async fn it_connects(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
@@ -515,12 +515,87 @@ async fn test_decode_error(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
 }
 
 #[sqlx::test]
-async fn test_execute_many_fails(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    // Ensure that even if errors are not handled a bad statement in a query will
-    // still result in the stream ending.
-    con.execute_many("SELECT 1; SELECT * FROM some_table_that_does_not_exist; SELECT 2;")
-        .for_each(|_| async {})
+async fn test_execute_many_works(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    con.execute_many("SELECT 1; SELECT 2; SELECT 3;")
+        .try_collect::<ExaQueryResult>()
+        .await?;
+
+    Ok(())
+}
+
+/// Ensure that even if errors are not handled a bad statement in a query will still result in the
+/// stream ending.
+#[sqlx::test]
+async fn test_execute_many_fails_bad_query(
+    mut con: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
+    let res = con
+        .execute_many("SELECT 1; SELECT * FROM some_table_that_does_not_exist; SELECT 2;")
+        .try_collect::<ExaQueryResult>()
         .await;
+
+    assert!(res.is_err());
+
+    Ok(())
+}
+
+#[expect(deprecated, reason = "testing deprecation")]
+#[sqlx::test]
+async fn test_execute_many_fails_params(
+    mut con: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
+    // Fails because this is a multi-statement query.
+    let is_err = sqlx::query("SELECT ?; SELECT ?")
+        .bind(1)
+        .bind(2)
+        .execute_many(&mut *con)
+        .await
+        .try_collect::<ExaQueryResult>()
+        .await
+        .is_err();
+
+    assert!(is_err);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_fetch_many_works(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    let mut stream = con.fetch_many(
+        "
+        CREATE TABLE FETCH_TEST (col VARCHAR(20));
+        INSERT INTO FETCH_TEST VALUES ('test');
+        SELECT * FROM FETCH_TEST;",
+    );
+
+    while stream.try_next().await?.is_some() {}
+
+    Ok(())
+}
+
+/// This test checks that [`sqlx::query::QueryAs::fetch`] still misbehaves and calls `fetch_many`
+/// internally.
+///
+/// When this test starts failing, check again whether the `Executor::fetch_many` can be made
+/// to fail on multi-statement queries that have arguments or are meant to be prepared.
+///
+/// If all looks good, then `Executor::fetch_many` can be made to exclusively call `ExecuteBatch`
+/// and possibly error if query arguments are passed in or the query is meant to be prepared.
+#[sqlx::test]
+async fn test_multi_statement_in_fetch(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    #[allow(dead_code)]
+    #[derive(FromRow)]
+    struct Test {
+        col: u8,
+    }
+
+    // Compose the query and take out the arguments so preparing the statement is not attempted
+    let mut query = sqlx::query_as::<_, Test>("SELECT 1 as col; SELECT 2 as col; SELECT 3 as col;");
+    query.take_arguments()?;
+    // This calls `fetch_many` internally and the call succeeds.
+    // If `fetch` gets called underneath, the request fails because it's a multi-statement query.
+    let mut stream = query.fetch(&mut *con);
+    while stream.try_next().await?.is_some() {}
 
     Ok(())
 }

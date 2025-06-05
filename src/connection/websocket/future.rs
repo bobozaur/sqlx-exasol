@@ -49,7 +49,7 @@ pub struct ExaFuture<'a, T> {
     ws: &'a mut ExaWebSocket,
 }
 
-impl<'a, T> Future for ExaFuture<'a, T>
+impl<T> Future for ExaFuture<'_, T>
 where
     T: WebSocketFuture,
 {
@@ -93,7 +93,7 @@ impl<'a> ExecutePrepared<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for ExecutePrepared<'a> {
+impl WebSocketFuture for ExecutePrepared<'_> {
     type Output = MultiResultStream;
 
     fn poll_unpin(
@@ -248,7 +248,7 @@ impl<'a> ExecuteBatch<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for ExecuteBatch<'a> {
+impl WebSocketFuture for ExecuteBatch<'_> {
     type Output = MultiResultStream;
 
     fn poll_unpin(
@@ -271,7 +271,7 @@ impl<'a> Execute<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for Execute<'a> {
+impl WebSocketFuture for Execute<'_> {
     type Output = MultiResultStream;
 
     fn poll_unpin(
@@ -302,7 +302,7 @@ impl<'a> GetOrPrepare<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for GetOrPrepare<'a> {
+impl WebSocketFuture for GetOrPrepare<'_> {
     type Output = PreparedStatement;
 
     fn poll_unpin(
@@ -396,7 +396,7 @@ impl<'a> Describe<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for Describe<'a> {
+impl WebSocketFuture for Describe<'_> {
     type Output = DescribeStatement;
 
     fn poll_unpin(
@@ -433,7 +433,7 @@ impl<'a> CreatePrepared<'a> {
     }
 }
 
-impl<'a> WebSocketFuture for CreatePrepared<'a> {
+impl WebSocketFuture for CreatePrepared<'_> {
     type Output = PreparedStatement;
 
     fn poll_unpin(

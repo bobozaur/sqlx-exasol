@@ -19,7 +19,9 @@ use sqlx_core::{logger::QueryLogger, Either, HashMap};
 use crate::{
     column::ExaColumn,
     connection::websocket::{
-        future::{CloseResultSets, FetchChunk, WebSocketFuture},
+        future::{
+            CloseResultSets, Execute, ExecuteBatch, ExecutePrepared, FetchChunk, WebSocketFuture,
+        },
         ExaWebSocket,
     },
     error::ExaProtocolError,
@@ -33,24 +35,24 @@ use crate::{
 /// from the database.
 ///
 /// This is the top of the hierarchy and the actual type used to stream rows from a [`ResultSet`].
-pub struct ResultStream<'a, F> {
+pub struct ResultStream<'a> {
     ws: &'a mut ExaWebSocket,
     logger: QueryLogger<'a>,
     result_set_handles: Vec<u16>,
-    state: ResultStreamState<F>,
+    state: ResultStreamState<'a>,
     had_err: bool,
 }
 
-impl<'a, F> ResultStream<'a, F>
-where
-    F: WebSocketFuture<Output = MultiResultStream>,
-{
-    pub fn new(ws: &'a mut ExaWebSocket, logger: QueryLogger<'a>, future: F) -> Self {
+impl<'a> ResultStream<'a> {
+    pub fn new<F>(ws: &'a mut ExaWebSocket, logger: QueryLogger<'a>, future: F) -> Self
+    where
+        ResultStreamState<'a>: From<F>,
+    {
         Self {
             ws,
             logger,
             result_set_handles: Vec::new(),
-            state: ResultStreamState::Initial(future),
+            state: future.into(),
             had_err: false,
         }
     }
@@ -59,7 +61,18 @@ where
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
         loop {
             match &mut self.state {
-                ResultStreamState::Initial(future) => {
+                ResultStreamState::Execute(future) => {
+                    let multi_stream = ready!(future.poll_unpin(cx, self.ws))?;
+                    self.result_set_handles = multi_stream.handles();
+                    self.state = ResultStreamState::Stream(multi_stream);
+                }
+
+                ResultStreamState::ExecuteBatch(future) => {
+                    let multi_stream = ready!(future.poll_unpin(cx, self.ws))?;
+                    self.result_set_handles = multi_stream.handles();
+                    self.state = ResultStreamState::Stream(multi_stream);
+                }
+                ResultStreamState::ExecutePrepared(future) => {
                     let multi_stream = ready!(future.poll_unpin(cx, self.ws))?;
                     self.result_set_handles = multi_stream.handles();
                     self.state = ResultStreamState::Stream(multi_stream);
@@ -84,10 +97,7 @@ where
 
 /// The [`Stream`] implementation here encapsulates end-stages actions such as using the
 /// [`QueryLogger`] or taking note of whether an error occurred (and stop streaming if it did).
-impl<'a, F> Stream for ResultStream<'a, F>
-where
-    F: WebSocketFuture<Output = MultiResultStream>,
-{
+impl Stream for ResultStream<'_> {
     type Item = SqlxResult<Either<ExaQueryResult, ExaRow>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -110,7 +120,7 @@ where
     }
 }
 
-impl<'a, F> Drop for ResultStream<'a, F> {
+impl Drop for ResultStream<'_> {
     fn drop(&mut self) {
         let handles = std::mem::take(&mut self.result_set_handles);
         if !handles.is_empty() {
@@ -122,9 +132,29 @@ impl<'a, F> Drop for ResultStream<'a, F> {
 
 /// State used to distinguish between the initial query execution and the subsequent streaming of
 /// rows.
-enum ResultStreamState<F> {
-    Initial(F),
+pub enum ResultStreamState<'a> {
+    Execute(Execute<'a>),
+    ExecuteBatch(ExecuteBatch<'a>),
+    ExecutePrepared(ExecutePrepared<'a>),
     Stream(MultiResultStream),
+}
+
+impl<'a> From<Execute<'a>> for ResultStreamState<'a> {
+    fn from(value: Execute<'a>) -> Self {
+        Self::Execute(value)
+    }
+}
+
+impl<'a> From<ExecuteBatch<'a>> for ResultStreamState<'a> {
+    fn from(value: ExecuteBatch<'a>) -> Self {
+        Self::ExecuteBatch(value)
+    }
+}
+
+impl<'a> From<ExecutePrepared<'a>> for ResultStreamState<'a> {
+    fn from(value: ExecutePrepared<'a>) -> Self {
+        Self::ExecutePrepared(value)
+    }
 }
 
 /// Helper trait for defining a stream like interface which also accepts a [`ExaWebSocket`]

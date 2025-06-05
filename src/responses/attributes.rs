@@ -254,7 +254,7 @@ impl<'a> ExaRwAttributes<'a> {
     }
 }
 
-impl<'a> Default for ExaRwAttributes<'a> {
+impl Default for ExaRwAttributes<'_> {
     fn default() -> Self {
         Self {
             autocommit: true,

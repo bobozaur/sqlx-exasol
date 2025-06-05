@@ -134,7 +134,7 @@ impl<'a> ImportBuilder<'a> {
     }
 }
 
-impl<'a> EtlJob for ImportBuilder<'a> {
+impl EtlJob for ImportBuilder<'_> {
     const JOB_TYPE: &'static str = "import";
 
     type Worker = ExaImport;
