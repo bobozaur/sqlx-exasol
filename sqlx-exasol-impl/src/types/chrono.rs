@@ -3,15 +3,13 @@ use std::{
     ops::{Add, Sub},
 };
 
+use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
-    types::{
-        chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc},
-        Type,
-    },
+    types::Type,
 };
 
 use crate::{
@@ -111,7 +109,7 @@ impl Decode<'_, Exasol> for NaiveDateTime {
     }
 }
 
-impl Type<Exasol> for chrono::Duration {
+impl Type<Exasol> for Duration {
     fn type_info() -> ExaTypeInfo {
         let ids = IntervalDayToSecond::new(
             IntervalDayToSecond::MAX_PRECISION,
@@ -125,7 +123,7 @@ impl Type<Exasol> for chrono::Duration {
     }
 }
 
-impl Encode<'_, Exasol> for chrono::Duration {
+impl Encode<'_, Exasol> for Duration {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(format_args!(
             "{} {}:{}:{}.{}",
@@ -165,7 +163,7 @@ impl Encode<'_, Exasol> for chrono::Duration {
     }
 }
 
-impl<'r> Decode<'r, Exasol> for chrono::Duration {
+impl<'r> Decode<'r, Exasol> for Duration {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
         let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
         let input_err_fn = || format!("could not parse {input} as INTERVAL DAY TO SECOND");
@@ -182,11 +180,11 @@ impl<'r> Decode<'r, Exasol> for chrono::Duration {
         let millis: i64 = millis.parse().map_err(Box::new)?;
         let sign = if days.is_negative() { -1 } else { 1 };
 
-        let duration = chrono::Duration::try_days(days).ok_or_else(input_err_fn)?
-            + chrono::Duration::try_hours(hours * sign).ok_or_else(input_err_fn)?
-            + chrono::Duration::try_minutes(minutes * sign).ok_or_else(input_err_fn)?
-            + chrono::Duration::try_seconds(seconds * sign).ok_or_else(input_err_fn)?
-            + chrono::Duration::try_milliseconds(millis * sign).ok_or_else(input_err_fn)?;
+        let duration = Duration::try_days(days).ok_or_else(input_err_fn)?
+            + Duration::try_hours(hours * sign).ok_or_else(input_err_fn)?
+            + Duration::try_minutes(minutes * sign).ok_or_else(input_err_fn)?
+            + Duration::try_seconds(seconds * sign).ok_or_else(input_err_fn)?
+            + Duration::try_milliseconds(millis * sign).ok_or_else(input_err_fn)?;
 
         Ok(duration)
     }
