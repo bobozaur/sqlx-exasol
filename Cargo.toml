@@ -119,12 +119,12 @@ serde = { version = "1", default-features = false, features = ["derive", "rc"] }
 serde_json = { version = "1", default-features = false, features = [
     "raw_value",
 ] }
-sqlx = { path = "../sqlx", default-features = false }
-sqlx-cli = { path = "../sqlx/sqlx-cli", default-features = false }
-sqlx-core = { path = "../sqlx/sqlx-core", default-features = false, features = [
+sqlx = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false }
+sqlx-cli = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false }
+sqlx-core = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false, features = [
     "offline",
 ] }
-sqlx-macros-core = { path = "../sqlx/sqlx-macros-core", default-features = false }
+sqlx-macros-core = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false }
 syn = { version = "2", default-features = false, features = [
     "parsing",
     "proc-macro",
