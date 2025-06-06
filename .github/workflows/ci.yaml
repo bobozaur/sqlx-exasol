@@ -38,8 +38,8 @@ jobs:
       matrix:
         tls:
           [
-            "--features native-tls",
-            "--features rustls",
+            "--features tls-native-tls",
+            "--features tls-rustls",
             "",
           ]
         other: ["--features compression,migrate,rust_decimal,uuid,chrono,etl", ""]
@@ -150,13 +150,13 @@ jobs:
 
       - name: TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono,tls-native-tls -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: TLS connection tests with compression
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression -- --ignored --nocapture
+        run: cargo test --features migrate,compression,tls-native-tls -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -194,18 +194,18 @@ jobs:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Tests compilation failure if both ETL TLS features are enabled
-        run: cargo test --features etl_native_tls,etl_rustls || true
+        run: cargo test --features tls-native-tls,tls-rustls || true
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Native-TLS ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl,tls-native-tls -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Rustls ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl,tls-rustls-aws-lc-rs -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
