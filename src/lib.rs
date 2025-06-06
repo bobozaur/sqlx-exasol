@@ -228,8 +228,3 @@ pub mod any {
 pub use sqlx_exasol_macros;
 #[cfg(feature = "macros")]
 mod macros;
-
-// TODO:
-// - Optimize ExaIter? Maybe with peek?
-// - Get features in sync with `sqlx` and fix README and lib.rs
-// - Properly organize modules
