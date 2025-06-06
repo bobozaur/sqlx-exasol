@@ -15,7 +15,7 @@ use sqlx_core::type_info::TypeInfo;
 pub struct ExaTypeInfo {
     #[serde(skip_serializing)]
     pub(crate) name: DataTypeName,
-    data_type: ExaDataType,
+    pub(crate) data_type: ExaDataType,
 }
 
 impl ExaTypeInfo {

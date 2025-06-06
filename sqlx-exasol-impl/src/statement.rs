@@ -1,7 +1,8 @@
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 use sqlx_core::{
-    column::ColumnIndex, database::Database, impl_statement_query, statement::Statement, Either,
+    column::ColumnIndex, database::Database, ext::ustr::UStr, impl_statement_query,
+    statement::Statement, Either, HashMap,
 };
 
 use crate::{
@@ -19,21 +20,22 @@ pub struct ExaStatement<'q> {
 #[derive(Debug, Clone)]
 pub struct ExaStatementMetadata {
     pub columns: Arc<[ExaColumn]>,
-    pub column_names: HashMap<Arc<str>, usize>,
+    pub column_names: Arc<HashMap<UStr, usize>>,
     pub parameters: Arc<[ExaTypeInfo]>,
 }
 
 impl ExaStatementMetadata {
     pub fn new(columns: Arc<[ExaColumn]>, parameters: Arc<[ExaTypeInfo]>) -> Self {
-        let mut column_names = HashMap::with_capacity(columns.len());
-
-        for (idx, col) in columns.as_ref().iter().enumerate() {
-            column_names.insert(col.name.clone(), idx);
-        }
+        let column_names = columns
+            .as_ref()
+            .iter()
+            .enumerate()
+            .map(|(idx, col)| (col.name.clone(), idx))
+            .collect();
 
         Self {
             columns,
-            column_names,
+            column_names: Arc::new(column_names),
             parameters,
         }
     }

@@ -1,0 +1,23 @@
+[package]
+name = "sqlx-exasol-macros"
+description = "Compile-time macros support for sqlx-exasol. Not meant to be used directly."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+sqlx-macros-core = { workspace = true }
+sqlx-exasol-impl = { workspace = true, features = ["macros"] }
+syn = { workspace = true }
+quote = { workspace = true }
+
+[lints]
+workspace = true

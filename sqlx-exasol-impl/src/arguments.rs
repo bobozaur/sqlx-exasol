@@ -137,7 +137,7 @@ impl ExaBuffer {
             Some(n) if n == count => (),
             Some(n) => Err(ExaProtocolError::ParameterLengthMismatch(count, n))?,
             None => self.first_col_params_num = Some(count),
-        };
+        }
 
         Ok(())
     }

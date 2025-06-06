@@ -53,14 +53,13 @@ where
 mod tests {
     use sqlx::{types::Text, Encode};
 
-    use crate::ExaArguments;
+    use crate::{ExaArguments, Exasol};
 
     #[test]
     fn test_text_null_string() {
         let mut arg_buffer = ExaArguments::default();
-        let is_null = Text(String::new())
-            .encode_by_ref(&mut arg_buffer.buf)
-            .unwrap();
+        let value = Text(String::new());
+        let is_null = Encode::<Exasol>::encode_by_ref(&value, &mut arg_buffer.buf).unwrap();
 
         assert!(is_null.is_null());
     }
@@ -68,7 +67,8 @@ mod tests {
     #[test]
     fn test_text_null_str() {
         let mut arg_buffer = ExaArguments::default();
-        let is_null = Text("").encode_by_ref(&mut arg_buffer.buf).unwrap();
+        let value = Text("");
+        let is_null = Encode::<Exasol>::encode_by_ref(&value, &mut arg_buffer.buf).unwrap();
 
         assert!(is_null.is_null());
     }
@@ -76,9 +76,8 @@ mod tests {
     #[test]
     fn test_text_non_null_string() {
         let mut arg_buffer = ExaArguments::default();
-        let is_null = Text(String::from("something"))
-            .encode_by_ref(&mut arg_buffer.buf)
-            .unwrap();
+        let value = Text(String::from("something"));
+        let is_null = Encode::<Exasol>::encode_by_ref(&value, &mut arg_buffer.buf).unwrap();
 
         assert!(!is_null.is_null());
     }
@@ -86,9 +85,8 @@ mod tests {
     #[test]
     fn test_text_non_null_str() {
         let mut arg_buffer = ExaArguments::default();
-        let is_null = Text("something")
-            .encode_by_ref(&mut arg_buffer.buf)
-            .unwrap();
+        let value = Text("something");
+        let is_null = Encode::<Exasol>::encode_by_ref(&value, &mut arg_buffer.buf).unwrap();
 
         assert!(!is_null.is_null());
     }

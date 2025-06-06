@@ -1,0 +1,68 @@
+[package]
+name = "sqlx-exasol-impl"
+description = "Driver implementation for sqlx-exasol. Not meant to be used directly."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+
+[features]
+any = ["sqlx-core/any"]
+migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
+macros = ["dep:sqlx-macros-core"]
+
+compression = ["dep:async-compression"]
+
+etl = ["dep:http-body-util", "dep:hyper", "dep:futures-channel"]
+etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
+etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
+
+uuid = ["dep:uuid", "sqlx-core/uuid"]
+chrono = ["dep:chrono", "sqlx-core/chrono"]
+rust_decimal = ["dep:rust_decimal", "sqlx-core/rust_decimal"]
+
+[dependencies]
+arrayvec = { workspace = true }
+async-tungstenite = { workspace = true }
+base64 = { workspace = true }
+futures-io = { workspace = true }
+futures-util = { workspace = true }
+futures-core = { workspace = true }
+lru = { workspace = true }
+rand = { workspace = true }
+rsa = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx-core = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+# Feature flagged optional dependencies
+async-compression = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+dotenvy = { workspace = true, optional = true }
+futures-channel = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+native-tls = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
+rust_decimal = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+sqlx-macros-core = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+paste = { workspace = true }
+rustls = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

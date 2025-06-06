@@ -14,7 +14,7 @@ use std::{
 use futures_core::ready;
 use futures_util::Stream;
 use serde_json::Value;
-use sqlx_core::{logger::QueryLogger, Either, HashMap};
+use sqlx_core::{ext::ustr::UStr, logger::QueryLogger, Either, HashMap};
 
 use crate::{
     column::ExaColumn,
@@ -445,7 +445,7 @@ enum MultiChunkStreamState {
 /// This is the lowest level of the streaming hierarchy and merely iterates over an already
 /// retrieved chunk of rows, not dealing at all with async operations.
 struct ChunkIter {
-    column_names: Arc<HashMap<Arc<str>, usize>>,
+    column_names: Arc<HashMap<UStr, usize>>,
     columns: Arc<[ExaColumn]>,
     chunk_rows_total: usize,
     chunk_rows_pos: usize,

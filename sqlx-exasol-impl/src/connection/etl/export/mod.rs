@@ -43,7 +43,7 @@ impl AsyncRead for ExaExport {
                     let reader = ExaExportReader::new(socket, *with_compression);
                     self.set(Self(ExaExportState::Poll(reader)));
                 }
-            };
+            }
         }
     }
 }

@@ -150,7 +150,7 @@ impl EtlJob for ExportBuilder<'_> {
                 query.push_str(qr);
                 query.push_str("\n)");
             }
-        };
+        }
 
         query.push(' ');
 

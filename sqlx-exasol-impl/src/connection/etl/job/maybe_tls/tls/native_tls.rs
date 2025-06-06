@@ -72,7 +72,7 @@ impl WithNativeTlsSocket {
                     poll_fn(|cx| h.get_mut().poll_write_ready(cx)).await?;
                     res = h.handshake();
                 }
-            };
+            }
         }
     }
 }
@@ -113,7 +113,7 @@ where
         match self.0.shutdown() {
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
             ready => return Poll::Ready(ready),
-        };
+        }
 
         ready!(self.0.get_mut().poll_read_ready(cx))?;
         self.0.get_mut().poll_write_ready(cx)
