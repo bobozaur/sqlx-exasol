@@ -81,6 +81,40 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         }
     }
 
+    fn fetch_all<'e, 'q: 'e, E>(self, query: E) -> BoxFuture<'e, SqlxResult<Vec<ExaRow>>>
+    where
+        'c: 'e,
+        E: 'q + Execute<'q, Self::Database>,
+    {
+        match self.fetch_impl(query) {
+            Ok(stream) => stream
+                .try_filter_map(|v| std::future::ready(Ok(v.right())))
+                .try_collect()
+                .boxed(),
+            Err(e) => std::future::ready(Err(e)).boxed(),
+        }
+    }
+
+    fn fetch_one<'e, 'q: 'e, E>(self, query: E) -> BoxFuture<'e, SqlxResult<ExaRow>>
+    where
+        'c: 'e,
+        E: 'q + Execute<'q, Self::Database>,
+    {
+        let stream = match self.fetch_impl(query) {
+            Ok(stream) => stream,
+            Err(e) => return std::future::ready(Err(e)).boxed(),
+        };
+
+        Box::pin(async move {
+            stream
+                .try_filter_map(|v| std::future::ready(Ok(v.right())))
+                .try_next()
+                .await
+                .transpose()
+                .unwrap_or(Err(SqlxError::RowNotFound))
+        })
+    }
+
     fn fetch_optional<'e, 'q, E>(self, query: E) -> BoxFuture<'e, SqlxResult<Option<ExaRow>>>
     where
         'q: 'e,

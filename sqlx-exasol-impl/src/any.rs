@@ -22,8 +22,6 @@ use sqlx_core::{
     Either,
 };
 
-#[cfg(feature = "migrate")]
-use crate::SqlxResult;
 use crate::{
     connection::{
         stream::ResultStream,
@@ -31,7 +29,7 @@ use crate::{
     },
     type_info::ExaDataType,
     ExaColumn, ExaConnectOptions, ExaConnection, ExaQueryResult, ExaRow, ExaTransactionManager,
-    ExaTypeInfo, ExaValueRef, Exasol, SqlxError,
+    ExaTypeInfo, ExaValueRef, Exasol, SqlxError, SqlxResult,
 };
 
 sqlx_core::declare_driver_with_optional_migrate!(DRIVER = Exasol);

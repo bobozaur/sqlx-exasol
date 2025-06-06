@@ -21,9 +21,9 @@
             "uuid",
             // Driver
             "etl",
-            "compression",
+            "compression"
             // TLS
-            "native-tls"
+            // "native-tls"
           ]
         }
       }
