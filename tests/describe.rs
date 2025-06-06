@@ -1,7 +1,6 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::{Column, Executor, Type, TypeInfo};
-use sqlx_core::pool::PoolConnection;
+use sqlx::{pool::PoolConnection, Column, Executor, Type, TypeInfo};
 use sqlx_exasol::Exasol;
 
 #[sqlx::test(migrations = "tests/setup")]

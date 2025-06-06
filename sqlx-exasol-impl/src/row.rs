@@ -1,14 +1,14 @@
 use std::{fmt::Debug, sync::Arc};
 
 use serde_json::Value;
-use sqlx_core::{column::ColumnIndex, database::Database, row::Row, HashMap};
+use sqlx_core::{column::ColumnIndex, database::Database, ext::ustr::UStr, row::Row, HashMap};
 
 use crate::{column::ExaColumn, database::Exasol, value::ExaValueRef, SqlxError, SqlxResult};
 
 /// Struct representing a result set row. Implementor of [`Row`].
 #[derive(Debug)]
 pub struct ExaRow {
-    column_names: Arc<HashMap<Arc<str>, usize>>,
+    pub(crate) column_names: Arc<HashMap<UStr, usize>>,
     columns: Arc<[ExaColumn]>,
     data: Vec<Value>,
 }
@@ -18,7 +18,7 @@ impl ExaRow {
     pub fn new(
         data: Vec<Value>,
         columns: Arc<[ExaColumn]>,
-        column_names: Arc<HashMap<Arc<str>, usize>>,
+        column_names: Arc<HashMap<UStr, usize>>,
     ) -> Self {
         Self {
             column_names,

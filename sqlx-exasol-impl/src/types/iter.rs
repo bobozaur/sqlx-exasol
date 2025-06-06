@@ -15,6 +15,7 @@ use crate::{arguments::ExaBuffer, Exasol};
 /// references than owning variants.
 ///
 /// ```rust
+/// # use sqlx_exasol_impl as sqlx_exasol;
 /// use sqlx_exasol::ExaIter;
 ///
 /// // Don't do this, as the iterator gets cloned internally.

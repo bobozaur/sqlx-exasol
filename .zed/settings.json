@@ -7,13 +7,18 @@
     "rust-analyzer": {
       "initialization_options": {
         "cargo": {
+          "extraEnv": {
+            "DATABASE_URL": "exa://sys:exasol@127.0.0.1:8563"
+          },
           "features": [
-            "etl_native_tls",
+            "any",
+            "etl_rustls",
             "compression",
             "uuid",
             "chrono",
             "rust_decimal",
-            "migrate"
+            "migrate",
+            "macros"
           ]
         }
       }

@@ -6,9 +6,9 @@ macro_rules! test_type_valid {
         paste::item! {
             #[sqlx::test]
             async fn [< test_type_valid_ $name >] (
-                mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-            ) -> Result<(), sqlx_core::error::BoxDynError> {
-                use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
+                mut con: sqlx::pool::PoolConnection<sqlx_exasol::Exasol>,
+            ) -> Result<(), sqlx::error::BoxDynError> {
+                use sqlx::{Executor, query, query_scalar};
 
                 let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                 con.execute(create_sql).await?;
@@ -63,9 +63,9 @@ macro_rules! test_type_array {
         paste::item! {
             #[sqlx::test]
             async fn [< test_type_array_ $name >] (
-                mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-            ) -> Result<(), sqlx_core::error::BoxDynError> {
-                use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
+                mut con: sqlx::pool::PoolConnection<sqlx_exasol::Exasol>,
+            ) -> Result<(), sqlx::error::BoxDynError> {
+                use sqlx::{Executor, query, query_scalar};
 
                 let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                 con.execute(create_sql).await?;
@@ -97,9 +97,9 @@ macro_rules! test_type_invalid {
             paste::item! {
                 #[sqlx::test]
                 async fn [< test_type_invalid_ $name >] (
-                    mut con: sqlx_core::pool::PoolConnection<sqlx_exasol::Exasol>,
-                ) -> Result<(), sqlx_core::error::BoxDynError> {
-                    use sqlx_core::{executor::Executor, query::query, query_scalar::query_scalar};
+                    mut con: sqlx::pool::PoolConnection<sqlx_exasol::Exasol>,
+                ) -> Result<(), sqlx::error::BoxDynError> {
+                    use sqlx::{Executor, query, query_scalar};
 
                     let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                     con.execute(create_sql).await?;

@@ -73,7 +73,7 @@ impl Future for ExportFuture {
         match ready!(self.0.poll_unpin(cx)) {
             Ok(()) => (),
             Err(e) => return Poll::Ready(Err(e)),
-        };
+        }
 
         let response = Response::builder()
             .status(StatusCode::OK)

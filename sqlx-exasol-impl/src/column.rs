@@ -1,23 +1,23 @@
-use std::{fmt::Display, sync::Arc};
+use std::fmt::Display;
 
-use serde::{Deserialize, Deserializer};
-use sqlx_core::{column::Column, database::Database};
+use serde::{Deserialize, Deserializer, Serialize};
+use sqlx_core::{column::Column, database::Database, ext::ustr::UStr};
 
 use crate::{database::Exasol, type_info::ExaTypeInfo};
 
 /// Implementor of [`Column`].
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExaColumn {
-    #[serde(skip)]
+    #[serde(default)]
     pub(crate) ordinal: usize,
     #[serde(deserialize_with = "ExaColumn::lowercase_name")]
-    pub(crate) name: Arc<str>,
+    pub(crate) name: UStr,
     pub(crate) data_type: ExaTypeInfo,
 }
 
 impl ExaColumn {
-    fn lowercase_name<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
+    fn lowercase_name<'de, D>(deserializer: D) -> Result<UStr, D::Error>
     where
         D: Deserializer<'de>,
     {

@@ -62,12 +62,12 @@ pub struct ExaConnectOptions {
     pub(crate) statement_cache_capacity: NonZeroUsize,
     pub(crate) schema: Option<String>,
     pub(crate) compression: bool,
+    pub(crate) log_settings: LogSettings,
     login: Login,
     protocol_version: ProtocolVersion,
     fetch_size: usize,
     query_timeout: u64,
     feedback_interval: u64,
-    log_settings: LogSettings,
 }
 
 impl ExaConnectOptions {
@@ -194,7 +194,7 @@ impl ConnectOptions for ExaConnectOptions {
                         "Unknown connection string parameter: {value}"
                     )))
                 }
-            };
+            }
         }
 
         builder.build()

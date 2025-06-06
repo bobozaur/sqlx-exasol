@@ -1,92 +1,150 @@
-[package]
-name = "sqlx-exasol"
-version = "0.8.6-hotifx1"
-edition = "2024"
-authors = ["bobozaur"]
-rust-version = "1.85.0"
-description = "Exasol driver for the SQLx framework."
+[workspace]
+members = [".", "sqlx-exasol-cli", "sqlx-exasol-impl", "sqlx-exasol-macros"]
+
+[workspace.package]
+version = "0.8.6"
 license = "MIT OR Apache-2.0"
+edition = "2024"
+rust-version = "1.86.0"
 repository = "https://github.com/bobozaur/sqlx-exasol"
 keywords = ["database", "sql", "exasol", "sqlx", "driver"]
+categories = ["database", "asynchronous"]
+authors = ["Bogdan Mircea <mirceapetrebogdan@gmail.com>"]
+
+[package]
+name = "sqlx-exasol"
+documentation = "https://docs.rs/sqlx-exasol"
+description = "Exasol driver for the SQLx framework."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
 exclude = ["tests/*"]
-categories = ["database"]
 
 [package.metadata.docs.rs]
-features = ["etl", "chrono", "rust_decimal", "uuid", "compression", "migrate"]
+features = [
+    "etl",
+    "chrono",
+    "rust_decimal",
+    "uuid",
+    "compression",
+    "migrate",
+    "macros",
+]
 
 [features]
 # ############################################
 # ########### User-facing features ###########
 # ############################################
+default = ["macros", "migrate"]
 
-compression = ["dep:async-compression"]
-uuid = ["dep:uuid"]
-chrono = ["dep:chrono"]
-rust_decimal = ["dep:rust_decimal"]
-migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
-etl = ["dep:http-body-util", "dep:hyper", "dep:futures-channel"]
-etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
-etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
+macros = ["dep:sqlx-exasol-macros"]
+migrate = ["sqlx-exasol-impl/migrate"]
+
+compression = ["sqlx-exasol-impl/compression"]
+
+etl = ["sqlx-exasol-impl/etl"]
+etl_rustls = ["sqlx-exasol-impl/etl_rustls"]
+etl_native_tls = ["sqlx-exasol-impl/etl_native_tls"]
+
+uuid = ["sqlx-exasol-impl/uuid"]
+chrono = ["sqlx-exasol-impl/chrono"]
+rust_decimal = ["sqlx-exasol-impl/rust_decimal"]
 
 # ############################################
 # ############################################
 # ############################################
 
-[dependencies]
+[workspace.dependencies]
+# Internal
+sqlx-exasol-macros = { path = "sqlx-exasol-macros" }
+sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
+
+# External
+anyhow = "1"
 arrayvec = "0.7"
-async-tungstenite = "0.29"
-base64 = "0.22"
-futures-io = "0.3"
-futures-util = "0.3"
-futures-core = "0.3"
-lru = "0.12"
-rand = "0.8"
-rsa = "0.9"
-serde = { version = "1", features = ["derive", "rc"] }
-serde_json = { version = "1", features = ["raw_value"] }
-sqlx-core = "=0.8.6"
-thiserror = "1"
-tracing = { version = "0.1", features = ["log"] }
-url = "2"
-
-# Feature flagged optional dependencies
 async-compression = { version = "0.4", features = [
     "futures-io",
     "gzip",
     "zlib",
-], optional = true }
-chrono = { version = "0.4", features = ["serde"], optional = true }
-dotenvy = { version = "0.15", optional = true }
-futures-channel = { version = "0.3", features = ["sink"], optional = true }
-hex = { version = "0.4", optional = true }
-http-body-util = { version = "0.1", optional = true }
-hyper = { version = "1.4", features = ["server", "http1"], optional = true }
-native-tls = { version = "0.2", optional = true }
-uuid = { version = "1", features = ["serde"], optional = true }
-rcgen = { version = "0.13", optional = true }
-rust_decimal = { version = "1", optional = true }
-rustls = { version = "0.23", default-features = false, features = [
-    "std",
-    "tls12",
-], optional = true }
-
-[dev-dependencies]
-anyhow = "1"
+] }
+async-tungstenite = "0.29"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+console = "0.15"
+dotenvy = "0.15"
+futures-io = "0.3"
+futures-util = "0.3"
+futures-channel = { version = "0.3", features = ["sink"] }
+futures-core = "0.3"
+hex = "0.4"
+http-body-util = "0.1"
+hyper = { version = "1.4", features = ["server", "http1"] }
+lru = "0.12"
+native-tls = "0.2"
 paste = "1"
-rustls = "0.23"
-sqlx = { version = "=0.8.6", features = [
+quote = { version = "1", default-features = false }
+rand = "0.8"
+rsa = "0.9"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["raw_value"] }
+# sqlx-core = "=0.8.6"
+# sqlx-macros-core = { version = "=0.8.6", features = ["macros"] }
+# sqlx = { version = "=0.8.6", features = [
+# "runtime-tokio",
+# "tls-native-tls",
+# "migrate",
+# ] }
+sqlx = { path = "../sqlx", features = [
     "runtime-tokio",
     "tls-native-tls",
     "migrate",
 ] }
+sqlx-cli = { path = "../sqlx/sqlx-cli" }
+sqlx-core = { path = "../sqlx/sqlx-core" }
+sqlx-macros-core = { path = "../sqlx/sqlx-macros-core", features = ["macros"] }
+syn = { version = "2", default-features = false, features = [
+    "parsing",
+    "proc-macro",
+] }
+thiserror = "1"
 tokio = { version = "1", features = ["full"] }
+tracing = { version = "0.1", features = ["log"] }
+url = "2"
+uuid = { version = "1", features = ["serde"] }
+rcgen = "0.13"
+rust_decimal = "1"
+rustls = { version = "0.23", default-features = false, features = [
+    "std",
+    "tls12",
+] }
 
-[lints.clippy]
+[dependencies]
+sqlx-exasol-macros = { workspace = true, optional = true }
+sqlx-exasol-impl = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dotenvy = { workspace = true }
+futures-util = { workspace = true }
+paste = { workspace = true }
+rustls = { workspace = true }
+rust_decimal = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
 
-[lints.rust]
+[workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }
 rust_2021_compatibility = { level = "warn", priority = -1 }
 meta_variable_misuse = "warn"

@@ -1,7 +1,7 @@
 #[cfg(feature = "etl")]
 pub mod etl;
 mod executor;
-mod stream;
+pub mod stream;
 pub mod websocket;
 
 use std::net::SocketAddr;
@@ -30,8 +30,8 @@ use crate::{
 #[derive(Debug)]
 pub struct ExaConnection {
     pub(crate) ws: ExaWebSocket,
+    pub(crate) log_settings: LogSettings,
     session_info: SessionInfo,
-    log_settings: LogSettings,
 }
 
 impl ExaConnection {

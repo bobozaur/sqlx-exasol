@@ -1,7 +1,6 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::error::ErrorKind;
-use sqlx_core::pool::PoolConnection;
+use sqlx::{error::ErrorKind, pool::PoolConnection};
 use sqlx_exasol::Exasol;
 
 #[sqlx::test(migrations = "tests/setup")]

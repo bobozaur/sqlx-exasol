@@ -121,7 +121,7 @@ where
             match self.state.complete_io(&mut self.inner) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
                 ready => return Poll::Ready(ready.map(|_| ())),
-            };
+            }
 
             ready!(self.inner.poll_read_ready(cx))?;
         }
@@ -132,7 +132,7 @@ where
             match self.state.complete_io(&mut self.inner) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
                 ready => return Poll::Ready(ready.map(|_| ())),
-            };
+            }
 
             ready!(self.inner.poll_write_ready(cx))?;
         }
