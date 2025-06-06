@@ -14,7 +14,7 @@ authors.workspace = true
 proc-macro = true
 
 [dependencies]
-sqlx-macros-core = { workspace = true }
+sqlx-macros-core = { workspace = true, features = ["macros"] }
 sqlx-exasol-impl = { workspace = true, features = ["macros"] }
 syn = { workspace = true }
 quote = { workspace = true }

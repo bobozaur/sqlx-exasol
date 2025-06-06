@@ -35,27 +35,41 @@ features = [
 ]
 
 [features]
-# ############################################
-# ########### User-facing features ###########
-# ############################################
-default = ["macros", "migrate"]
+default = ["any", "macros", "migrate"]
 
-macros = ["dep:sqlx-exasol-macros"]
-migrate = ["sqlx-exasol-impl/migrate"]
+derive = ["sqlx/derive"]
+macros = ["sqlx/macros", "sqlx-exasol-impl/macros", "dep:sqlx-exasol-macros"]
+migrate = ["sqlx/migrate", "sqlx-exasol-impl/migrate"]
 
+# Base runtime features without TLS
+runtime-async-std = ["sqlx/runtime-async-std"]
+runtime-tokio = ["sqlx/runtime-tokio"]
+
+# TLS features
+tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
+tls-rustls = ["sqlx/tls-rustls", "sqlx-exasol-impl/rustls"]
+tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "sqlx-exasol-impl/rustls"]
+tls-rustls-ring = ["sqlx/tls-rustls-ring", "sqlx-exasol-impl/rustls"]
+tls-rustls-ring-webpki = [
+    "sqlx/tls-rustls-ring-webpki",
+    "sqlx-exasol-impl/rustls",
+]
+tls-rustls-ring-native-roots = [
+    "sqlx/tls-rustls-ring-native-roots",
+    "sqlx-exasol-impl/rustls",
+]
+
+# Database
+any = ["sqlx/any", "sqlx-exasol-impl/any"]
+
+# Types
+chrono = ["sqlx/chrono", "sqlx-exasol-impl/chrono"]
+rust_decimal = ["sqlx/rust_decimal", "sqlx-exasol-impl/rust_decimal"]
+uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid"]
+
+# Driver specific features
 compression = ["sqlx-exasol-impl/compression"]
-
 etl = ["sqlx-exasol-impl/etl"]
-etl_rustls = ["sqlx-exasol-impl/etl_rustls"]
-etl_native_tls = ["sqlx-exasol-impl/etl_native_tls"]
-
-uuid = ["sqlx-exasol-impl/uuid"]
-chrono = ["sqlx-exasol-impl/chrono"]
-rust_decimal = ["sqlx-exasol-impl/rust_decimal"]
-
-# ############################################
-# ############################################
-# ############################################
 
 [workspace.dependencies]
 # Internal
@@ -91,21 +105,9 @@ rand = "0.8"
 rsa = "0.9"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["raw_value"] }
-# sqlx-core = "=0.8.6"
-# sqlx-macros-core = { version = "=0.8.6", features = ["macros"] }
-# sqlx = { version = "=0.8.6", features = [
-# "runtime-tokio",
-# "tls-native-tls",
-# "migrate",
-# ] }
 sqlx = { path = "../sqlx" }
-sqlx-dev = { path = "../sqlx", package = "sqlx", features = [
-    "runtime-tokio",
-    "tls-native-tls",
-    "migrate",
-] }
 sqlx-cli = { path = "../sqlx/sqlx-cli" }
-sqlx-core = { path = "../sqlx/sqlx-core" }
+sqlx-core = { path = "../sqlx/sqlx-core", features = ["offline"] }
 sqlx-macros-core = { path = "../sqlx/sqlx-macros-core", features = ["macros"] }
 syn = { version = "2", default-features = false, features = [
     "parsing",

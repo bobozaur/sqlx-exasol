@@ -11,14 +11,19 @@
             "DATABASE_URL": "exa://sys:exasol@127.0.0.1:8563"
           },
           "features": [
+            // SQLx
+            "migrate",
+            "macros",
             "any",
-            "etl_rustls",
-            "compression",
-            "uuid",
+            // Types
             "chrono",
             "rust_decimal",
-            "migrate",
-            "macros"
+            "uuid",
+            // Driver
+            "etl",
+            "compression",
+            // TLS
+            "native-tls"
           ]
         }
       }

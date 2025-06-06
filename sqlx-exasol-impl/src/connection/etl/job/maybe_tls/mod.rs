@@ -1,4 +1,4 @@
-#[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+#[cfg(feature = "tls")]
 pub mod tls;
 
 use futures_util::FutureExt;
@@ -13,14 +13,14 @@ use crate::{
 /// Implementor of [`WithSocketMaker`] that abstracts away the TLS/non-TLS socket creation.
 pub enum WithMaybeTlsSocketMaker {
     NonTls,
-    #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+    #[cfg(feature = "tls")]
     Tls(tls::WithTlsSocketMaker),
 }
 
 impl WithMaybeTlsSocketMaker {
     pub fn new(with_tls: bool) -> SqlxResult<Self> {
         match with_tls {
-            #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+            #[cfg(feature = "tls")]
             true => tls::with_worker().map(Self::Tls),
             #[allow(unreachable_patterns, reason = "reachable with no TLS feature ")]
             true => Err(SqlxError::Tls("No ETL TLS feature set".into())),
@@ -35,7 +35,7 @@ impl WithSocketMaker for WithMaybeTlsSocketMaker {
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket {
         match self {
             Self::NonTls => WithMaybeTlsSocket::NonTls(with_socket),
-            #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+            #[cfg(feature = "tls")]
             Self::Tls(w) => WithMaybeTlsSocket::Tls(w.make_with_socket(with_socket)),
         }
     }
@@ -44,7 +44,7 @@ impl WithSocketMaker for WithMaybeTlsSocketMaker {
 /// Implementor of [`WithSocket`] that abstracts away the TLS/non-TLS socket creation.
 pub enum WithMaybeTlsSocket {
     NonTls(WithExaSocket),
-    #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+    #[cfg(feature = "tls")]
     Tls(tls::WithTlsSocket),
 }
 
@@ -54,7 +54,7 @@ impl WithSocket for WithMaybeTlsSocket {
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         match self {
             WithMaybeTlsSocket::NonTls(w) => w.with_socket(socket).map(Ok).boxed(),
-            #[cfg(any(feature = "etl_native_tls", feature = "etl_rustls"))]
+            #[cfg(feature = "tls")]
             WithMaybeTlsSocket::Tls(w) => w.with_socket(socket).await,
         }
     }

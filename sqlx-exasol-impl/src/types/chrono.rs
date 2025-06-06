@@ -3,13 +3,15 @@ use std::{
     ops::{Add, Sub},
 };
 
-use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
-    types::Type,
+    types::{
+        chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc},
+        Type,
+    },
 };
 
 use crate::{

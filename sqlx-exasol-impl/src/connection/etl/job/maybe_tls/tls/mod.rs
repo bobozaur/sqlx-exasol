@@ -1,6 +1,6 @@
-#[cfg(feature = "etl_native_tls")]
+#[cfg(feature = "native-tls")]
 mod native_tls;
-#[cfg(feature = "etl_rustls")]
+#[cfg(feature = "rustls")]
 mod rustls;
 mod sync_socket;
 
@@ -12,17 +12,14 @@ use rsa::{
 
 use crate::{error::ToSqlxError, SqlxError, SqlxResult};
 
-#[cfg(all(feature = "etl_native_tls", feature = "etl_rustls"))]
-compile_error!("Only enable one of 'etl_antive_tls' or 'etl_rustls' features");
-
-#[cfg(feature = "etl_native_tls")]
+#[cfg(feature = "native-tls")]
 pub type WithTlsSocketMaker = native_tls::WithNativeTlsSocketMaker;
-#[cfg(feature = "etl_rustls")]
+#[cfg(feature = "rustls")]
 pub type WithTlsSocketMaker = rustls::WithRustlsSocketMaker;
 
-#[cfg(feature = "etl_native_tls")]
+#[cfg(feature = "native-tls")]
 pub type WithTlsSocket = native_tls::WithNativeTlsSocket;
-#[cfg(feature = "etl_rustls")]
+#[cfg(feature = "rustls")]
 pub type WithTlsSocket = rustls::WithRustlsSocket;
 
 /// Returns the dedicated [`impl WithSocketMaker`] for the chosen TLS implementation.
@@ -42,9 +39,9 @@ pub fn with_worker() -> SqlxResult<WithTlsSocketMaker> {
         .self_signed(&key_pair)
         .map_err(ToSqlxError::to_sqlx_err)?;
 
-    #[cfg(feature = "etl_native_tls")]
+    #[cfg(feature = "native-tls")]
     return native_tls::WithNativeTlsSocketMaker::new(&cert, &key_pair);
-    #[cfg(feature = "etl_rustls")]
+    #[cfg(feature = "rustls")]
     return rustls::WithRustlsSocketMaker::new(&cert, &key_pair);
 }
 
