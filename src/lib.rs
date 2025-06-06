@@ -227,3 +227,4 @@ mod macros;
 
 // TODO:
 // - Optimize ExaIter? Maybe with peek?
+// - Get features in sync with `sqlx` and fix README and lib.rs

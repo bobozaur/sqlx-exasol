@@ -11,19 +11,24 @@ categories.workspace = true
 authors.workspace = true
 
 [features]
+# SQLx inherited features
 any = ["sqlx-core/any"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
 macros = ["dep:sqlx-macros-core"]
 
+# Type Integration features
+uuid = ["sqlx-core/uuid"]
+chrono = ["sqlx-core/chrono", "dep:chrono"]
+rust_decimal = ["sqlx-core/rust_decimal"]
+
+# TLS features
+tls = []
+rustls = ["dep:rustls", "dep:rcgen", "tls"]
+native-tls = ["dep:native-tls", "dep:rcgen", "tls"]
+
+# Driver specific features
 compression = ["dep:async-compression"]
-
 etl = ["dep:http-body-util", "dep:hyper", "dep:futures-channel"]
-etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
-etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
-
-uuid = ["dep:uuid", "sqlx-core/uuid"]
-chrono = ["dep:chrono", "sqlx-core/chrono"]
-rust_decimal = ["dep:rust_decimal", "sqlx-core/rust_decimal"]
 
 [dependencies]
 arrayvec = { workspace = true }
@@ -51,9 +56,7 @@ hex = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
 native-tls = { workspace = true, optional = true }
-uuid = { workspace = true, optional = true }
 rcgen = { workspace = true, optional = true }
-rust_decimal = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 sqlx-macros-core = { workspace = true, optional = true }
 

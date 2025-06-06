@@ -7,8 +7,7 @@ use sqlx_exasol_impl::any::DRIVER;
 async fn main() {
     // Checks for `--no-dotenv` before parsing.
     sqlx_cli::maybe_apply_dotenv();
-
-    sqlx::any::install_drivers(&[DRIVER]);
+    sqlx::any::install_drivers(&[DRIVER]).expect("driver installation failed");
 
     let opt = Opt::parse();
 

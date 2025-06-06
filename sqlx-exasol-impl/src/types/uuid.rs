@@ -3,9 +3,8 @@ use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
-    types::Type,
+    types::{Type, Uuid},
 };
-use uuid::Uuid;
 
 use crate::{
     arguments::ExaBuffer,
