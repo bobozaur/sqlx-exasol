@@ -40,14 +40,6 @@ impl ExaAttributes {
         self.read_write.autocommit
     }
 
-    #[deprecated = "use Connection::begin() to start a transaction"]
-    pub fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
-        self.driver.needs_send = true;
-        self.read_write.autocommit = autocommit;
-        self.driver.open_transaction = !autocommit;
-        self
-    }
-
     #[must_use]
     pub fn current_schema(&self) -> Option<&str> {
         self.read_write.current_schema.as_deref()
@@ -186,6 +178,13 @@ impl ExaAttributes {
 
     pub(crate) fn set_needs_send(&mut self, flag: bool) -> &mut Self {
         self.driver.needs_send = flag;
+        self
+    }
+
+    pub(crate) fn set_autocommit(&mut self, autocommit: bool) -> &mut Self {
+        self.driver.needs_send = true;
+        self.read_write.autocommit = autocommit;
+        self.driver.open_transaction = !autocommit;
         self
     }
 

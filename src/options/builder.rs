@@ -27,7 +27,7 @@ pub struct ExaConnectOptionsBuilder {
     fetch_size: usize,
     query_timeout: u64,
     compression: bool,
-    feedback_interval: u8,
+    feedback_interval: u64,
 }
 
 impl Default for ExaConnectOptionsBuilder {
@@ -204,7 +204,7 @@ impl ExaConnectOptionsBuilder {
     }
 
     #[must_use = "call build() to get connection options"]
-    pub fn feedback_interval(mut self, feedback_interval: u8) -> Self {
+    pub fn feedback_interval(mut self, feedback_interval: u64) -> Self {
         self.feedback_interval = feedback_interval;
         self
     }

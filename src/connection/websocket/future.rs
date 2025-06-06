@@ -572,7 +572,6 @@ impl WebSocketFuture for Commit {
         // Receiving the response is not needed for the commit to take place
         // on the database side.
         if self.0.has_sent() {
-            #[expect(deprecated, reason = "will make this private")]
             ws.attributes.set_autocommit(true);
         }
 
@@ -604,7 +603,6 @@ impl WebSocketFuture for Rollback {
         // Receiving the response is not needed for the rollback to take place
         // on the database side.
         if self.0.has_sent() {
-            #[expect(deprecated, reason = "will make this private")]
             ws.attributes.set_autocommit(true);
         }
 

@@ -22,7 +22,7 @@ impl WithSocket for WithExaSocket {
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         ExaSocket {
-            sock_addr: self.0,
+            server: self.0,
             inner: Box::new(socket),
         }
     }
@@ -31,7 +31,7 @@ impl WithSocket for WithExaSocket {
 /// A wrapper so we can implement [`AsyncRead`] and [`AsyncWrite`] for the underlying TCP socket.
 /// The traits are needed by the [`async_tungstenite::WebSocketStream`] wrapper.
 pub struct ExaSocket {
-    pub sock_addr: SocketAddr,
+    pub server: SocketAddr,
     pub inner: Box<dyn Socket>,
 }
 

@@ -1,5 +1,3 @@
-#![expect(deprecated, reason = "will hide enum under a public type")]
-
 mod compression;
 mod options;
 mod reader;
@@ -16,7 +14,7 @@ use futures_io::AsyncRead;
 use futures_util::FutureExt;
 pub use options::ExportBuilder;
 
-use super::WithSocketFuture;
+use crate::etl::job::SocketSetup;
 
 /// An ETL EXPORT worker.
 ///
@@ -28,30 +26,8 @@ use super::WithSocketFuture;
 /// Dropping a reader before it returned EOF will result in the `EXPORT` query returning an error.
 /// While not necessarily a problem if you're not interested in the whole export, there's no way to
 /// circumvent that other than handling the error in code.
-#[allow(clippy::large_enum_variant)]
-pub enum ExaExport {
-    /// Setup state of the worker. This typically means waiting on the TLS handshake.
-    ///
-    /// This approach is needed because Exasol will issue connections sequentially and thus perform
-    /// TLS handshakes the same way.
-    ///
-    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
-    /// through the workers, which happens within consumer code.
-    #[deprecated = "will be made private"]
-    Setup(WithSocketFuture, bool),
-    /// The worker is fully connected and ready for I/O.
-    #[deprecated = "will be made private"]
-    Reading(ExaExportReader),
-}
-
-impl Debug for ExaExport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Reading(arg0) => f.debug_tuple("Reading").field(arg0).finish(),
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
-        }
-    }
-}
+#[derive(Debug)]
+pub struct ExaExport(ExaExportState);
 
 impl AsyncRead for ExaExport {
     fn poll_read(
@@ -60,13 +36,14 @@ impl AsyncRead for ExaExport {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            let (socket, with_compression) = match self.as_mut().get_mut() {
-                Self::Reading(r) => return Pin::new(r).poll_read(cx, buf),
-                Self::Setup(f, c) => (ready!(f.poll_unpin(cx))?, *c),
+            match &mut self.0 {
+                ExaExportState::Poll(r) => return Pin::new(r).poll_read(cx, buf),
+                ExaExportState::Setup(f, with_compression) => {
+                    let socket = ready!(f.poll_unpin(cx))?;
+                    let reader = ExaExportReader::new(socket, *with_compression);
+                    self.set(Self(ExaExportState::Poll(reader)));
+                }
             };
-
-            let reader = ExaExportReader::new(socket, with_compression);
-            self.set(Self::Reading(reader));
         }
     }
 }
@@ -76,4 +53,26 @@ impl AsyncRead for ExaExport {
 pub enum ExportSource<'a> {
     Query(&'a str),
     Table(&'a str),
+}
+
+pub enum ExaExportState {
+    /// The worker is fully connected and ready for I/O.
+    Poll(ExaExportReader),
+    /// Worker is being set up. Typically means that a TLS handshake is being performed.
+    ///
+    /// This approach is needed because Exasol will issue connections sequentially and thus perform
+    /// TLS handshakes the same way.
+    ///
+    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
+    /// through the workers, which happens within consumer code.
+    Setup(SocketSetup, bool),
+}
+
+impl Debug for ExaExportState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Poll(arg0) => f.debug_tuple("Poll").field(arg0).finish(),
+            Self::Setup(..) => f.debug_tuple("Setup").finish(),
+        }
+    }
 }

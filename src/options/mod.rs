@@ -66,7 +66,7 @@ pub struct ExaConnectOptions {
     protocol_version: ProtocolVersion,
     fetch_size: usize,
     query_timeout: u64,
-    feedback_interval: u8,
+    feedback_interval: u64,
     log_settings: LogSettings,
 }
 
@@ -184,7 +184,7 @@ impl ConnectOptions for ExaConnectOptions {
 
                 PARAM_FEEDBACK_INTERVAL => {
                     let feedback_interval = value
-                        .parse::<u8>()
+                        .parse::<u64>()
                         .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FEEDBACK_INTERVAL))?;
                     builder = builder.feedback_interval(feedback_interval);
                 }
@@ -228,7 +228,7 @@ impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
 
         let attributes = ExaRwAttributes::new(
             value.schema.as_deref().map(Cow::Borrowed),
-            value.feedback_interval.into(),
+            value.feedback_interval,
             value.query_timeout,
         );
 

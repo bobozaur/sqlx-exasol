@@ -111,8 +111,8 @@ impl ExaWebSocket {
         self.inner.ping().await
     }
 
-    pub fn socket_addr(&self) -> SocketAddr {
-        self.inner.socket_addr()
+    pub fn server(&self) -> SocketAddr {
+        self.inner.server()
     }
 }
 

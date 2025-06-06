@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - [#33](https://github.com/bobozaur/sqlx-exasol/pull/33): Avoid nested boxing in Executor impl
+- [#31](https://github.com/bobozaur/sqlx-exasol/pull/31): BREAKING CHANGES
+  - Renamed `ExaConnection::socket_addr` to `ExaConnection::server`
+  - Made `feedback_interval` match between options and attributes
+  - Removed the boxing of `EtlQuery` future
+  - Made `ExaAttributes::set_autocommit` private
+  - Created wrapper structs `ExaImport` and `ExaExport` to avoid exposing enum variants
 
 ## [0.8.6] - 2025-06-03
 
