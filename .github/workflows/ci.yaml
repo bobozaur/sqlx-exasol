@@ -36,14 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        etl:
+        tls:
           [
-            "--features etl_native_tls",
-            "--features etl_rustls",
-            "--features etl",
+            "--features native-tls",
+            "--features rustls",
             "",
           ]
-        other: ["--features compression,migrate,rust_decimal,uuid,chrono", ""]
+        other: ["--features compression,migrate,rust_decimal,uuid,chrono,etl", ""]
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -53,7 +52,7 @@ jobs:
           components: clippy
 
       - name: Run clippy
-        run: cargo clippy --tests ${{ matrix.etl }} ${{ matrix.other }}
+        run: cargo clippy --tests ${{ matrix.tls }} ${{ matrix.other }}
         env:
           RUSTFLAGS: -D warnings
 
