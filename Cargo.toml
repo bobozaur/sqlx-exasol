@@ -98,7 +98,8 @@ serde_json = { version = "1", features = ["raw_value"] }
 # "tls-native-tls",
 # "migrate",
 # ] }
-sqlx = { path = "../sqlx", features = [
+sqlx = { path = "../sqlx" }
+sqlx-dev = { path = "../sqlx", package = "sqlx", features = [
     "runtime-tokio",
     "tls-native-tls",
     "migrate",
@@ -125,6 +126,7 @@ rustls = { version = "0.23", default-features = false, features = [
 [dependencies]
 sqlx-exasol-macros = { workspace = true, optional = true }
 sqlx-exasol-impl = { workspace = true }
+sqlx = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

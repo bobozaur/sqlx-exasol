@@ -217,6 +217,8 @@
 //! nullable or not, so the driver cannot implicitly decide whether a `NULL` value can go into a
 //! certain database column or not until it actually tries.
 
+#[allow(ambiguous_glob_reexports)]
+pub use sqlx::*;
 pub use sqlx_exasol_impl::*;
 #[cfg(feature = "macros")]
 pub use sqlx_exasol_macros;
@@ -225,5 +227,3 @@ mod macros;
 
 // TODO:
 // - Optimize ExaIter? Maybe with peek?
-// - Re-export sqlx?
-// - Make use of sqlx_core::Ustr?

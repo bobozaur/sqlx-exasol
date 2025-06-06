@@ -40,6 +40,7 @@ use sqlx_core::{
 };
 pub use statement::ExaStatement;
 pub use transaction::ExaTransactionManager;
+#[doc(hidden)]
 #[cfg(feature = "macros")]
 pub use type_checking::QUERY_DRIVER;
 pub use type_info::ExaTypeInfo;
