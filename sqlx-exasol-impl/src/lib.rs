@@ -1,6 +1,13 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 //! **EXASOL** database driver.
 
+#[cfg(feature = "native-tls")]
+use native_tls as _;
+#[cfg(feature = "tls")]
+use rcgen as _;
+#[cfg(feature = "rustls")]
+use rustls as _;
+
 #[cfg(feature = "any")]
 pub mod any;
 mod arguments;

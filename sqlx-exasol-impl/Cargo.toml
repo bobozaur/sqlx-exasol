@@ -63,11 +63,7 @@ sqlx-macros-core = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
-paste = { workspace = true }
-rustls = { workspace = true }
 sqlx = { workspace = true }
-tokio = { workspace = true }
 
 [lints]
 workspace = true
