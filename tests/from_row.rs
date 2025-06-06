@@ -1,7 +1,6 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::{Executor, FromRow};
-use sqlx_core::pool::PoolConnection;
+use sqlx::{pool::PoolConnection, Executor, FromRow};
 use sqlx_exasol::Exasol;
 
 #[derive(Debug, FromRow, PartialEq, Eq)]
@@ -16,8 +15,8 @@ async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r"
         CREATE TABLE TEST_FROM_ROW (
-            name VARCHAR(200), 
-            age DECIMAL(3, 0), 
+            name VARCHAR(200),
+            age DECIMAL(3, 0),
             amount DECIMAL(15, 0)
          );",
     )

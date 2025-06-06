@@ -8,12 +8,19 @@
       "initialization_options": {
         "cargo": {
           "features": [
-            "etl_native_tls",
-            "compression",
-            "uuid",
+            // SQLx
+            "migrate",
+            "macros",
+            "any",
+            // Types
             "chrono",
             "rust_decimal",
-            "migrate"
+            "uuid",
+            // Driver
+            "etl",
+            "compression"
+            // TLS
+            // "native-tls"
           ]
         }
       }

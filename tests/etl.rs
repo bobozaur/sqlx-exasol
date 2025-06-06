@@ -12,12 +12,10 @@ use futures_util::{
 };
 use rustls::crypto::{aws_lc_rs, CryptoProvider};
 use sqlx::{Connection, Executor};
-use sqlx_core::{
-    error::BoxDynError,
-    pool::{PoolConnection, PoolOptions},
-};
 use sqlx_exasol::{
+    error::BoxDynError,
     etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
+    pool::{PoolConnection, PoolOptions},
     ExaConnectOptions, Exasol,
 };
 

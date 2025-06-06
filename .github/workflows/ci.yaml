@@ -36,24 +36,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        etl:
+        tls:
           [
-            "--features etl_native_tls",
-            "--features etl_rustls",
-            "--features etl",
+            "--features tls-native-tls",
+            "--features tls-rustls",
             "",
           ]
-        other: ["--features compression,migrate,rust_decimal,uuid,chrono", ""]
+        other: ["--features compression,migrate,rust_decimal,uuid,chrono,etl", ""]
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.86.0
         with:
           components: clippy
 
       - name: Run clippy
-        run: cargo clippy --tests ${{ matrix.etl }} ${{ matrix.other }}
+        run: cargo clippy --tests ${{ matrix.tls }} ${{ matrix.other }}
         env:
           RUSTFLAGS: -D warnings
 
@@ -65,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.86.0
         with:
           components: clippy
 
@@ -84,7 +83,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.86.0
         with:
           components: clippy
 
@@ -112,7 +111,7 @@ jobs:
           exasol-version: ${{ env.EXASOL_VERSION }}
           num-nodes: ${{ env.NUM_NODES }}
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
       - name: Connection tests
@@ -146,18 +145,18 @@ jobs:
           exasol-version: ${{ env.EXASOL_VERSION }}
           num-nodes: ${{ env.NUM_NODES }}
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
       - name: TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono,tls-native-tls -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: TLS connection tests with compression
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression -- --ignored --nocapture
+        run: cargo test --features migrate,compression,tls-native-tls -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -180,7 +179,7 @@ jobs:
           exasol-version: ${{ env.EXASOL_VERSION }}
           num-nodes: ${{ env.NUM_NODES }}
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
       - name: ETL tests
@@ -195,18 +194,18 @@ jobs:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Tests compilation failure if both ETL TLS features are enabled
-        run: cargo test --features etl_native_tls,etl_rustls || true
+        run: cargo test --features tls-native-tls,tls-rustls || true
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Native-TLS ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl_native_tls -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl,tls-native-tls -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Rustls ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl_rustls -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl,tls-rustls-aws-lc-rs -- --ignored --nocapture --test-threads `nproc`
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
