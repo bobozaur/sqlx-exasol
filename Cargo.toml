@@ -73,6 +73,7 @@ etl = ["sqlx-exasol-impl/etl"]
 
 [workspace.dependencies]
 # Internal
+sqlx-exasol = { path = "." }
 sqlx-exasol-macros = { path = "sqlx-exasol-macros" }
 sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
 
@@ -99,7 +100,7 @@ futures-channel = { version = "0.3", default-features = false, features = [
     "sink",
 ] }
 futures-core = { version = "0.3", default-features = false }
-hex = { version = "0.4", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["std"] }
 http-body-util = { version = "0.1", default-features = false }
 hyper = { version = "1.4", default-features = false, features = [
     "server",
