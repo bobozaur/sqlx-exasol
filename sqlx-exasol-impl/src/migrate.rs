@@ -59,8 +59,9 @@ impl MigrateDatabase for Exasol {
             let query = "SELECT true FROM exa_schemas WHERE schema_name = ?";
             let exists: bool = query_scalar(query)
                 .bind(database)
-                .fetch_one(&mut conn)
-                .await?;
+                .fetch_optional(&mut conn)
+                .await?
+                .unwrap_or_default();
 
             Ok(exists)
         })
