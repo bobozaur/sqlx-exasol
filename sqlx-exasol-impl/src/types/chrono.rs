@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    ops::{Add, Sub},
-};
+use std::ops::{Add, Sub};
 
 use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
@@ -102,8 +99,8 @@ impl Encode<'_, Exasol> for NaiveDateTime {
 
 impl Decode<'_, Exasol> for NaiveDateTime {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
-        Self::parse_from_str(&input, TIMESTAMP_FMT)
+        let input = <&str>::deserialize(value.value).map_err(Box::new)?;
+        Self::parse_from_str(input, TIMESTAMP_FMT)
             .map_err(Box::new)
             .map_err(From::from)
     }
@@ -165,7 +162,7 @@ impl Encode<'_, Exasol> for Duration {
 
 impl<'r> Decode<'r, Exasol> for Duration {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
+        let input = <&str>::deserialize(value.value).map_err(Box::new)?;
         let input_err_fn = || format!("could not parse {input} as INTERVAL DAY TO SECOND");
 
         let (days, rest) = input.split_once(' ').ok_or_else(input_err_fn)?;
@@ -274,7 +271,7 @@ impl Encode<'_, Exasol> for Months {
 
 impl<'r> Decode<'r, Exasol> for Months {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        let input = Cow::<str>::deserialize(value.value).map_err(Box::new)?;
+        let input = <&str>::deserialize(value.value).map_err(Box::new)?;
         let input_err_fn = || format!("could not parse {input} as INTERVAL YEAR TO MONTH");
 
         let (years, months) = input.rsplit_once('-').ok_or_else(input_err_fn)?;

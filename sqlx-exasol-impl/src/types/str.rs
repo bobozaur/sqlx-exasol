@@ -84,16 +84,6 @@ impl Decode<'_, Exasol> for String {
     }
 }
 
-impl Type<Exasol> for Cow<'_, str> {
-    fn type_info() -> ExaTypeInfo {
-        <&str as Type<Exasol>>::type_info()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <&str as Type<Exasol>>::compatible(ty)
-    }
-}
-
 impl Encode<'_, Exasol> for Cow<'_, str> {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         match self {
@@ -108,11 +98,5 @@ impl Encode<'_, Exasol> for Cow<'_, str> {
 
     fn size_hint(&self) -> usize {
         <&str as Encode<Exasol>>::size_hint(&&**self)
-    }
-}
-
-impl<'r> Decode<'r, Exasol> for Cow<'r, str> {
-    fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        Cow::deserialize(value.value).map_err(From::from)
     }
 }

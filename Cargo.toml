@@ -2,7 +2,7 @@
 members = [".", "sqlx-exasol-cli", "sqlx-exasol-impl", "sqlx-exasol-macros"]
 
 [workspace.package]
-version = "0.8.6"
+version = "0.9.0"
 license = "MIT OR Apache-2.0"
 edition = "2024"
 rust-version = "1.86.0"
@@ -119,12 +119,12 @@ serde = { version = "1", default-features = false, features = ["derive", "rc"] }
 serde_json = { version = "1", default-features = false, features = [
     "raw_value",
 ] }
-sqlx = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false }
-sqlx-cli = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false }
-sqlx-core = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false, features = [
+sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
+sqlx-cli = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
+sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false, features = [
     "offline",
 ] }
-sqlx-macros-core = { git = "https://github.com/bobozaur/sqlx", branch = "external-drivers-macros", default-features = false }
+sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
 syn = { version = "2", default-features = false, features = [
     "parsing",
     "proc-macro",

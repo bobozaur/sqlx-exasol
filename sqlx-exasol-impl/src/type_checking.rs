@@ -40,21 +40,35 @@ impl_type_checking!(
         String,
 
         // External types
-        #[cfg(feature = "chrono")]
-        sqlx::types::chrono::NaiveDate,
-
-        #[cfg(feature = "chrono")]
-        sqlx::types::chrono::NaiveDateTime,
-
-        #[cfg(feature = "chrono")]
-        sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
-
-        #[cfg(feature = "rust_decimal")]
-        sqlx::types::Decimal,
-
         #[cfg(feature = "uuid")]
         sqlx::types::Uuid,
     },
     ParamChecking::Weak,
     feature-types: _info => None,
+    // The expansion of the macro automatically applies the correct feature name
+    // and checks `[macros.preferred-crates]`
+    datetime-types: {
+        chrono: {
+            sqlx::types::chrono::NaiveDate,
+
+            sqlx::types::chrono::NaiveDateTime,
+
+            sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+        },
+        time: {
+            sqlx::types::time::Date,
+
+            sqlx::types::time::PrimitiveDateTime,
+
+            sqlx::types::time::OffsetDateTime,
+        },
+    },
+    numeric-types: {
+        bigdecimal: {
+            sqlx::types::BigDecimal,
+        },
+        rust_decimal: {
+            sqlx::types::Decimal,
+        },
+    },
 );

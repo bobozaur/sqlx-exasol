@@ -81,51 +81,74 @@ impl MigrateDatabase for Exasol {
 }
 
 impl Migrate for ExaConnection {
-    fn ensure_migrations_table(&mut self) -> BoxFuture<'_, Result<(), MigrateError>> {
+    fn create_schema_if_not_exists<'e>(
+        &'e mut self,
+        schema_name: &'e str,
+    ) -> BoxFuture<'e, Result<(), MigrateError>> {
         Box::pin(async move {
-            let query = r#"
-            CREATE TABLE IF NOT EXISTS "_sqlx_migrations" (
+            let query = format!(r#"CREATE SCHEMA IF NOT EXISTS "{schema_name}";"#);
+            self.execute(&*query).await?;
+            Ok(())
+        })
+    }
+
+    fn ensure_migrations_table<'e>(
+        &'e mut self,
+        table_name: &'e str,
+    ) -> BoxFuture<'e, Result<(), MigrateError>> {
+        Box::pin(async move {
+            let query = format!(
+                r#"
+            CREATE TABLE IF NOT EXISTS "{table_name}" (
                 version DECIMAL(20, 0),
                 description CLOB NOT NULL,
                 installed_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 success BOOLEAN NOT NULL,
                 checksum CLOB NOT NULL,
                 execution_time DECIMAL(20, 0) NOT NULL
-            );"#;
+            );"#
+            );
 
-            self.execute(query).await?;
+            self.execute(&*query).await?;
             Ok(())
         })
     }
 
-    fn dirty_version(&mut self) -> BoxFuture<'_, Result<Option<i64>, MigrateError>> {
+    fn dirty_version<'e>(
+        &'e mut self,
+        table_name: &'e str,
+    ) -> BoxFuture<'e, Result<Option<i64>, MigrateError>> {
         Box::pin(async move {
-            let query = r#"
+            let query = format!(
+                r#"
             SELECT version
-            FROM "_sqlx_migrations"
+            FROM "{table_name}"
             WHERE success = false
             ORDER BY version
-            LIMIT 1
-            "#;
+            LIMIT 1;
+            "#
+            );
 
-            let row: Option<(i64,)> = query_as(query).fetch_optional(self).await?;
+            let row: Option<(i64,)> = query_as(&query).fetch_optional(self).await?;
 
             Ok(row.map(|r| r.0))
         })
     }
 
-    fn list_applied_migrations(
-        &mut self,
-    ) -> BoxFuture<'_, Result<Vec<AppliedMigration>, MigrateError>> {
+    fn list_applied_migrations<'e>(
+        &'e mut self,
+        table_name: &'e str,
+    ) -> BoxFuture<'e, Result<Vec<AppliedMigration>, MigrateError>> {
         Box::pin(async move {
-            let query = r#"
+            let query = format!(
+                r#"
                 SELECT version, checksum
-                FROM "_sqlx_migrations"
+                FROM "{table_name}"
                 ORDER BY version
-                "#;
+                "#
+            );
 
-            let rows: Vec<(i64, String)> = query_as(query).fetch_all(self).await?;
-
+            let rows: Vec<(i64, String)> = query_as(&query).fetch_all(self).await?;
             let mut migrations = Vec::with_capacity(rows.len());
 
             for (version, checksum) in rows {
@@ -156,10 +179,11 @@ impl Migrate for ExaConnection {
         })
     }
 
-    fn apply<'e: 'm, 'm>(
+    fn apply<'e>(
         &'e mut self,
-        migration: &'m Migration,
-    ) -> BoxFuture<'m, Result<Duration, MigrateError>> {
+        table_name: &'e str,
+        migration: &'e Migration,
+    ) -> BoxFuture<'e, Result<Duration, MigrateError>> {
         Box::pin(async move {
             let mut tx = self.begin().await?;
             let start = Instant::now();
@@ -170,12 +194,14 @@ impl Migrate for ExaConnection {
 
             let checksum = hex::encode(&*migration.checksum);
 
-            let query_str = r#"
-            INSERT INTO "_sqlx_migrations" ( version, description, success, checksum, execution_time )
+            let query_str = format!(
+                r#"
+            INSERT INTO "{table_name}" ( version, description, success, checksum, execution_time )
             VALUES ( ?, ?, TRUE, ?, -1 );
-            "#;
+            "#
+            );
 
-            let _ = query(query_str)
+            let _ = query(&query_str)
                 .bind(migration.version)
                 .bind(&*migration.description)
                 .bind(checksum)
@@ -186,13 +212,15 @@ impl Migrate for ExaConnection {
 
             let elapsed = start.elapsed();
 
-            let query_str = r#"
-                UPDATE "_sqlx_migrations"
+            let query_str = format!(
+                r#"
+                UPDATE "{table_name}"
                 SET execution_time = ?
                 WHERE version = ?
-                "#;
+                "#
+            );
 
-            let _ = query(query_str)
+            let _ = query(&query_str)
                 .bind(elapsed.as_nanos())
                 .bind(migration.version)
                 .execute(self)
@@ -202,10 +230,11 @@ impl Migrate for ExaConnection {
         })
     }
 
-    fn revert<'e: 'm, 'm>(
+    fn revert<'e>(
         &'e mut self,
-        migration: &'m Migration,
-    ) -> BoxFuture<'m, Result<Duration, MigrateError>> {
+        table_name: &'e str,
+        migration: &'e Migration,
+    ) -> BoxFuture<'e, Result<Duration, MigrateError>> {
         Box::pin(async move {
             let mut tx = self.begin().await?;
             let start = Instant::now();
@@ -214,8 +243,8 @@ impl Migrate for ExaConnection {
                 .future(&mut tx.ws)
                 .await?;
 
-            let query_str = r#" DELETE FROM "_sqlx_migrations" WHERE version = ? "#;
-            let _ = query(query_str)
+            let query_str = format!(r#" DELETE FROM "{table_name}" WHERE version = ? "#);
+            let _ = query(&query_str)
                 .bind(migration.version)
                 .execute(&mut *tx)
                 .await?;
