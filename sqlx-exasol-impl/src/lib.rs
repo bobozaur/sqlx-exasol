@@ -28,7 +28,7 @@ mod transaction;
 #[cfg(feature = "macros")]
 mod type_checking;
 mod type_info;
-mod types;
+pub mod types;
 mod value;
 
 pub use arguments::ExaArguments;
@@ -51,9 +51,6 @@ pub use transaction::ExaTransactionManager;
 #[cfg(feature = "macros")]
 pub use type_checking::QUERY_DRIVER;
 pub use type_info::ExaTypeInfo;
-pub use types::ExaIter;
-#[cfg(feature = "chrono")]
-pub use types::Months;
 pub use value::{ExaValue, ExaValueRef};
 
 /// An alias for [`Pool`][sqlx_core::pool::Pool], specialized for Exasol.

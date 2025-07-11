@@ -139,9 +139,6 @@ macro_rules! test_etl {
             #[ignore]
             #[sqlx::test]
             async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> AnyResult<()> {
-                CryptoProvider::install_default(aws_lc_rs::default_provider())
-                    .ok();
-
                 let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
 
                 let mut conn1 = pool.acquire().await?;
@@ -197,6 +194,6 @@ macro_rules! test_etl_multi_threaded {
         };
 
         ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr, $(#[$attr:meta]),*) => {
-            $crate::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  tokio::spawn(pipe(r, w)).map_err(From::from).and_then(|r| async { r }), $export, $import, $(#[$attr]),*);
+            $crate::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  sqlx_exasol::__rt::spawn(pipe(r, w)), $export, $import, $(#[$attr]),*);
         }
     }

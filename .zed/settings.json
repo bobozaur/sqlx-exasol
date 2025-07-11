@@ -18,9 +18,11 @@
             "uuid",
             // Driver
             "etl",
-            "compression"
+            "compression",
+            // Runtime
+            "runtime-tokio",
             // TLS
-            // "native-tls"
+            "tls-native-tls"
           ]
         }
       }

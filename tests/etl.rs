@@ -10,7 +10,6 @@ use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
-use rustls::crypto::{aws_lc_rs, CryptoProvider};
 use sqlx::{Connection, Executor};
 use sqlx_exasol::{
     error::BoxDynError,
@@ -132,8 +131,6 @@ test_etl!(
 #[ignore]
 #[sqlx::test]
 async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -159,8 +156,6 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
 #[ignore]
 #[sqlx::test]
 async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -188,8 +183,6 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
 #[ignore]
 #[sqlx::test]
 async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -222,8 +215,6 @@ async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) 
 #[ignore]
 #[sqlx::test]
 async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 

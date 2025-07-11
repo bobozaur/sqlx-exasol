@@ -22,9 +22,9 @@ chrono = ["sqlx-core/chrono", "dep:chrono"]
 rust_decimal = ["sqlx-core/rust_decimal", "dep:rust_decimal"]
 
 # TLS features
-tls = []
-rustls = ["dep:rustls", "dep:rcgen", "tls"]
-native-tls = ["dep:native-tls", "dep:rcgen", "tls"]
+tls = ["dep:rcgen"]
+rustls = ["dep:rustls", "tls"]
+native-tls = ["dep:native-tls", "tls"]
 
 # Driver specific features
 compression = ["dep:async-compression"]

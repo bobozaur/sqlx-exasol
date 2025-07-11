@@ -220,6 +220,16 @@
 pub use sqlx::*;
 pub use sqlx_exasol_impl::*;
 
+pub mod types {
+    pub use sqlx::types::*;
+    pub use sqlx_exasol_impl::types::ExaIter;
+
+    pub mod chrono {
+        pub use sqlx::types::chrono::*;
+        pub use sqlx_exasol_impl::types::{Months, Duration};
+    }
+}
+
 pub mod any {
     pub use sqlx::any::*;
     pub use sqlx_exasol_impl::any::DRIVER;

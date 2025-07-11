@@ -9,8 +9,20 @@ keywords.workspace = true
 categories.workspace = true
 authors.workspace = true
 
+[features]
+default = ["native-tls", "completions", "sqlx-toml"]
+
+rustls = ["sqlx-cli/rustls"]
+native-tls = ["sqlx-cli/native-tls"]
+
+openssl-vendored = ["sqlx-cli/openssl-vendored"]
+
+completions = ["sqlx-cli/openssl-vendored"]
+
+sqlx-toml = ["sqlx-cli/sqlx-toml"]
+
 [dependencies]
-sqlx-exasol = { workspace = true, features = ["any", "migrate", "tls-rustls-aws-lc-rs"] }
+sqlx-exasol = { workspace = true }
 sqlx-cli = { workspace = true }
 clap = { workspace = true }
 console = { workspace = true }
