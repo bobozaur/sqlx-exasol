@@ -198,7 +198,7 @@ impl Serialize for WithAttributes<'_, Fetch> {
 }
 
 /// Request to execute a single SQL statement.
-// This is internall used in the IMPORT/EXPORT jobs as well, since they rely on query execution too.
+// This is internally used in the IMPORT/EXPORT jobs as well, since they rely on query execution too.
 // However, in these scenarios the query is an owned string, hence the usage of [`Cow`] here to
 // support that.
 #[derive(Clone, Debug)]
