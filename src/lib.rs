@@ -224,6 +224,7 @@ pub mod types {
     pub use sqlx::types::*;
     pub use sqlx_exasol_impl::types::ExaIter;
 
+    #[cfg(feature = "chrono")]
     pub mod chrono {
         pub use sqlx::types::chrono::*;
         pub use sqlx_exasol_impl::types::{Months, Duration};

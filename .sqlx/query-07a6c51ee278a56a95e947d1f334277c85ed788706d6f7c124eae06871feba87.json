@@ -1,0 +1,24 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT dummy FROM DUAL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "dummy",
+        "dataType": {
+          "type": "VARCHAR",
+          "size": 1,
+          "characterSet": "UTF8"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "07a6c51ee278a56a95e947d1f334277c85ed788706d6f7c124eae06871feba87"
+}

@@ -17,7 +17,7 @@ native-tls = ["sqlx-cli/native-tls"]
 
 openssl-vendored = ["sqlx-cli/openssl-vendored"]
 
-completions = ["sqlx-cli/openssl-vendored"]
+completions = ["sqlx-cli/completions"]
 
 sqlx-toml = ["sqlx-cli/sqlx-toml"]
 

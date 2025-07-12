@@ -9,13 +9,25 @@ use sqlx_core::type_info::TypeInfo;
 
 /// Information about an Exasol data type and implementor of [`TypeInfo`].
 // Note that the [`DataTypeName`] is automatically constructed from the provided [`ExaDataType`].
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(from = "ExaDataType")]
 #[serde(rename_all = "camelCase")]
 pub struct ExaTypeInfo {
-    #[serde(skip_serializing)]
     pub(crate) name: DataTypeName,
     pub(crate) data_type: ExaDataType,
+}
+
+/// Manually implemented because we only want to serialize the `data_type` field while also
+/// flattening the structure.
+///
+/// On [`Deserialize`] we simply convert from the [`ExaDataType`] to this.
+impl Serialize for ExaTypeInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.data_type.serialize(serializer)
+    }
 }
 
 impl ExaTypeInfo {

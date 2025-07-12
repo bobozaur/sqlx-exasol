@@ -117,12 +117,14 @@ rand = { version = "0.8", default-features = false, features = [
 rsa = { version = "0.9", default-features = false, features = ["pem", "std"] }
 serde = { version = "1", default-features = false, features = ["derive", "rc"] }
 serde_json = { version = "1", default-features = false, features = [
+    "std",
     "raw_value",
 ] }
 sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
 sqlx-cli = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
 sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false, features = [
     "offline",
+    "migrate",
 ] }
 sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
 syn = { version = "2", default-features = false, features = [

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx_core::{column::Column, database::Database, ext::ustr::UStr};
@@ -21,9 +21,17 @@ impl ExaColumn {
     where
         D: Deserializer<'de>,
     {
-        // NOTE: We can borrow because we always deserialize from an owned buffer.
-        <&str>::deserialize(deserializer)
-            .map(str::to_lowercase)
+        /// Intermediate type used to take advantage of [`Cow`] borrowed deserialization when
+        /// possible.
+        ///
+        /// In regular usage, an owned buffer is used and a borrowed [`str`] could be
+        /// used, but for offline query deserialization a reader seems to be used and the buffer is
+        /// shortlived, hence a string slice would fail deserialization.
+        #[derive(Deserialize)]
+        struct CowStr<'a>(#[serde(borrow)] Cow<'a, str>);
+
+        CowStr::deserialize(deserializer)
+            .map(|c| c.0.to_lowercase())
             .map(From::from)
     }
 }

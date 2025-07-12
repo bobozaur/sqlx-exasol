@@ -113,16 +113,22 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
-
-      - name: Connection tests
+      
+      - name: Unit connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
+          
+      - name: Unit connection tests with compression
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test -p sqlx-exasol-impl --features migrate,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
-      - name: Connection tests with compression
+      - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression -- --ignored --nocapture
+        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
@@ -148,15 +154,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
-      - name: TLS connection tests
+      - name: Unit TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono,tls-native-tls -- --nocapture
+        run: cargo test -p sqlx-exasol-impl --features migrate,native-tls -- --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
+          
+      - name: Unit TLS connection tests with compression
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test -p sqlx-exasol-impl --features migrate,native-tls,compression -- --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
-      - name: TLS connection tests with compression
+      - name: Integration TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,tls-native-tls -- --ignored --nocapture
+        run: cargo test --features migrate,native-tls,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -184,12 +196,12 @@ jobs:
 
       - name: ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: ETL without TLS feature but TLS connection (should fail)
-        run: cargo test --features migrate,etl -- --ignored --nocapture --test-threads `nproc` || true
+        run: cargo test --features migrate,etl -- test_etl --ignored --nocapture || true
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -200,12 +212,42 @@ jobs:
 
       - name: Native-TLS ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl,tls-native-tls -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl,tls-native-tls -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Rustls ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl,tls-rustls-aws-lc-rs -- --ignored --nocapture --test-threads `nproc`
+        run: cargo test --features migrate,compression,etl,tls-rustls-aws-lc-rs -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
+
+  compile_time_tests:
+    name: Compile time tests
+    needs: clippy
+    runs-on: ubuntu-latest
+    steps:      
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: ./.github/actions/free-space
+
+      - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
+        id: exa-cluster
+        uses: ./.github/actions/exa-cluster
+        with:
+          exasol-version: ${{ env.EXASOL_VERSION }}
+          num-nodes: ${{ env.NUM_NODES }}
+
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Setup database
+        run: cargo run -p sqlx-exasol-cli -- database create
+        
+      - name: Run migrations
+        run: cargo run -p sqlx-exasol-cli -- migrate run tests/migrations
+        
+      - name: Run tests
+        run: cargo test -- test_compile_time --ignored --nocapture
