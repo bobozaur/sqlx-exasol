@@ -1,6 +1,6 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::{pool::PoolConnection, Executor, FromRow};
+use sqlx_exasol::{pool::PoolConnection, Executor, FromRow};
 use sqlx_exasol::Exasol;
 
 #[derive(Debug, FromRow, PartialEq, Eq)]
@@ -10,7 +10,7 @@ struct TestRow {
     amount: u64,
 }
 
-#[sqlx::test]
+#[sqlx_exasol::test]
 async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r"
@@ -34,14 +34,14 @@ async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
         amount: 43_759_384_749,
     };
 
-    sqlx::query("INSERT INTO TEST_FROM_ROW VALUES (?, ?, ?)")
+    sqlx_exasol::query("INSERT INTO TEST_FROM_ROW VALUES (?, ?, ?)")
         .bind([&test_row1.name, &test_row2.name])
         .bind([&test_row1.age, &test_row2.age])
         .bind([&test_row1.amount, &test_row2.amount])
         .execute(&mut *conn)
         .await?;
 
-    let rows: Vec<TestRow> = sqlx::query_as("SELECT * FROM TEST_FROM_ROW ORDER BY age")
+    let rows: Vec<TestRow> = sqlx_exasol::query_as("SELECT * FROM TEST_FROM_ROW ORDER BY age")
         .fetch_all(&mut *conn)
         .await?;
 

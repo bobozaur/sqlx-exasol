@@ -203,8 +203,8 @@ mod tests {
 
     use crate::{ExaConnectOptions, ExaQueryResult, Exasol};
 
-    #[cfg(feature = "compression")]
     #[ignore]
+    #[cfg(feature = "compression")]
     #[sqlx::test]
     async fn test_compression_feature(
         pool_opts: PoolOptions<Exasol>,
@@ -233,7 +233,7 @@ mod tests {
 
     #[cfg(not(feature = "compression"))]
     #[sqlx::test]
-    async fn test_compression_no_feature(
+    async fn test_enabled_compression_without_feature(
         pool_opts: PoolOptions<Exasol>,
         mut exa_opts: ExaConnectOptions,
     ) {

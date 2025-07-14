@@ -10,7 +10,7 @@ use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
-use sqlx::{Connection, Executor};
+use sqlx_exasol::{Connection, Executor};
 use sqlx_exasol::{
     error::BoxDynError,
     etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
@@ -129,12 +129,12 @@ test_etl!(
 // ################ Failures ################
 // ##########################################
 #[ignore]
-#[sqlx::test]
+#[sqlx_exasol::test]
 async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -154,12 +154,12 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
 }
 
 #[ignore]
-#[sqlx::test]
+#[sqlx_exasol::test]
 async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -181,12 +181,12 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
 }
 
 #[ignore]
-#[sqlx::test]
+#[sqlx_exasol::test]
 async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -203,7 +203,7 @@ async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) 
 
     tx.rollback().await?;
 
-    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+    let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
         .fetch_one(&mut *conn)
         .await?;
 
@@ -213,12 +213,12 @@ async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) 
 }
 
 #[ignore]
-#[sqlx::test]
+#[sqlx_exasol::test]
 async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -236,7 +236,7 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 
     tx.commit().await?;
 
-    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+    let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
         .fetch_one(&mut *conn)
         .await?;
 
@@ -250,7 +250,7 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // //
 // // This will thus fail, because Exasol will just keep sending new requests.
 // #[ignore]
-// #[sqlx::test]
+// #[sqlx_exasol::test]
 // async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
 //
 //     async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
@@ -273,7 +273,7 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 //         .await
 //         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-//     let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+//     let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
 //         .fetch_one(&mut *conn)
 //         .await?;
 

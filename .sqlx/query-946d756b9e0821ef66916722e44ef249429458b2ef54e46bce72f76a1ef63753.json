@@ -1,0 +1,40 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT user_id as \"user_id!\", username as \"username!\" FROM users WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!",
+        "dataType": {
+          "type": "DECIMAL",
+          "precision": 18,
+          "scale": 0
+        }
+      },
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "dataType": {
+          "type": "VARCHAR",
+          "size": 16,
+          "characterSet": "UTF8"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "type": "DECIMAL",
+          "precision": 18,
+          "scale": 0
+        }
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "946d756b9e0821ef66916722e44ef249429458b2ef54e46bce72f76a1ef63753"
+}

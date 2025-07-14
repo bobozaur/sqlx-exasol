@@ -37,7 +37,7 @@ impl_type_checking!(
         i128,
         f32,
         f64,
-        String,
+        String | &str,
 
         // External types
         #[cfg(feature = "uuid")]

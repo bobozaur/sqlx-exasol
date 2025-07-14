@@ -4,11 +4,11 @@
 macro_rules! test_type_valid {
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
         paste::item! {
-            #[sqlx::test]
+            #[sqlx_exasol::test]
             async fn [< test_type_valid_ $name >] (
-                mut con: sqlx::pool::PoolConnection<sqlx_exasol::Exasol>,
-            ) -> Result<(), sqlx::error::BoxDynError> {
-                use sqlx::{Executor, query, query_scalar};
+                mut con: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
+            ) -> Result<(), sqlx_exasol::error::BoxDynError> {
+                use sqlx_exasol::{Executor, query, query_scalar};
 
                 let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                 con.execute(create_sql).await?;
@@ -61,11 +61,11 @@ macro_rules! test_type_valid {
 macro_rules! test_type_array {
     ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
         paste::item! {
-            #[sqlx::test]
+            #[sqlx_exasol::test]
             async fn [< test_type_array_ $name >] (
-                mut con: sqlx::pool::PoolConnection<sqlx_exasol::Exasol>,
-            ) -> Result<(), sqlx::error::BoxDynError> {
-                use sqlx::{Executor, query, query_scalar};
+                mut con: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
+            ) -> Result<(), sqlx_exasol::error::BoxDynError> {
+                use sqlx_exasol::{Executor, query, query_scalar};
 
                 let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                 con.execute(create_sql).await?;
@@ -95,11 +95,11 @@ macro_rules! test_type_array {
 macro_rules! test_type_invalid {
         ($name:ident<$ty:ty>::$datatype:literal::($($prepared:expr),+)) => {
             paste::item! {
-                #[sqlx::test]
+                #[sqlx_exasol::test]
                 async fn [< test_type_invalid_ $name >] (
-                    mut con: sqlx::pool::PoolConnection<sqlx_exasol::Exasol>,
-                ) -> Result<(), sqlx::error::BoxDynError> {
-                    use sqlx::{Executor, query, query_scalar};
+                    mut con: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
+                ) -> Result<(), sqlx_exasol::error::BoxDynError> {
+                    use sqlx_exasol::{Executor, query, query_scalar};
 
                     let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                     con.execute(create_sql).await?;
@@ -137,7 +137,7 @@ macro_rules! test_etl {
         paste::item! {
             $(#[$attr]),*
             #[ignore]
-            #[sqlx::test]
+            #[sqlx_exasol::test]
             async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> AnyResult<()> {
                 let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
 
@@ -148,7 +148,7 @@ macro_rules! test_etl {
                     .execute(concat!("CREATE TABLE ", $table, " ( col VARCHAR(200) );"))
                     .await?;
 
-                sqlx::query(concat!("INSERT INTO ", $table, " VALUES (?)"))
+                sqlx_exasol::query(concat!("INSERT INTO ", $table, " VALUES (?)"))
                     .bind(vec!["dummy"; NUM_ROWS])
                     .execute(&mut *conn1)
                     .await?;
@@ -164,7 +164,7 @@ macro_rules! test_etl {
                 assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
                 assert_eq!(NUM_ROWS as u64, import_res.rows_affected(), "imported rows");
 
-                let num_rows: u64 = sqlx::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
+                let num_rows: u64 = sqlx_exasol::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
                     .fetch_one(&mut *conn1)
                     .await?;
 

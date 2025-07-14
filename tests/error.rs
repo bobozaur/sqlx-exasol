@@ -1,15 +1,15 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::{error::ErrorKind, pool::PoolConnection};
+use sqlx_exasol::{error::ErrorKind, pool::PoolConnection};
 use sqlx_exasol::Exasol;
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_fails_with_unique_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
-    sqlx::query("INSERT INTO tweet(id, text, owner_id) VALUES (1, 'Foo', 1)")
+    sqlx_exasol::query("INSERT INTO tweet(id, text, owner_id) VALUES (1, 'Foo', 1)")
         .execute(&mut *conn)
         .await?;
 
-    let res: Result<_, sqlx::Error> = sqlx::query("INSERT INTO tweet VALUES (1, NOW(), 'Foo', 1);")
+    let res: Result<_, sqlx_exasol::Error> = sqlx_exasol::query("INSERT INTO tweet VALUES (1, NOW(), 'Foo', 1);")
         .execute(&mut *conn)
         .await;
 
@@ -22,12 +22,12 @@ async fn it_fails_with_unique_violation(mut conn: PoolConnection<Exasol>) -> any
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_fails_with_foreign_key_violation(
     mut conn: PoolConnection<Exasol>,
 ) -> anyhow::Result<()> {
-    let res: Result<_, sqlx::Error> =
-        sqlx::query("INSERT INTO tweet_reply (tweet_id, text) VALUES (1, 'Reply!');")
+    let res: Result<_, sqlx_exasol::Error> =
+        sqlx_exasol::query("INSERT INTO tweet_reply (tweet_id, text) VALUES (1, 'Reply!');")
             .execute(&mut *conn)
             .await;
 
@@ -40,9 +40,9 @@ async fn it_fails_with_foreign_key_violation(
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_fails_with_not_null_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
-    let res: Result<_, sqlx::Error> = sqlx::query("INSERT INTO tweet (text) VALUES (null);")
+    let res: Result<_, sqlx_exasol::Error> = sqlx_exasol::query("INSERT INTO tweet (text) VALUES (null);")
         .execute(&mut *conn)
         .await;
     let err = res.unwrap_err();

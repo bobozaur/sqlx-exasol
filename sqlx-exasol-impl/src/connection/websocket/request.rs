@@ -198,8 +198,8 @@ impl Serialize for WithAttributes<'_, Fetch> {
 }
 
 /// Request to execute a single SQL statement.
-// This is internally used in the IMPORT/EXPORT jobs as well, since they rely on query execution too.
-// However, in these scenarios the query is an owned string, hence the usage of [`Cow`] here to
+// This is internally used in the IMPORT/EXPORT jobs as well, since they rely on query execution
+// too. However, in these scenarios the query is an owned string, hence the usage of [`Cow`] here to
 // support that.
 #[derive(Clone, Debug)]
 pub struct Execute<'a>(pub Cow<'a, str>);
@@ -443,10 +443,33 @@ enum Command<'a> {
         num_columns: usize,
         num_rows: usize,
         #[serde(skip_serializing_if = "<[ExaTypeInfo]>::is_empty")]
+        #[serde(serialize_with = "serialize_params")]
         columns: &'a [ExaTypeInfo],
         #[serde(skip_serializing_if = "PreparedStmtData::is_empty")]
         data: &'a PreparedStmtData,
     },
+}
+
+/// Thin serialization wrapper that helps respect the serialization format of
+/// prepared statement parameters (same layout as [`crate::ExaColumn`]).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreparedStmtParam<'a> {
+    data_type: &'a ExaTypeInfo,
+}
+
+impl<'a> From<&'a ExaTypeInfo> for PreparedStmtParam<'a> {
+    fn from(data_type: &'a ExaTypeInfo) -> Self {
+        Self { data_type }
+    }
+}
+
+/// Serialization helper function that maps a [`ExaTypeInfo`] reference to [`PreparedStmtParam`].
+fn serialize_params<S>(params: &[ExaTypeInfo], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.collect_seq(params.iter().map(PreparedStmtParam::from))
 }
 
 /// Type containing the parameters data to be passed as part of executing a prepared statement.

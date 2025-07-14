@@ -16,7 +16,7 @@ use crate::{arguments::ExaBuffer, Exasol};
 ///
 /// ```rust
 /// # use sqlx_exasol_impl as sqlx_exasol;
-/// use sqlx_exasol::ExaIter;
+/// use sqlx_exasol::types::ExaIter;
 ///
 /// // Don't do this, as the iterator gets cloned internally.
 /// let vector = vec![1, 2, 3];

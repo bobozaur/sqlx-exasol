@@ -122,13 +122,13 @@ jobs:
           
       - name: Unit connection tests with compression
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate,compression -- --ignored --nocapture
+        run: cargo test -p sqlx-exasol-impl --features migrate,compression -- --ignored --nocapture test_compression
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features runtime-tokio,migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
@@ -156,19 +156,19 @@ jobs:
 
       - name: Unit TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate,native-tls -- --nocapture
+        run: cargo test -p sqlx-exasol-impl --features native-tls,migrate -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
           
       - name: Unit TLS connection tests with compression
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate,native-tls,compression -- --ignored --nocapture
+        run: cargo test -p sqlx-exasol-impl --features native-tls,migrate,compression -- --ignored --nocapture test_compression
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Integration TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,native-tls,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features runtime-tokio,tls-native-tls,migrate,rust_decimal,uuid,chrono -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -196,17 +196,12 @@ jobs:
 
       - name: ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl -- test_etl --ignored --nocapture
+        run: cargo test --features runtime-tokio,migrate,compression,etl -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: ETL without TLS feature but TLS connection (should fail)
         run: cargo test --features migrate,etl -- test_etl --ignored --nocapture || true
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
-
-      - name: Tests compilation failure if both ETL TLS features are enabled
-        run: cargo test --features tls-native-tls,tls-rustls || true
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 

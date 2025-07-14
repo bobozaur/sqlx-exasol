@@ -56,7 +56,7 @@
 //! - [`f32`], [`f64`]
 //! - [`str`], [`String`], [`std::borrow::Cow<str>`]
 //! - `chrono` feature: [`chrono::DateTime<Utc>`], [`chrono::DateTime<Utc>`],
-//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`], [`Months`] (analog of
+//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`], [`crate::types::chrono::Months`] (analog of
 //!   [`chrono::Months`])
 //! - `uuid` feature: [`uuid::Uuid`]
 //! - `rust_decimal` feature: [`rust_decimal::Decimal`]
@@ -100,7 +100,7 @@
 //! let pool = ExaPool::connect(&env::var("DATABASE_URL").unwrap()).await?;
 //! let mut con = pool.acquire().await?;
 //!
-//! sqlx::query("CREATE SCHEMA RUST_DOC_TEST")
+//! sqlx_exasol::query("CREATE SCHEMA RUST_DOC_TEST")
 //!     .execute(&mut *con)
 //!     .await?;
 //! #
@@ -109,7 +109,7 @@
 //! # };
 //! ```
 //!
-//! Array-like parameter binding, also featuring the [`ExaIter`] adapter.
+//! Array-like parameter binding, also featuring the [`crate::types::ExaIter`] adapter.
 //! An important thing to note is that the parameter sets must be of equal length,
 //! otherwise an error is thrown:
 //! ```rust,no_run
@@ -125,9 +125,9 @@
 //! let params1 = vec![1, 2, 3];
 //! let params2 = HashSet::from([1, 2, 3]);
 //!
-//! sqlx::query("INSERT INTO MY_TABLE VALUES (?, ?)")
+//! sqlx_exasol::query("INSERT INTO MY_TABLE VALUES (?, ?)")
 //!     .bind(&params1)
-//!     .bind(ExaIter::from(&params2))
+//!     .bind(types::ExaIter::from(&params2))
 //!     .execute(&mut *con)
 //!     .await?;
 //! #
@@ -227,7 +227,7 @@ pub mod types {
     #[cfg(feature = "chrono")]
     pub mod chrono {
         pub use sqlx::types::chrono::*;
-        pub use sqlx_exasol_impl::types::{Months, Duration};
+        pub use sqlx_exasol_impl::types::{Duration, Months};
     }
 }
 
@@ -239,3 +239,6 @@ pub mod any {
 pub use sqlx_exasol_macros;
 #[cfg(feature = "macros")]
 mod macros;
+
+// TODO:
+// - Amend PreparedStatement with a wrapper of ExaTypeInfo

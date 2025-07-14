@@ -23,8 +23,8 @@ rust_decimal = ["sqlx-core/rust_decimal", "dep:rust_decimal"]
 
 # TLS features
 tls = ["dep:rcgen"]
-rustls = ["dep:rustls", "tls"]
-native-tls = ["dep:native-tls", "tls"]
+rustls = ["dep:rustls", "sqlx-core/_tls-rustls", "tls"]
+native-tls = ["dep:native-tls", "sqlx-core/_tls-native-tls", "tls"]
 
 # Driver specific features
 compression = ["dep:async-compression"]
@@ -63,7 +63,7 @@ sqlx-macros-core = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio", "macros", "migrate"] }
 
 [lints]
 workspace = true

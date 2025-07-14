@@ -11,7 +11,6 @@ use sqlx_core::type_info::TypeInfo;
 // Note that the [`DataTypeName`] is automatically constructed from the provided [`ExaDataType`].
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(from = "ExaDataType")]
-#[serde(rename_all = "camelCase")]
 pub struct ExaTypeInfo {
     pub(crate) name: DataTypeName,
     pub(crate) data_type: ExaDataType,
