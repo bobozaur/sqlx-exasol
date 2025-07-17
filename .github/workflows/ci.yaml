@@ -200,20 +200,15 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
-      - name: ETL without TLS feature but TLS connection (should fail)
-        run: cargo test --features migrate,etl -- test_etl --ignored --nocapture || true
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
-
       - name: Native-TLS ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl,tls-native-tls -- test_etl --ignored --nocapture
+        run: cargo test --features tls-native-tls,runtime-tokio,migrate,compression,etl -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
       - name: Rustls ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features migrate,compression,etl,tls-rustls-aws-lc-rs -- test_etl --ignored --nocapture
+        run: cargo test --features tls-rustls-aws-lc-rs,runtime-tokio,migrate,compression,etl -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 
@@ -245,4 +240,4 @@ jobs:
         run: cargo run -p sqlx-exasol-cli -- migrate run tests/migrations
         
       - name: Run tests
-        run: cargo test -- test_compile_time --ignored --nocapture
+        run: cargo test --features runtime-tokio -- test_compile_time --ignored --nocapture
