@@ -72,7 +72,7 @@ impl MigrateDatabase for Exasol {
             let (options, database) = parse_for_maintenance(url)?;
             let mut conn = options.connect().await?;
 
-            let query = format!(r#"DROP SCHEMA IF EXISTS "{database}""#);
+            let query = format!(r#"DROP SCHEMA IF EXISTS "{database}" CASCADE;"#);
             let _ = conn.execute(&*query).await?;
 
             Ok(())

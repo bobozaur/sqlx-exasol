@@ -45,8 +45,6 @@ impl_type_checking!(
     },
     ParamChecking::Weak,
     feature-types: _info => None,
-    // The expansion of the macro automatically applies the correct feature name
-    // and checks `[macros.preferred-crates]`
     datetime-types: {
         chrono: {
             sqlx::types::chrono::NaiveDate,
