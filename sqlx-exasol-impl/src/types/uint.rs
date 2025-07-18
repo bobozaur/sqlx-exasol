@@ -23,10 +23,6 @@ impl Type<Exasol> for u8 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Decimal(Decimal::new(Decimal::MAX_8BIT_PRECISION, 0)).into()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl Encode<'_, Exasol> for u8 {
@@ -54,10 +50,6 @@ impl Decode<'_, Exasol> for u8 {
 impl Type<Exasol> for u16 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Decimal(Decimal::new(Decimal::MAX_16BIT_PRECISION, 0)).into()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -87,10 +79,6 @@ impl Type<Exasol> for u32 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Decimal(Decimal::new(Decimal::MAX_32BIT_PRECISION, 0)).into()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl Encode<'_, Exasol> for u32 {
@@ -118,10 +106,6 @@ impl Decode<'_, Exasol> for u32 {
 impl Type<Exasol> for u64 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Decimal(Decimal::new(Decimal::MAX_64BIT_PRECISION, 0)).into()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -160,10 +144,6 @@ impl Decode<'_, Exasol> for u64 {
 impl Type<Exasol> for u128 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Decimal(Decimal::new(Decimal::MAX_128BIT_PRECISION, 0)).into()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

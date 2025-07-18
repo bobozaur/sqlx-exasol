@@ -7,12 +7,11 @@ use sqlx_core::{
 
 use crate::{arguments::ExaBuffer, Exasol};
 
-/// Adapter allowing any iterator of encodable values to be passed
-/// as a parameter set / array to Exasol.
+/// Adapter allowing any iterator of encodable values to be passed as a parameter set / array to
+/// Exasol.
 ///
-/// Note that the iterator must implement [`Clone`] because
-/// it's used in multiple places. Therefore, prefer using iterators over
-/// references than owning variants.
+/// Note that the iterator must implement [`Clone`] because it's used in multiple places. Therefore,
+/// prefer using iterators over references than owning variants.
 ///
 /// ```rust
 /// # use sqlx_exasol_impl as sqlx_exasol;
@@ -53,10 +52,6 @@ where
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
     }
-
-    fn compatible(ty: &<Exasol as Database>::TypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl<T, I> Encode<'_, Exasol> for ExaIter<I, T>
@@ -94,10 +89,6 @@ where
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
     }
-
-    fn compatible(ty: &<Exasol as Database>::TypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl<T> Encode<'_, Exasol> for &[T]
@@ -127,10 +118,6 @@ where
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
     }
-
-    fn compatible(ty: &<Exasol as Database>::TypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl<T> Encode<'_, Exasol> for &mut [T]
@@ -156,10 +143,6 @@ where
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
-    }
-
-    fn compatible(ty: &<Exasol as Database>::TypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
@@ -187,10 +170,6 @@ where
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
     }
-
-    fn compatible(ty: &<Exasol as Database>::TypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl<T> Encode<'_, Exasol> for Vec<T>
@@ -216,10 +195,6 @@ where
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
         T::type_info()
-    }
-
-    fn compatible(ty: &<Exasol as Database>::TypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

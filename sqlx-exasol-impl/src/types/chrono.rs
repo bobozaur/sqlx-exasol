@@ -114,10 +114,6 @@ impl Type<Exasol> for Duration {
         );
         ExaDataType::IntervalDayToSecond(ids).into()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl Encode<'_, Exasol> for Duration {
@@ -236,10 +232,6 @@ impl Type<Exasol> for Months {
     fn type_info() -> ExaTypeInfo {
         let iym = IntervalYearToMonth::new(IntervalYearToMonth::MAX_PRECISION);
         ExaDataType::IntervalYearToMonth(iym).into()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

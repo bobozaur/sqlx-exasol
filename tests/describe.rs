@@ -1,7 +1,7 @@
 #![cfg(feature = "migrate")]
 
-use sqlx_exasol::{pool::PoolConnection, Column, Executor, Type, TypeInfo};
 use sqlx_exasol::Exasol;
+use sqlx_exasol::{pool::PoolConnection, Column, Executor, Type, TypeInfo};
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {

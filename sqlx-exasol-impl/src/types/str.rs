@@ -20,10 +20,6 @@ impl Type<Exasol> for str {
         let string_like = StringLike::new(StringLike::MAX_VARCHAR_LEN, Charset::Utf8);
         ExaDataType::Varchar(string_like).into()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl Encode<'_, Exasol> for &'_ str {
@@ -57,10 +53,6 @@ impl<'r> Decode<'r, Exasol> for &'r str {
 impl Type<Exasol> for String {
     fn type_info() -> ExaTypeInfo {
         <str as Type<Exasol>>::type_info()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <str as Type<Exasol>>::compatible(ty)
     }
 }
 

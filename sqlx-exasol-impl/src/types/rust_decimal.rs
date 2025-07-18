@@ -18,16 +18,12 @@ const RUST_DECIMAL_MAX_SCALE: u32 = 28;
 
 impl Type<Exasol> for rust_decimal::Decimal {
     fn type_info() -> ExaTypeInfo {
-        // This is not a valid Exasol datatype defintion,
-        // but defining it like this means that we can accommodate
-        // almost any DECIMAL value when decoding
-        // (considering `rust_decimal` scale limitations)
+        // This is not a valid Exasol datatype defintion, but defining it like this means that we
+        // can accommodate almost any DECIMAL value when decoding (considering `rust_decimal` scale
+        // limitations)
         let precision = Decimal::MAX_PRECISION + RUST_DECIMAL_MAX_SCALE;
         let decimal = Decimal::new(precision, RUST_DECIMAL_MAX_SCALE);
         ExaDataType::Decimal(decimal).into()
-    }
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 

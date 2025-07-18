@@ -124,7 +124,9 @@ async fn it_drops_results_in_affected_rows(mut conn: PoolConnection<Exasol>) -> 
 
 #[sqlx_exasol::test]
 async fn it_selects_null(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
-    let (val,): (Option<i32>,) = sqlx_exasol::query_as("SELECT NULL").fetch_one(&mut *conn).await?;
+    let (val,): (Option<i32>,) = sqlx_exasol::query_as("SELECT NULL")
+        .fetch_one(&mut *conn)
+        .await?;
 
     assert!(val.is_none());
 

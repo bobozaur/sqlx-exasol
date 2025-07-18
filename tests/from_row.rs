@@ -1,7 +1,7 @@
 #![cfg(feature = "migrate")]
 
-use sqlx_exasol::{pool::PoolConnection, Executor, FromRow};
 use sqlx_exasol::Exasol;
+use sqlx_exasol::{pool::PoolConnection, Executor, FromRow};
 
 #[derive(Debug, FromRow, PartialEq, Eq)]
 struct TestRow {

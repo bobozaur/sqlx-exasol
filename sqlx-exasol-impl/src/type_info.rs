@@ -29,17 +29,6 @@ impl Serialize for ExaTypeInfo {
     }
 }
 
-impl ExaTypeInfo {
-    /// Checks compatibility with other data types.
-    ///
-    /// Returns true if the [`ExaTypeInfo`] instance is compatible/bigger/able to
-    /// accommodate the `other` instance.
-    #[must_use]
-    pub fn compatible(&self, other: &Self) -> bool {
-        self.data_type.compatible(&other.data_type)
-    }
-}
-
 impl From<ExaDataType> for ExaTypeInfo {
     fn from(data_type: ExaDataType) -> Self {
         let name = data_type.full_name();
@@ -72,6 +61,16 @@ impl TypeInfo for ExaTypeInfo {
     /// database does not match/fit inside the Rust data type.
     fn name(&self) -> &str {
         self.name.as_ref()
+    }
+
+    /// Checks compatibility with other data types.
+    ///
+    /// Returns true if this [`ExaTypeInfo`] instance is able to accommodate the `other` instance.
+    fn type_compatible(&self, other: &Self) -> bool
+    where
+        Self: Sized,
+    {
+        self.data_type.compatible(&other.data_type)
     }
 }
 
@@ -393,7 +392,7 @@ impl PartialOrd for Decimal {
         let scale_cmp = self.scale.partial_cmp(&other.scale);
         let diff_cmp = self_diff.partial_cmp(&other_diff);
 
-        #[allow(clippy::match_same_arms)] // false positive
+        #[allow(clippy::match_same_arms, reason = "better readability if split")]
         match (scale_cmp, diff_cmp) {
             (Some(Ordering::Greater), Some(Ordering::Greater)) => Some(Ordering::Greater),
             (Some(Ordering::Greater), Some(Ordering::Equal)) => Some(Ordering::Greater),

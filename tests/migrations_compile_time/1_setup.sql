@@ -1,8 +1,12 @@
 CREATE TABLE compile_time_tests
 (
     column_bool BOOLEAN,
-    column_integer INTEGER,
-    column_float DOUBLE PRECISION,
+    column_i8 DECIMAL(3, 0),
+    column_i16 DECIMAL(5, 0),
+    column_i32 DECIMAL(10, 0),
+    column_i64 DECIMAL(20, 0),
+    column_i128 DECIMAL(36, 0),
+    column_f64 DOUBLE PRECISION,
     column_date DATE,
     column_timestamp TIMESTAMP,
     column_timestamp_with_timezone TIMESTAMP WITH LOCAL TIME ZONE,

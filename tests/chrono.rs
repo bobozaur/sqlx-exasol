@@ -3,7 +3,9 @@
 
 mod macros;
 
-use sqlx_exasol::types::chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, Utc, Months};
+use sqlx_exasol::types::chrono::{
+    DateTime, Duration, Local, Months, NaiveDate, NaiveDateTime, Utc,
+};
 
 const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 const DATE_FMT: &str = "%Y-%m-%d";

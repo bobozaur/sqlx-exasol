@@ -13,10 +13,6 @@ impl<T> Type<Exasol> for Text<T> {
     fn type_info() -> ExaTypeInfo {
         <String as Type<Exasol>>::type_info()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <String as Type<Exasol>>::compatible(ty)
-    }
 }
 
 impl<T> Encode<'_, Exasol> for Text<T>

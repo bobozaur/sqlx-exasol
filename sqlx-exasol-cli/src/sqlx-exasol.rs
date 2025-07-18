@@ -5,7 +5,6 @@ use sqlx_exasol::any::DRIVER;
 
 #[tokio::main]
 async fn main() {
-    
     sqlx_cli::maybe_apply_dotenv();
     sqlx_exasol::any::install_drivers(&[DRIVER]).expect("driver installation failed");
     let opt = Opt::parse();

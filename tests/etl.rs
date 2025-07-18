@@ -10,13 +10,13 @@ use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
-use sqlx_exasol::{Connection, Executor};
 use sqlx_exasol::{
     error::BoxDynError,
     etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
     pool::{PoolConnection, PoolOptions},
     ExaConnectOptions, Exasol,
 };
+use sqlx_exasol::{Connection, Executor};
 
 const NUM_ROWS: usize = 1_000_000;
 

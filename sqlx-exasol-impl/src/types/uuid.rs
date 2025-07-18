@@ -18,10 +18,6 @@ impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::HashType(HashType {}).into()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl Encode<'_, Exasol> for Uuid {

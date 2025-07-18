@@ -19,6 +19,7 @@ use serde::{
     de::{DeserializeOwned, IgnoredAny},
     Serialize,
 };
+use sqlx_core::type_info::TypeInfo;
 
 use crate::{
     connection::{
@@ -110,7 +111,7 @@ impl WebSocketFuture for ExecutePrepared<'_> {
                     // and the ones expected by the database.
                     let iter = std::iter::zip(prepared.parameters.as_ref(), &self.arguments.types);
                     for (expected, provided) in iter {
-                        if !expected.compatible(provided) {
+                        if !expected.type_compatible(provided) {
                             return Err(ExaProtocolError::DatatypeMismatch(
                                 expected.name,
                                 provided.name,

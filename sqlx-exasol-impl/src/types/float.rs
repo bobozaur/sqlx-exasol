@@ -18,10 +18,6 @@ impl Type<Exasol> for f32 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Double.into()
     }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
-    }
 }
 
 impl Encode<'_, Exasol> for f32 {
@@ -56,10 +52,6 @@ impl Decode<'_, Exasol> for f32 {
 impl Type<Exasol> for f64 {
     fn type_info() -> ExaTypeInfo {
         ExaDataType::Double.into()
-    }
-
-    fn compatible(ty: &ExaTypeInfo) -> bool {
-        <Self as Type<Exasol>>::type_info().compatible(ty)
     }
 }
 
