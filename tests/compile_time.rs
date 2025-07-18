@@ -3,6 +3,8 @@
 //! cargo run -p sqlx-exasol-cli prepare -- --features runtime-tokio --tests
 //! ```
 
+extern crate sqlx_exasol as sqlx;
+
 #[ignore]
 #[sqlx_exasol::test(migrations = "tests/migrations_compile_time")]
 async fn test_compile_time_queries(
@@ -27,7 +29,7 @@ async fn test_compile_time_queries(
     )
     .execute(&mut *conn)
     .await?;
-    
+
     let _: i8 = sqlx_exasol::query_scalar!(
         r#"SELECT column_i8 as "column_i8!" FROM compile_time_tests WHERE column_i8 IS NOT NULL"#,
     )
@@ -40,7 +42,7 @@ async fn test_compile_time_queries(
     )
     .execute(&mut *conn)
     .await?;
-    
+
     let _: i16 = sqlx_exasol::query_scalar!(
         r#"SELECT column_i16 as "column_i16!" FROM compile_time_tests WHERE column_i16 IS NOT NULL"#,
     )
@@ -53,7 +55,7 @@ async fn test_compile_time_queries(
     )
     .execute(&mut *conn)
     .await?;
-    
+
     let _: i32 = sqlx_exasol::query_scalar!(
         r#"SELECT column_i32 as "column_i32!" FROM compile_time_tests WHERE column_i32 IS NOT NULL"#,
     )
@@ -72,14 +74,14 @@ async fn test_compile_time_queries(
     )
     .fetch_one(&mut *conn)
     .await?;
-    
+
     sqlx_exasol::query!(
         "INSERT INTO compile_time_tests (column_i128) VALUES(?);",
         10i128
     )
     .execute(&mut *conn)
     .await?;
-    
+
     let _: i128 = sqlx_exasol::query_scalar!(
         r#"SELECT column_i128 as "column_i128!" FROM compile_time_tests WHERE column_i128 IS NOT NULL"#,
     )
@@ -92,7 +94,21 @@ async fn test_compile_time_queries(
     )
     .execute(&mut *conn)
     .await?;
-    
+
+    let _: f64 = sqlx_exasol::query_scalar!(
+        r#"SELECT column_f64 as "column_f64!" FROM compile_time_tests WHERE column_f64 IS NOT NULL"#,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+
+    sqlx_exasol::query!(
+        "INSERT INTO compile_time_tests (column_i8, column_f64) VALUES(?, ?);",
+        vec![10i8],
+        15.3f64
+    )
+    .execute(&mut *conn)
+    .await?;
+
     let _: f64 = sqlx_exasol::query_scalar!(
         r#"SELECT column_f64 as "column_f64!" FROM compile_time_tests WHERE column_f64 IS NOT NULL"#,
     )

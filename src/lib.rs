@@ -240,5 +240,6 @@ pub use sqlx_exasol_macros;
 #[cfg(feature = "macros")]
 mod macros;
 
-// TODO:
-// - Amend PreparedStatement with a wrapper of ExaTypeInfo
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub mod ty_match;
