@@ -107,7 +107,6 @@ macro_rules! impl_for_iterator {
 }
 
 impl_for_iterator!(&[T], deref => *);
-impl_for_iterator!(&mut [T], deref => *);
 impl_for_iterator!([T; N], bounds => const N: usize);
 impl_for_iterator!(Vec<T>);
 impl_for_iterator!(Box<[T]>, deref => &**);

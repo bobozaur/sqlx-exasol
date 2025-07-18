@@ -1,6 +1,7 @@
-//! Similar module to `sqlx::ty_match` overridden so that we can allow array types in compile-time
-//! statements as well. Most of the code is identical to the original.
-use std::marker::PhantomData;
+//! Similar module to `sqlx::ty_match` overridden so that we can allow array like types in
+//! compile-time statements as well. Most of the code is identical to the original.
+
+use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 #[allow(clippy::just_underscores_and_digits)]
 pub fn same_type<T>(_1: &T, _2: &T) {}
@@ -49,6 +50,30 @@ pub trait MatchBorrowExt: Sized {
 // ######## BEGIN CUSTOM ########
 // ##############################
 
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<&'a [T]>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<&'a T, &'a [T]> {
+    type Matched = &'a T;
+}
+
+impl<'a, T, const N: usize> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<[T; N]>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<'a, T, const N: usize> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<&'a [T; N]>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<T, const N: usize> MatchBorrowExt for MatchBorrow<T, [T; N]> {
+    type Matched = T;
+}
+
+impl<'a, T, const N: usize> MatchBorrowExt for MatchBorrow<&'a T, [T; N]> {
+    type Matched = &'a T;
+}
+
 impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<Vec<T>>> {
     type Matched = Option<&'a T>;
 }
@@ -62,6 +87,54 @@ impl<T> MatchBorrowExt for MatchBorrow<T, Vec<T>> {
 }
 
 impl<'a, T> MatchBorrowExt for MatchBorrow<&'a T, Vec<T>> {
+    type Matched = &'a T;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<Box<[T]>>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<&'a Box<[T]>>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<T> MatchBorrowExt for MatchBorrow<T, Box<[T]>> {
+    type Matched = T;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<&'a T, Box<[T]>> {
+    type Matched = &'a T;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<Rc<[T]>>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<&'a Rc<[T]>>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<T> MatchBorrowExt for MatchBorrow<T, Rc<[T]>> {
+    type Matched = T;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<&'a T, Rc<[T]>> {
+    type Matched = &'a T;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<Arc<[T]>>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<Option<&'a T>, Option<&'a Arc<[T]>>> {
+    type Matched = Option<&'a T>;
+}
+
+impl<T> MatchBorrowExt for MatchBorrow<T, Arc<[T]>> {
+    type Matched = T;
+}
+
+impl<'a, T> MatchBorrowExt for MatchBorrow<&'a T, Arc<[T]>> {
     type Matched = &'a T;
 }
 
