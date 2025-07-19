@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 use sqlx_core::{
     database::Database,
@@ -9,12 +9,15 @@ use sqlx_core::{
 
 use crate::{arguments::ExaBuffer, Exasol};
 
-/// Adapter allowing any iterator of encodable values to be passed as a parameter array for a column
-/// to Exasol in a single query invocation. The adapter is needed because [`Encode`] is still a
-/// foreign trait and thus cannot be implemented in a generic manner.
+/// Adapter allowing any iterator of encodable values to be treated and passed as a one dimensional
+/// parameter array for a column to Exasol in a single query invocation. Multi dimensional arrays
+/// are not supported. The adapter is needed because [`Encode`] is still a foreign trait and thus
+/// cannot be implemented in a generic manner.
 ///
 /// Note that the [`Encode`] trait requires the ability to encode by reference, thus the adapter
-/// takes a reference that must implement [`IntoIterator`].
+/// takes a reference that implements [`IntoIterator`]. But since iteration requires mutability,
+/// the adaptar also requires [`Clone`]. The adapter definition should steer it towards being used
+/// with cheaply clonable iterators since it expects the iteration elements to be references.
 ///
 /// ```rust
 /// # use sqlx_exasol_impl as sqlx_exasol;
@@ -25,47 +28,53 @@ use crate::{arguments::ExaBuffer, Exasol};
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct ExaIter<'i, I>(&'i I)
+pub struct ExaIter<'i, I, T>
 where
-    I: ?Sized,
-    &'i I: IntoIterator,
-    <&'i I as IntoIterator>::Item: for<'q> Encode<'q, Exasol> + Type<Exasol>;
-
-impl<'i, I> ExaIter<'i, I>
-where
-    I: ?Sized,
-    &'i I: IntoIterator,
-    <&'i I as IntoIterator>::Item: for<'q> Encode<'q, Exasol> + Type<Exasol>,
+    I: IntoIterator<Item = &'i T> + Clone,
+    T: 'i,
 {
-    pub fn new(into_iter: &'i I) -> Self {
-        Self(into_iter)
+    into_iter: I,
+    data_lifetime: PhantomData<&'i ()>,
+}
+
+impl<'i, 'q, I, T> ExaIter<'i, I, T>
+where
+    I: IntoIterator<Item = &'i T> + Clone,
+    T: 'i + Type<Exasol> + Encode<'q, Exasol>,
+    'i: 'q,
+{
+    pub fn new(into_iter: I) -> Self {
+        Self {
+            into_iter,
+            data_lifetime: PhantomData,
+        }
     }
 }
 
-impl<'i, I> Type<Exasol> for ExaIter<'i, I>
+impl<'i, I, T> Type<Exasol> for ExaIter<'i, I, T>
 where
-    I: ?Sized,
-    &'i I: IntoIterator,
-    <&'i I as IntoIterator>::Item: for<'q> Encode<'q, Exasol> + Type<Exasol>,
+    I: IntoIterator<Item = &'i T> + Clone,
+    T: 'i + Type<Exasol>,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
-        <&'i I as IntoIterator>::Item::type_info()
+        <I as IntoIterator>::Item::type_info()
     }
 }
 
-impl<'i, I> Encode<'_, Exasol> for ExaIter<'i, I>
+impl<'i, 'q, I, T> Encode<'q, Exasol> for ExaIter<'i, I, T>
 where
-    I: ?Sized,
-    &'i I: IntoIterator,
-    <&'i I as IntoIterator>::Item: for<'q> Encode<'q, Exasol> + Type<Exasol>,
+    I: IntoIterator<Item = &'i T> + Clone,
+    T: 'i + Encode<'q, Exasol>,
+    'i: 'q,
 {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append_iter(self.0)?;
+        buf.append_iter(self.into_iter.clone())?;
         Ok(IsNull::No)
     }
 
     fn size_hint(&self) -> usize {
-        self.0
+        self.into_iter
+            .clone()
             .into_iter()
             .fold(0, |sum, item| sum + item.size_hint())
     }

@@ -3,6 +3,8 @@
 //! cargo run -p sqlx-exasol-cli prepare -- --features runtime-tokio --tests
 //! ```
 
+use sqlx_exasol::types::ExaIter;
+
 extern crate sqlx_exasol as sqlx;
 
 #[ignore]
@@ -103,7 +105,7 @@ async fn test_compile_time_queries(
 
     sqlx_exasol::query!(
         "INSERT INTO compile_time_tests (column_i8, column_f64) VALUES(?, ?);",
-        vec![10i8],
+        ExaIter::new([Some(10i8)].iter()),
         15.3f64
     )
     .execute(&mut *conn)

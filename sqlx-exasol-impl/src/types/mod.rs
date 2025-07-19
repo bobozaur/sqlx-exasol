@@ -17,5 +17,4 @@ mod uuid;
 pub use ::chrono::Duration;
 #[cfg(feature = "chrono")]
 pub use chrono::Months;
-
 pub use iter::ExaIter;

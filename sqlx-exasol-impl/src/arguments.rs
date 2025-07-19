@@ -77,7 +77,7 @@ impl ExaBuffer {
     pub fn append_iter<'q, I, T>(&mut self, iter: I) -> Result<(), BoxDynError>
     where
         I: IntoIterator<Item = T>,
-        T: 'q + Encode<'q, Exasol> + Type<Exasol>,
+        T: 'q + Encode<'q, Exasol>,
     {
         let mut iter = iter.into_iter();
 

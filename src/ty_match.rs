@@ -3,6 +3,8 @@
 
 use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
+use sqlx_exasol_impl::types::ExaIter;
+
 #[allow(clippy::just_underscores_and_digits)]
 pub fn same_type<T>(_1: &T, _2: &T) {}
 
@@ -136,6 +138,34 @@ impl<T> MatchBorrowExt for MatchBorrow<T, Arc<[T]>> {
 
 impl<'a, T> MatchBorrowExt for MatchBorrow<&'a T, Arc<[T]>> {
     type Matched = &'a T;
+}
+
+impl<'i, I, T> MatchBorrowExt for MatchBorrow<T, ExaIter<'i, I, Option<T>>>
+where
+    I: IntoIterator<Item = &'i Option<T>> + Clone,
+{
+    type Matched = T;
+}
+
+impl<'i, I, T> MatchBorrowExt for MatchBorrow<&'i T, ExaIter<'i, I, Option<T>>>
+where
+    I: IntoIterator<Item = &'i Option<T>> + Clone,
+{
+    type Matched = &'i T;
+}
+
+impl<'i, I, T> MatchBorrowExt for MatchBorrow<T, ExaIter<'i, I, T>>
+where
+    I: IntoIterator<Item = &'i T> + Clone,
+{
+    type Matched = T;
+}
+
+impl<'i, I, T> MatchBorrowExt for MatchBorrow<&'i T, ExaIter<'i, I, T>>
+where
+    I: IntoIterator<Item = &'i T> + Clone,
+{
+    type Matched = &'i T;
 }
 
 // ##############################
