@@ -5,8 +5,9 @@ CREATE TABLE compile_time_tests
     column_i16 DECIMAL(5, 0),
     column_i32 DECIMAL(10, 0),
     column_i64 DECIMAL(20, 0),
-    column_i128 DECIMAL(36, 0),
     column_f64 DOUBLE PRECISION,
+    column_char CHAR(16),
+    column_varchar VARCHAR(16)
     column_date DATE,
     column_timestamp TIMESTAMP,
     column_timestamp_with_timezone TIMESTAMP WITH LOCAL TIME ZONE,
@@ -14,6 +15,4 @@ CREATE TABLE compile_time_tests
     column_months INTERVAL YEAR TO MONTH,
     column_geometry GEOMETRY,
     column_uuid HASHTYPE(16 BYTE),
-    column_char CHAR(16),
-    column_varchar VARCHAR(16)
 );

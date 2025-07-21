@@ -5,7 +5,6 @@ mod macros;
 
 use std::iter;
 
-use anyhow::Result as AnyResult;
 use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
@@ -14,9 +13,8 @@ use sqlx_exasol::{
     error::BoxDynError,
     etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
     pool::{PoolConnection, PoolOptions},
-    ExaConnectOptions, Exasol,
+    Connection, ExaConnectOptions, Exasol, Executor,
 };
-use sqlx_exasol::{Connection, Executor};
 
 const NUM_ROWS: usize = 1_000_000;
 
@@ -130,7 +128,7 @@ test_etl!(
 // ##########################################
 #[ignore]
 #[sqlx_exasol::test]
-async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -155,7 +153,7 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
 
 #[ignore]
 #[sqlx_exasol::test]
-async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -182,7 +180,9 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
 
 #[ignore]
 #[sqlx_exasol::test]
-async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+async fn test_etl_transaction_import_rollback(
+    mut conn: PoolConnection<Exasol>,
+) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -214,7 +214,9 @@ async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) 
 
 #[ignore]
 #[sqlx_exasol::test]
-async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+async fn test_etl_transaction_import_commit(
+    mut conn: PoolConnection<Exasol>,
+) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -251,9 +253,9 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // // This will thus fail, because Exasol will just keep sending new requests.
 // #[ignore]
 // #[sqlx_exasol::test]
-// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 //
-//     async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
+//     async fn pipe_close_writers(mut writer: ExaImport) -> anyhow::Result<()> {
 //         writer.close().await?;
 //         Ok(())
 //     }
@@ -286,7 +288,7 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // ############### Utilities ################
 // ##########################################
 
-async fn read_data(mut reader: ExaExport) -> AnyResult<()> {
+async fn read_data(mut reader: ExaExport) -> anyhow::Result<()> {
     let mut buf = String::new();
     reader.read_to_string(&mut buf).await?;
     Ok(())
@@ -309,7 +311,7 @@ async fn drop_some_readers(idx: usize, mut reader: ExaExport) -> Result<(), BoxD
     Ok(())
 }
 
-async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
+async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
     // test if flushing is fine even before any write.
     writer.flush().await?;
 
@@ -322,7 +324,7 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
     Ok(())
 }
 
-async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
+async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
     let mut buf = vec![0; 5120].into_boxed_slice();
     let mut read = 1;
 

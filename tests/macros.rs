@@ -138,7 +138,7 @@ macro_rules! test_etl {
             $(#[$attr]),*
             #[ignore]
             #[sqlx_exasol::test]
-            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> AnyResult<()> {
+            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> anyhow::Result<()> {
                 let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
 
                 let mut conn1 = pool.acquire().await?;
@@ -197,3 +197,115 @@ macro_rules! test_etl_multi_threaded {
             $crate::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  sqlx_exasol::__rt::spawn(pipe(r, w)), $export, $import, $(#[$attr]),*);
         }
     }
+
+#[macro_export]
+macro_rules! test_compile_time_type {
+    ($col:ident, $ty:tt, $value:expr, $insert:expr, $select:expr) => {
+        paste::item! {
+            #[ignore]
+            #[sqlx_exasol::test(migrations = "tests/migrations_compile_time")]
+            async fn [< test_compile_time_ $col >](
+                mut conn: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
+            ) -> anyhow::Result<()> {
+                use sqlx_exasol::types::ExaIter;
+                
+                let value = $value;
+
+                sqlx_exasol::query!($insert, value.clone())
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, &value)
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, Some(value.clone()))
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, Some(&value))
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, vec![value.clone()])
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, vec![&value])
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, vec![Some(value.clone())])
+                .execute(&mut *conn)
+                .await?;
+
+                sqlx_exasol::query!($insert, vec![Some(&value)])
+                .execute(&mut *conn)
+                .await?;
+                
+                let arr = [value.clone(); 1];
+                sqlx_exasol::query!($insert, arr.as_slice())
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, ExaIter::new(arr.iter().filter(|_| true)))
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, arr)
+                .execute(&mut *conn)
+                .await?;
+
+                let arr_ref = [&value; 1];
+                sqlx_exasol::query!($insert, arr_ref.as_slice())
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, ExaIter::new(arr_ref.iter().filter(|_| true).map(|v| *v)))
+                .execute(&mut *conn)
+                .await?;
+                
+                let arr_ref = [&value; 1];
+                sqlx_exasol::query!($insert, arr_ref)
+                .execute(&mut *conn)
+                .await?;
+
+                let opt_arr = [Some(value.clone()); 1];
+                sqlx_exasol::query!($insert, opt_arr.as_slice())
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, ExaIter::new(opt_arr.iter().filter(|_| true)))
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, opt_arr)
+                .execute(&mut *conn)
+                .await?;
+
+                let opt_arr_ref = [Some(&value); 1];
+                sqlx_exasol::query!($insert, opt_arr_ref.as_slice())
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, ExaIter::new(opt_arr_ref.iter().filter(|_| true)))
+                .execute(&mut *conn)
+                .await?;
+                
+                sqlx_exasol::query!($insert, opt_arr_ref)
+                .execute(&mut *conn)
+                .await?;
+
+                let _: Vec<Option<$ty>> = sqlx_exasol::query_scalar!($select)
+                .fetch_all(&mut *conn)
+                .await?;
+
+                Ok(())
+            }
+        }
+    };
+
+    ($ty:tt, $value:expr, $insert:literal, $select:literal) => {
+        test_compile_time_type!($ty, $ty, $value, $insert, $select);
+    };
+}
