@@ -1,6 +1,6 @@
 [package]
 name = "sqlx-exasol"
-version = "0.8.6"
+version = "0.8.6-hotfix1"
 edition = "2021"
 authors = ["bobozaur"]
 rust-version = "1.82.0"
