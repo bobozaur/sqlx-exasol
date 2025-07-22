@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Removed the boxing of `EtlQuery` future
   - Made `ExaAttributes::set_autocommit` private
   - Created wrapper structs `ExaImport` and `ExaExport` to avoid exposing enum variants
+  
+## [0.8.6-hotfix1] - 2025-07-22
+
+### Fixed
+
+- [36](https://github.com/bobozaur/sqlx-exasol/issues/36) Fix chunked result set streaming
 
 ## [0.8.6] - 2025-06-03
 
