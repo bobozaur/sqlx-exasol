@@ -599,3 +599,29 @@ async fn test_multi_statement_in_fetch(mut con: PoolConnection<Exasol>) -> Resul
 
     Ok(())
 }
+
+#[sqlx::test]
+async fn it_works_on_large_datasets(mut con: PoolConnection<Exasol>) -> anyhow::Result<()> {
+    sqlx::query("CREATE TABLE large_dataset (col1 VARCHAR(20), col2 VARCHAR(20));")
+        .execute(&mut *con)
+        .await?;
+
+    let data = vec!["test"; 100_000];
+
+    for _ in 0..50 {
+        sqlx::query("INSERT INTO large_dataset VALUES(?, ?);")
+            .bind(&data)
+            .bind(&data)
+            .execute(&mut *con)
+            .await?;
+    }
+
+    let mut rows = sqlx::query("SELECT col1, col2 FROM large_dataset").fetch(&mut *con);
+
+    while let Some(row_result) = rows.try_next().await? {
+        let row = row_result;
+        let _: String = row.get("col1");
+        let _: String = row.get("col2");
+    }
+    Ok(())
+}
