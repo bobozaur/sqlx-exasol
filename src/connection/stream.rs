@@ -423,7 +423,7 @@ impl WebsocketStream for MultiChunkStream {
                     let chunk = ready!(future.poll_unpin(cx, ws))?;
 
                     self.total_rows_pos += chunk.num_rows;
-                    let future = FetchChunk::new(self.handle, self.total_rows_num, num_bytes);
+                    let future = FetchChunk::new(self.handle, self.total_rows_pos, num_bytes);
                     self.state = MultiChunkStreamState::Polling(future);
 
                     return Poll::Ready(Some(Ok(chunk)));
