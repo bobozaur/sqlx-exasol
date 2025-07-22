@@ -208,7 +208,7 @@ macro_rules! test_compile_time_type {
                 mut conn: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
             ) -> anyhow::Result<()> {
                 use sqlx_exasol::types::ExaIter;
-                
+
                 let value = $value;
 
                 sqlx_exasol::query!($insert, value.clone())
@@ -242,16 +242,16 @@ macro_rules! test_compile_time_type {
                 sqlx_exasol::query!($insert, vec![Some(&value)])
                 .execute(&mut *conn)
                 .await?;
-                
+
                 let arr = [value.clone(); 1];
                 sqlx_exasol::query!($insert, arr.as_slice())
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, ExaIter::new(arr.iter().filter(|_| true)))
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, arr)
                 .execute(&mut *conn)
                 .await?;
@@ -260,11 +260,11 @@ macro_rules! test_compile_time_type {
                 sqlx_exasol::query!($insert, arr_ref.as_slice())
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, ExaIter::new(arr_ref.iter().filter(|_| true).map(|v| *v)))
                 .execute(&mut *conn)
                 .await?;
-                
+
                 let arr_ref = [&value; 1];
                 sqlx_exasol::query!($insert, arr_ref)
                 .execute(&mut *conn)
@@ -274,11 +274,11 @@ macro_rules! test_compile_time_type {
                 sqlx_exasol::query!($insert, opt_arr.as_slice())
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, ExaIter::new(opt_arr.iter().filter(|_| true)))
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, opt_arr)
                 .execute(&mut *conn)
                 .await?;
@@ -287,11 +287,11 @@ macro_rules! test_compile_time_type {
                 sqlx_exasol::query!($insert, opt_arr_ref.as_slice())
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, ExaIter::new(opt_arr_ref.iter().filter(|_| true)))
                 .execute(&mut *conn)
                 .await?;
-                
+
                 sqlx_exasol::query!($insert, opt_arr_ref)
                 .execute(&mut *conn)
                 .await?;

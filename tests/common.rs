@@ -4,10 +4,9 @@ use std::iter::zip;
 
 use futures_util::TryStreamExt;
 use sqlx_exasol::{
-    error::BoxDynError, pool::PoolConnection, Column, Connection, Executor, Row, Statement,
-    TypeInfo,
+    error::BoxDynError, pool::PoolConnection, Column, Connection, ExaConnection, ExaPool,
+    ExaPoolOptions, ExaQueryResult, ExaRow, Exasol, Executor, Row, Statement, TypeInfo,
 };
-use sqlx_exasol::{ExaConnection, ExaPool, ExaPoolOptions, ExaQueryResult, ExaRow, Exasol};
 
 #[sqlx_exasol::test]
 async fn it_connects(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {

@@ -2,8 +2,7 @@
 
 use std::path::Path;
 
-use sqlx_exasol::{migrate::Migrator, pool::PoolConnection, Executor, Row};
-use sqlx_exasol::{ExaConnection, Exasol};
+use sqlx_exasol::{migrate::Migrator, pool::PoolConnection, ExaConnection, Exasol, Executor, Row};
 
 #[sqlx_exasol::test(migrations = false)]
 async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {

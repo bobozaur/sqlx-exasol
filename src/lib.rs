@@ -56,8 +56,8 @@
 //! - [`f32`], [`f64`]
 //! - [`str`], [`String`], [`std::borrow::Cow<str>`]
 //! - `chrono` feature: [`chrono::DateTime<Utc>`], [`chrono::DateTime<Utc>`],
-//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`], [`crate::types::chrono::Months`] (analog of
-//!   [`chrono::Months`])
+//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`],
+//!   [`crate::types::chrono::Months`] (analog of [`chrono::Months`])
 //! - `uuid` feature: [`uuid::Uuid`]
 //! - `rust_decimal` feature: [`rust_decimal::Decimal`]
 //!

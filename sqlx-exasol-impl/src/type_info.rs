@@ -281,7 +281,8 @@ impl StringLike {
         self.character_set
     }
 
-    /// Strings are complex and ensuring one fits inside a database column would imply a lot of overhead.
+    /// Strings are complex and ensuring one fits inside a database column would imply a lot of
+    /// overhead.
     ///
     /// So just let the database do its thing and throw an error.
     #[allow(clippy::unused_self)]
