@@ -14,5 +14,5 @@ CREATE TABLE compile_time_tests
     column_duration INTERVAL DAY TO SECOND,
     column_months INTERVAL YEAR TO MONTH,
     column_geometry GEOMETRY,
-    column_uuid HASHTYPE(16 BYTE),
+    column_uuid HASHTYPE(16 BYTE)
 );
