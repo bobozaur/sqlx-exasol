@@ -7,7 +7,7 @@ CREATE TABLE compile_time_tests
     column_i64 DECIMAL(20, 0),
     column_f64 DOUBLE PRECISION,
     column_char CHAR(16),
-    column_varchar VARCHAR(16)
+    column_varchar VARCHAR(16),
     column_date DATE,
     column_timestamp TIMESTAMP,
     column_timestamp_with_timezone TIMESTAMP WITH LOCAL TIME ZONE,
