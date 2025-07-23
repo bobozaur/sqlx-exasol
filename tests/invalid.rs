@@ -3,6 +3,11 @@
 mod macros;
 
 // Test incompatible types
+test_type_invalid!(i8_into_smaller<i8>::"DECIMAL(1, 0)"::(-5i8, 5i8));
+test_type_invalid!(i16_into_smaller<i16>::"DECIMAL(3, 0)"::(-12i16, 12i16));
+test_type_invalid!(i32_into_smaller<i32>::"DECIMAL(7, 0)"::(-12345i32, 12345i32));
+test_type_invalid!(i64_into_smaller<i64>::"DECIMAL(15, 0)"::(-1_234_567_890i64, 1_234_567_890i64));
+
 test_type_invalid!(i16_into_i8<i16>::"DECIMAL(3,0)"::(i16::MAX));
 test_type_invalid!(i32_into_i8<i32>::"DECIMAL(3,0)"::(i32::MAX));
 test_type_invalid!(i32_into_i16<i32>::"DECIMAL(5,0)"::(i32::MAX));

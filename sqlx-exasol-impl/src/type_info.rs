@@ -330,31 +330,28 @@ impl Display for Charset {
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Decimal {
-    precision: u32,
-    scale: u32,
+    precision: u8,
+    scale: u8,
 }
 
 impl Decimal {
-    pub const MAX_8BIT_PRECISION: u32 = 3;
-    pub const MAX_16BIT_PRECISION: u32 = 5;
-    pub const MAX_32BIT_PRECISION: u32 = 10;
-    pub const MAX_64BIT_PRECISION: u32 = 20;
-    pub const MAX_PRECISION: u32 = 36;
-    pub const MAX_SCALE: u32 = 36;
+    /// Special value used along with actual decimal types.
+    /// Because those types can hold virtually any Exasol DECIMAL value while also being encodable
+    /// we need a way to "turn off" compatibility checks sometimes.
+    pub(crate) const SENTINEL_VALUE: u8 = u8::MAX;
+    pub(crate) const MAX_8BIT_PRECISION: u8 = 3;
+    pub(crate) const MAX_16BIT_PRECISION: u8 = 5;
+    pub(crate) const MAX_32BIT_PRECISION: u8 = 10;
+    pub(crate) const MAX_64BIT_PRECISION: u8 = 20;
 
-    pub fn new(precision: u32, scale: u32) -> Self {
+    pub const MAX_PRECISION: u8 = 36;
+    pub const MAX_SCALE: u8 = 36;
+
+    pub(crate) fn new(precision: u8, scale: u8) -> Self {
         Self { precision, scale }
     }
 
-    pub fn precision(self) -> u32 {
-        self.precision
-    }
-
-    pub fn scale(self) -> u32 {
-        self.scale
-    }
-
-    pub fn compatible(self, ty: &ExaDataType) -> bool {
+    fn compatible(self, ty: &ExaDataType) -> bool {
         match ty {
             ExaDataType::Decimal(d) => self >= *d,
             ExaDataType::Double => self.scale > 0,
@@ -381,8 +378,15 @@ impl Decimal {
 /// - if a.scale > b.scale, a > b if and only if (a.precision - a.scale) >= (b.precision - b.scale)
 /// - if a.scale == b.scale, a == b if and only if (a.precision - a.scale) == (b.precision - b.scale)
 /// - if a.scale < b.scale, a < b if and only if (a.precision - a.scale) <= (b.precision - b.scale)
+///
+/// However, decimal Rust types require special handling because they can hold virtually any decoded value.
+/// Therefore, encountering the [`Decimal::SENTINEL_VALUE`] precision means that the comparison must be skipped.
 impl PartialOrd for Decimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if other.precision == Decimal::SENTINEL_VALUE {
+            return Some(Ordering::Greater);
+        }
+
         let self_diff = self.precision - self.scale;
         let other_diff = other.precision - other.scale;
 

@@ -14,12 +14,11 @@ use crate::{
 };
 
 impl Type<Exasol> for rust_decimal::Decimal {
+    #[allow(clippy::cast_possible_truncation)]
     fn type_info() -> ExaTypeInfo {
-        // This is not a valid Exasol datatype defintion, but defining it like this means that we
-        // can accommodate almost any DECIMAL value when decoding (considering `rust_decimal` scale
-        // limitations)
-        let precision = Decimal::MAX_PRECISION + rust_decimal::Decimal::MAX_SCALE;
-        let decimal = Decimal::new(precision, rust_decimal::Decimal::MAX_SCALE);
+        // A somewhat non-sensical value used to allow decoding any DECIMAL value
+        // with a supported scale.
+        let decimal = Decimal::new(Decimal::SENTINEL_VALUE, rust_decimal::Decimal::MAX_SCALE as u8);
         ExaDataType::Decimal(decimal).into()
     }
 }

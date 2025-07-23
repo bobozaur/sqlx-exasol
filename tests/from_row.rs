@@ -16,7 +16,7 @@ async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
         CREATE TABLE TEST_FROM_ROW (
             name VARCHAR(200),
             age DECIMAL(3, 0),
-            amount DECIMAL(15, 0)
+            amount DECIMAL(20, 0)
          );",
     )
     .await?;

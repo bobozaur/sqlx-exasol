@@ -127,7 +127,7 @@
 //!
 //! sqlx_exasol::query("INSERT INTO MY_TABLE VALUES (?, ?)")
 //!     .bind(&params1)
-//!     .bind(types::ExaIter::from(&params2))
+//!     .bind(types::ExaIter::new(params2.iter()))
 //!     .execute(&mut *con)
 //!     .await?;
 //! #

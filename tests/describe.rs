@@ -16,10 +16,10 @@ async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
     assert_eq!(d.nullable(2), None);
     assert_eq!(d.nullable(3), None);
 
-    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(18, 0)");
+    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(20, 0)");
     assert_eq!(d.columns()[1].type_info().name(), "TIMESTAMP");
     assert_eq!(d.columns()[2].type_info().name(), "VARCHAR(2000000) UTF8");
-    assert_eq!(d.columns()[3].type_info().name(), "DECIMAL(18, 0)");
+    assert_eq!(d.columns()[3].type_info().name(), "DECIMAL(20, 0)");
 
     Ok(())
 }

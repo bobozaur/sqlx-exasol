@@ -128,7 +128,7 @@ jobs:
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features runtime-tokio,migrate,bigdecimal,chrono,rust_decimal,time,uuid -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
@@ -168,7 +168,7 @@ jobs:
 
       - name: Integration TLS connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,tls-native-tls,migrate,rust_decimal,uuid,chrono -- --nocapture
+        run: cargo test --features runtime-tokio,tls-native-tls,migrate,bigdecimal,chrono,rust_decimal,time,uuid -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.tls-url }}
 

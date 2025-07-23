@@ -16,10 +16,8 @@ use crate::{
 
 impl Type<Exasol> for BigDecimal {
     fn type_info() -> ExaTypeInfo {
-        // This is not a valid Exasol datatype defintion, but defining it like this means that we
-        // can accommodate any DECIMAL value when decoding.
-        let precision = Decimal::MAX_PRECISION + Decimal::MAX_SCALE;
-        let decimal = Decimal::new(precision, Decimal::MAX_SCALE);
+        // A somewhat non-sensical value used to allow decoding any DECIMAL value.
+        let decimal = Decimal::new(Decimal::SENTINEL_VALUE, Decimal::SENTINEL_VALUE);
         ExaDataType::Decimal(decimal).into()
     }
 }

@@ -16,12 +16,9 @@ use crate::{
     value::ExaValueRef,
 };
 
-const MIN_I64_NUMERIC: i64 = -999_999_999_999_999_999;
-const MAX_I64_NUMERIC: i64 = 1_000_000_000_000_000_000;
-
 /// Numbers within this range must be serialized/deserialized as integers.
 /// The ones above/under these thresholds are treated as strings.
-const NUMERIC_I64_RANGE: Range<i64> = MIN_I64_NUMERIC..MAX_I64_NUMERIC;
+const NUMERIC_I64_RANGE: Range<i64> = -999_999_999_999_999_999..1_000_000_000_000_000_000;
 
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {

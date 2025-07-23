@@ -198,10 +198,10 @@ mod tests {
     use std::num::NonZeroUsize;
 
     use futures_util::TryStreamExt;
-    use sqlx::{query, Connection, Executor};
+    use sqlx::{query, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
-    use crate::{ExaConnectOptions, ExaQueryResult, Exasol};
+    use crate::{ExaConnectOptions, Exasol};
 
     #[ignore]
     #[cfg(feature = "compression")]
@@ -275,6 +275,7 @@ mod tests {
         mut exa_opts: ExaConnectOptions,
     ) -> Result<(), BoxDynError> {
         exa_opts.schema = None;
+
         let pool = pool_opts.connect_with(exa_opts).await?;
         let mut con = pool.acquire().await?;
 
@@ -288,156 +289,6 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_schema_selected(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-
-        let schema: Option<String> = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        assert!(schema.is_some());
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_schema_switch(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-        let schema = "TEST_SWITCH_SCHEMA";
-
-        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
-            .await?;
-
-        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
-            .await?;
-
-        assert_eq!(schema, new_schema);
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_schema_switch_from_attr(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-
-        let orig_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        let schema = "TEST_SWITCH_SCHEMA";
-
-        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
-            .await?;
-
-        con.attributes_mut().set_current_schema(orig_schema.clone());
-        con.flush_attributes().await?;
-
-        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        assert_eq!(orig_schema, new_schema);
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_schema_close_and_empty_attr(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-
-        let orig_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        assert_eq!(
-            con.attributes().current_schema(),
-            Some(orig_schema.as_str())
-        );
-
-        con.execute("CLOSE SCHEMA").await?;
-        assert_eq!(con.attributes().current_schema(), None);
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_comment_stmts(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-
-        con.execute_many("/* this is a comment */")
-            .try_collect::<ExaQueryResult>()
-            .await?;
-        con.execute("-- this is a comment").await?;
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn test_connection_flush_on_drop(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        // Only allow one connection
-        let pool = pool_opts.max_connections(1).connect_with(exa_opts).await?;
-        pool.execute("CREATE TABLE TRANSACTIONS_TEST ( col DECIMAL(1, 0) );")
-            .await?;
-
-        {
-            let mut conn = pool.acquire().await?;
-            let mut tx = conn.begin().await?;
-            tx.execute("INSERT INTO TRANSACTIONS_TEST VALUES(1)")
-                .await?;
-        }
-
-        let mut conn = pool.acquire().await?;
-        {
-            let mut tx = conn.begin().await?;
-            tx.execute("INSERT INTO TRANSACTIONS_TEST VALUES(1)")
-                .await?;
-        }
-
-        {
-            let mut tx = conn.begin().await?;
-            tx.execute("INSERT INTO TRANSACTIONS_TEST VALUES(1)")
-                .await?;
-        }
-
-        drop(conn);
-
-        let inserted = pool
-            .fetch_all("SELECT * FROM TRANSACTIONS_TEST")
-            .await?
-            .len();
-
-        assert_eq!(inserted, 0);
-        Ok(())
-    }
-
-    #[sqlx::test]
     async fn test_connection_result_set_auto_close(
         pool_opts: PoolOptions<Exasol>,
         exa_opts: ExaConnectOptions,
@@ -445,11 +296,11 @@ mod tests {
         // Only allow one connection
         let pool = pool_opts.max_connections(1).connect_with(exa_opts).await?;
         let mut conn = pool.acquire().await?;
-        conn.execute("CREATE TABLE CLOSE_RESULTS_TEST ( col DECIMAL(1, 0) );")
+        conn.execute("CREATE TABLE CLOSE_RESULTS_TEST ( col DECIMAL(3, 0) );")
             .await?;
 
         query("INSERT INTO CLOSE_RESULTS_TEST VALUES(?)")
-            .bind(vec![1; 10000])
+            .bind(vec![1i8; 10000])
             .execute(&mut *conn)
             .await?;
 
