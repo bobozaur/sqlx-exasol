@@ -35,11 +35,11 @@ features = [
 ]
 
 [features]
-default = ["any", "macros", "migrate"]
+default = ["any", "macros", "migrate", "json"]
 
-derive = ["sqlx/derive"]
-macros = ["sqlx/macros", "sqlx-exasol-impl/macros", "dep:sqlx-exasol-macros"]
-migrate = ["sqlx/migrate", "sqlx-exasol-impl/migrate"]
+derive = ["sqlx/derive", "sqlx-exasol-macros?/derive"]
+macros = ["derive", "sqlx/macros", "sqlx-exasol-macros/macros"]
+migrate = ["sqlx/migrate", "sqlx-exasol-impl/migrate", "sqlx-exasol-macros?/migrate"]
 
 # Base runtime features without TLS
 runtime-async-std = ["sqlx/runtime-async-std"]
@@ -63,8 +63,11 @@ tls-rustls-ring-native-roots = [
 any = ["sqlx/any", "sqlx-exasol-impl/any"]
 
 # Types
+bigdecimal = ["sqlx/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
 chrono = ["sqlx/chrono", "sqlx-exasol-impl/chrono"]
+json = ["sqlx/json", "sqlx-exasol-impl/json"]
 rust_decimal = ["sqlx/rust_decimal", "sqlx-exasol-impl/rust_decimal"]
+time = ["sqlx/time", "sqlx-exasol-impl/time"]
 uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid"]
 
 # Driver specific features
@@ -90,6 +93,10 @@ async-tungstenite = { version = "0.29", default-features = false, features = [
     "futures-03-sink",
 ] }
 base64 = { version = "0.22", default-features = false }
+bigdecimal = { version = "0.4", default-features = false, features = [
+    "std",
+    "serde-json",
+] }
 chrono = { version = "0.4", default-features = false, features = ["serde"] }
 clap = { version = "4", default-features = false, features = ["derive"] }
 console = { version = "0.15", default-features = false }
@@ -132,6 +139,13 @@ syn = { version = "2", default-features = false, features = [
     "proc-macro",
 ] }
 thiserror = { version = "1", default-features = false }
+time = { version = "0.3", default-features = false, features = [
+    "std",
+    "serde",
+    "formatting",
+    "parsing",
+    "macros",
+] }
 tokio = { version = "1", default-features = false, features = [
     "rt-multi-thread",
 ] }

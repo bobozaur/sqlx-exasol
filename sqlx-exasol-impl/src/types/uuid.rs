@@ -26,13 +26,9 @@ impl Encode<'_, Exasol> for Uuid {
         Ok(IsNull::No)
     }
 
-    fn produces(&self) -> Option<ExaTypeInfo> {
-        Some(ExaDataType::HashType(HashType {}).into())
-    }
-
     fn size_hint(&self) -> usize {
-        // 16 bytes encoded as HEX, so double
-        32
+        // Serialized as string so: 2 * 16 HEX bytes + 4 dashes + 2 quotes
+        38
     }
 }
 

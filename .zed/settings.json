@@ -13,8 +13,10 @@
             "macros",
             "any",
             // Types
+            "bigdecimal",
             "chrono",
             "rust_decimal",
+            "time",
             "uuid",
             // Driver
             "etl",

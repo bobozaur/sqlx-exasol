@@ -164,11 +164,11 @@ macro_rules! test_etl {
                 assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
                 assert_eq!(NUM_ROWS as u64, import_res.rows_affected(), "imported rows");
 
-                let num_rows: u64 = sqlx_exasol::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
+                let num_rows: i64 = sqlx_exasol::query_scalar(concat!("SELECT COUNT(*) FROM ", $table))
                     .fetch_one(&mut *conn1)
                     .await?;
 
-                assert_eq!(num_rows, 2 * NUM_ROWS as u64, "export + import rows");
+                assert_eq!(num_rows, 2 * NUM_ROWS as i64, "export + import rows");
 
                 Ok(())
             }

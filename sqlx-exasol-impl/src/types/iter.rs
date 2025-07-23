@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, rc::Rc, sync::Arc};
+use std::marker::PhantomData;
 
 use sqlx_core::{
     database::Database,
@@ -68,51 +68,77 @@ where
     }
 
     fn size_hint(&self) -> usize {
-        self.into_iter
+        // Brackets [] + items size
+        2 + self
+            .into_iter
             .clone()
             .into_iter()
             .fold(0, |sum, item| sum + item.size_hint())
     }
 }
 
-macro_rules! impl_for_iterator {
-    ($ty:ty, deref => { $($deref:tt)* }, bounds => $($bounds:tt)*) => {
-        impl<T, $($bounds)* > Type<Exasol> for $ty
-        where
-        T: Type<Exasol>,
-        {
-            fn type_info() -> <Exasol as Database>::TypeInfo {
-                T::type_info()
-            }
-        }
-
-        impl<T, $($bounds)* > Encode<'_, Exasol> for $ty
-        where
-        for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
-        {
-            fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-                ExaIter::new($($deref)* self).encode_by_ref(buf)
-            }
-
-            fn size_hint(&self) -> usize {
-                ExaIter::new($($deref)* self).size_hint()
-            }
-        }
-    };
-    ($ty:ty, bounds => $($bounds:tt)*) => {
-        impl_for_iterator!($ty, deref => {}, bounds => $($bounds)*);
-    };
-    ($ty:ty, deref => $($deref:tt)*) => {
-        impl_for_iterator!($ty, deref => { $($deref)* }, bounds => );
-    };
-    ($ty:ty) => {
-        impl_for_iterator!($ty, deref => {}, bounds => );
-    };
+impl<T> Type<Exasol> for &[T]
+where
+    T: Type<Exasol>,
+{
+    fn type_info() -> <Exasol as Database>::TypeInfo {
+        T::type_info()
+    }
 }
 
-impl_for_iterator!(&[T], deref => *);
-impl_for_iterator!([T; N], bounds => const N: usize);
-impl_for_iterator!(Vec<T>);
-impl_for_iterator!(Box<[T]>, deref => &**);
-impl_for_iterator!(Rc<[T]>, deref => &**);
-impl_for_iterator!(Arc<[T]>, deref => &**);
+impl<T> Encode<'_, Exasol> for &[T]
+where
+    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
+{
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        ExaIter::new(*self).encode_by_ref(buf)
+    }
+
+    fn size_hint(&self) -> usize {
+        ExaIter::new(*self).size_hint()
+    }
+}
+
+impl<T, const N: usize> Type<Exasol> for [T; N]
+where
+    T: Type<Exasol>,
+{
+    fn type_info() -> <Exasol as Database>::TypeInfo {
+        T::type_info()
+    }
+}
+
+impl<T, const N: usize> Encode<'_, Exasol> for [T; N]
+where
+    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
+{
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        ExaIter::new(self.as_slice()).encode_by_ref(buf)
+    }
+
+    fn size_hint(&self) -> usize {
+        ExaIter::new(self.as_slice()).size_hint()
+    }
+}
+
+impl<T> Type<Exasol> for Vec<T>
+where
+    T: Type<Exasol>,
+{
+    fn type_info() -> <Exasol as Database>::TypeInfo {
+        T::type_info()
+    }
+}
+
+impl<T> Encode<'_, Exasol> for Vec<T>
+where
+    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
+{
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        ExaIter::new(self.as_slice()).encode_by_ref(buf)
+    }
+
+    fn size_hint(&self) -> usize {
+        ExaIter::new(self.as_slice()).size_hint()
+    }
+}

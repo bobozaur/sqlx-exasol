@@ -160,7 +160,7 @@ async fn it_caches_statements(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
             .fetch_one(&mut *conn)
             .await?;
 
-        let val: u32 = row.get("val");
+        let val: i32 = row.get("val");
 
         assert_eq!(i, val);
     }
@@ -176,7 +176,7 @@ async fn it_caches_statements(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
             .fetch_one(&mut *conn)
             .await?;
 
-        let val: u32 = row.get("val");
+        let val: i32 = row.get("val");
 
         assert_eq!(i, val);
     }
@@ -230,7 +230,7 @@ async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> anyhow
         .execute(&mut *tx)
         .await?;
 
-    let tweet_id: u64 = sqlx_exasol::query_scalar("SELECT id from tweet;")
+    let tweet_id: i64 = sqlx_exasol::query_scalar("SELECT id from tweet;")
         .fetch_one(&mut *tx)
         .await?;
 
@@ -434,7 +434,7 @@ async fn test_equal_arrays(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
 
     assert_eq!(query_result.rows_affected(), 3);
 
-    let values: Vec<(bool, u32, Option<String>)> =
+    let values: Vec<(bool, i32, Option<String>)> =
         sqlx_exasol::query_as("SELECT * FROM sqlx_test_type ORDER BY col2;")
             .fetch_all(&mut *con)
             .await?;
@@ -481,7 +481,7 @@ async fn test_exceeding_arrays(mut con: PoolConnection<Exasol>) -> Result<(), Bo
     .await?;
 
     let bools = vec![false, true, false];
-    let ints = vec![1, 2, u64::MAX];
+    let ints = vec![1, 2, i64::MAX];
     let strings = vec![Some("one".to_owned()), Some(String::new()), None];
 
     sqlx_exasol::query("INSERT INTO sqlx_test_type VALUES (?, ?, ?)")
@@ -501,11 +501,11 @@ async fn test_decode_error(mut con: PoolConnection<Exasol>) -> Result<(), BoxDyn
         .await?;
 
     sqlx_exasol::query("INSERT INTO sqlx_test_type VALUES (?)")
-        .bind(u32::MAX)
+        .bind(i32::MAX)
         .execute(&mut *con)
         .await?;
 
-    let error = sqlx_exasol::query_scalar::<_, u8>("SELECT col FROM sqlx_test_type")
+    let error = sqlx_exasol::query_scalar::<_, i8>("SELECT col FROM sqlx_test_type")
         .fetch_one(&mut *con)
         .await
         .unwrap_err();

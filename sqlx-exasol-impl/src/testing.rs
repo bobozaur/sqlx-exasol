@@ -213,7 +213,7 @@ async fn cleanup_old_dbs(conn: &mut ExaConnection) -> Result<(), Error> {
             .fetch_all(&mut *conn)
             .await;
 
-    let db_ids: Vec<u64> = match res {
+    let db_ids: Vec<i64> = match res {
         Ok(db_ids) => db_ids,
         Err(e) => {
             return match e

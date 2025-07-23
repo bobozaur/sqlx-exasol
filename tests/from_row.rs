@@ -5,8 +5,8 @@ use sqlx_exasol::{pool::PoolConnection, Exasol, Executor, FromRow};
 #[derive(Debug, FromRow, PartialEq, Eq)]
 struct TestRow {
     name: String,
-    age: u8,
-    amount: u64,
+    age: i8,
+    amount: i64,
 }
 
 #[sqlx_exasol::test]

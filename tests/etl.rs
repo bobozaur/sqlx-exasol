@@ -203,11 +203,11 @@ async fn test_etl_transaction_import_rollback(
 
     tx.rollback().await?;
 
-    let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+    let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
         .fetch_one(&mut *conn)
         .await?;
 
-    assert_eq!(num_rows, NUM_ROWS as u64);
+    assert_eq!(num_rows, NUM_ROWS as i64);
 
     Ok(())
 }
@@ -238,11 +238,11 @@ async fn test_etl_transaction_import_commit(
 
     tx.commit().await?;
 
-    let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+    let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
         .fetch_one(&mut *conn)
         .await?;
 
-    assert_eq!(num_rows, (NUM_ROWS + num_writers) as u64);
+    assert_eq!(num_rows, (NUM_ROWS + num_writers) as i64);
 
     Ok(())
 }

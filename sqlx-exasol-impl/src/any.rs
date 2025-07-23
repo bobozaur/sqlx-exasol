@@ -2,18 +2,18 @@ use std::{borrow::Cow, future};
 
 use futures_core::{future::BoxFuture, stream::BoxStream};
 use futures_util::{stream, StreamExt, TryStreamExt};
-#[cfg(feature = "migrate")]
-use sqlx_core::migrate::Migrate;
 use sqlx_core::{
     any::{
         Any, AnyArguments, AnyColumn, AnyConnectOptions, AnyConnectionBackend, AnyQueryResult,
         AnyRow, AnyStatement, AnyTypeInfo, AnyTypeInfoKind, AnyValue, AnyValueKind,
     },
+    arguments::Arguments,
     column::Column,
     connection::{ConnectOptions, Connection},
     database::Database,
     decode::Decode,
     describe::Describe,
+    error::BoxDynError,
     executor::Executor,
     logger::QueryLogger,
     row::Row,
@@ -28,8 +28,8 @@ use crate::{
         websocket::future::{Execute, ExecuteBatch, ExecutePrepared},
     },
     type_info::ExaDataType,
-    ExaColumn, ExaConnectOptions, ExaConnection, ExaQueryResult, ExaRow, ExaTransactionManager,
-    ExaTypeInfo, ExaValueRef, Exasol, SqlxError, SqlxResult,
+    ExaArguments, ExaColumn, ExaConnectOptions, ExaConnection, ExaQueryResult, ExaRow,
+    ExaTransactionManager, ExaTypeInfo, ExaValueRef, Exasol, SqlxError, SqlxResult,
 };
 
 sqlx_core::declare_driver_with_optional_migrate!(DRIVER = Exasol);
@@ -84,7 +84,9 @@ impl AnyConnectionBackend for ExaConnection {
     }
 
     #[cfg(feature = "migrate")]
-    fn as_migrate(&mut self) -> SqlxResult<&mut (dyn Migrate + Send + 'static)> {
+    fn as_migrate(
+        &mut self,
+    ) -> SqlxResult<&mut (dyn sqlx_core::migrate::Migrate + Send + 'static)> {
         Ok(self)
     }
 
@@ -95,7 +97,7 @@ impl AnyConnectionBackend for ExaConnection {
         arguments: Option<AnyArguments<'q>>,
     ) -> BoxStream<'q, SqlxResult<Either<AnyQueryResult, AnyRow>>> {
         let logger = QueryLogger::new(sql, self.log_settings.clone());
-        let arguments = match arguments.as_ref().map(AnyArguments::convert_to).transpose() {
+        let arguments = match arguments.as_ref().map(convert_arguments_to).transpose() {
             Ok(arguments) => arguments,
             Err(error) => {
                 return stream::once(future::ready(Err(sqlx_core::Error::Encode(error)))).boxed()
@@ -131,7 +133,7 @@ impl AnyConnectionBackend for ExaConnection {
         let logger = QueryLogger::new(sql, self.log_settings.clone());
         let arguments = arguments
             .as_ref()
-            .map(AnyArguments::convert_to)
+            .map(convert_arguments_to)
             .transpose()
             .map_err(sqlx_core::Error::Encode);
 
@@ -252,12 +254,11 @@ impl<'a> TryFrom<&'a ExaRow> for AnyRow {
                 AnyTypeInfoKind::SmallInt => AnyValueKind::SmallInt(decode(value)?),
                 AnyTypeInfoKind::Integer => AnyValueKind::Integer(decode(value)?),
                 AnyTypeInfoKind::BigInt => AnyValueKind::BigInt(decode(value)?),
-                AnyTypeInfoKind::Real => AnyValueKind::Real(decode(value)?),
                 AnyTypeInfoKind::Double => AnyValueKind::Double(decode(value)?),
                 AnyTypeInfoKind::Text => AnyValueKind::Text(decode::<String>(value)?.into()),
-                AnyTypeInfoKind::Blob => Err(SqlxError::decode(
-                    "unsupported data type by the `any` driver",
-                ))?,
+                a => Err(SqlxError::decode(format!(
+                    "unsupported data type {a:?} by the `any` driver"
+                )))?,
             };
 
             row_out.columns.push(any_col);
@@ -283,4 +284,33 @@ fn map_result(result: ExaQueryResult) -> AnyQueryResult {
         rows_affected: result.rows_affected(),
         last_insert_id: None,
     }
+}
+
+fn convert_arguments_to<'q, 'a>(args: &'a AnyArguments<'q>) -> Result<ExaArguments, BoxDynError>
+where
+    'q: 'a,
+{
+    let mut out = ExaArguments::default();
+
+    for arg in &args.values.0 {
+        match arg {
+            AnyValueKind::Null(AnyTypeInfoKind::Null) => out.add(Option::<i8>::None), /* data type does not matter here */
+            AnyValueKind::Null(AnyTypeInfoKind::Bool) => out.add(Option::<bool>::None),
+            AnyValueKind::Null(AnyTypeInfoKind::SmallInt) => out.add(Option::<i16>::None),
+            AnyValueKind::Null(AnyTypeInfoKind::Integer) => out.add(Option::<i32>::None),
+            AnyValueKind::Null(AnyTypeInfoKind::BigInt) => out.add(Option::<i64>::None),
+            AnyValueKind::Null(AnyTypeInfoKind::Real) => out.add(Option::<f64>::None),
+            AnyValueKind::Null(AnyTypeInfoKind::Text) => out.add(Option::<String>::None),
+            AnyValueKind::Bool(b) => out.add(b),
+            AnyValueKind::SmallInt(i) => out.add(i),
+            AnyValueKind::Integer(i) => out.add(i),
+            AnyValueKind::BigInt(i) => out.add(i),
+            AnyValueKind::Double(d) => out.add(d),
+            AnyValueKind::Text(t) => out.add(&**t),
+            a => Err(format!(
+                "Exasol does not support `any` driver datatype {a:?}"
+            ))?,
+        }?;
+    }
+    Ok(out)
 }

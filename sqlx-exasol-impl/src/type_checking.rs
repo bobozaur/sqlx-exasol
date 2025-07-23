@@ -29,7 +29,6 @@ impl_type_checking!(
         i16,
         i32,
         i64,
-        i128,
         f64,
         String | &str,
 

@@ -41,6 +41,7 @@ where
 
     #[inline]
     fn size_hint(&self) -> usize {
-        self.as_ref().map(Encode::size_hint).unwrap_or_default()
+        // We encode `null` when `None`, hence size 4.
+        self.as_ref().map_or(4, Encode::size_hint)
     }
 }

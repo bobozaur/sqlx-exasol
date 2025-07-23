@@ -3,11 +3,9 @@
 
 mod macros;
 
-use sqlx_exasol::types::chrono::{
-    DateTime, Duration, Local, Months, NaiveDate, NaiveDateTime, Utc,
-};
+use sqlx_exasol::types::chrono::{DateTime, Local, NaiveDate, NaiveDateTime, Utc};
 
-const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.9f";
 const DATE_FMT: &str = "%Y-%m-%d";
 
 test_type_valid!(naive_datetime<NaiveDateTime>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap()));
@@ -29,15 +27,3 @@ test_type_valid!(datetime_local<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZON
 test_type_valid!(datetime_local_str<String>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591000'" => "2023-08-12 19:22:36.591000"));
 test_type_valid!(datetime_local_option<Option<DateTime<Local>>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("NULL" => None::<DateTime<Local>>, "''" => None::<DateTime<Local>>, "'2023-08-12 19:22:36.591000'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap())));
 test_type_array!(datetime_local_array<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::(vec!["2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000", "2023-08-12 19:22:36.591000"]));
-
-test_type_valid!(duration<Duration>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => Duration::try_milliseconds(938_750_123).unwrap(), "'-10 20:45:50.123'" => Duration::try_milliseconds(-938_750_123).unwrap()));
-test_type_valid!(duration_str<String>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => "+10 20:45:50.123"));
-test_type_valid!(duration_with_prec<Duration>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => Duration::try_milliseconds(938_750_123).unwrap(), "'-10 20:45:50.123'" => Duration::try_milliseconds(-938_750_123).unwrap()));
-test_type_valid!(duration_option<Option<Duration>>::"INTERVAL DAY TO SECOND"::("NULL" => None::<Duration>, "''" => None::<Duration>, "'10 20:45:50.123'" => Some(Duration::try_milliseconds(938_750_123).unwrap())));
-test_type_array!(duration_array<Duration>::"INTERVAL DAY TO SECOND"::(vec!["10 20:45:50.123", "10 20:45:50.123", "10 20:45:50.123"]));
-
-test_type_valid!(months<Months>::"INTERVAL YEAR TO MONTH"::("'1-5'" => Months::new(17), "'-1-5'" => Months::new(-17)));
-test_type_valid!(months_str<String>::"INTERVAL YEAR TO MONTH"::("'1-5'" => "+01-05"));
-test_type_valid!(months_with_prec<Months>::"INTERVAL YEAR(4) TO MONTH"::("'1000-5'" => Months::new(12005), "'-1000-5'" => Months::new(-12005)));
-test_type_valid!(months_option<Option<Months>>::"INTERVAL YEAR TO MONTH"::("NULL" => None::<Months>, "''" => None::<Months>, "'1-5'" => Some(Months::new(17))));
-test_type_array!(months_array<Months>::"INTERVAL YEAR TO MONTH"::(vec!["1-5", "1-5", "1-5"]));

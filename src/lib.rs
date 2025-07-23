@@ -222,13 +222,7 @@ pub use sqlx_exasol_impl::*;
 
 pub mod types {
     pub use sqlx::types::*;
-    pub use sqlx_exasol_impl::types::ExaIter;
-
-    #[cfg(feature = "chrono")]
-    pub mod chrono {
-        pub use sqlx::types::chrono::*;
-        pub use sqlx_exasol_impl::types::{Duration, Months};
-    }
+    pub use sqlx_exasol_impl::types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth, ExaIter};
 }
 
 pub mod any {

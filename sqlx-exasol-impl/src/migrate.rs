@@ -220,8 +220,9 @@ impl Migrate for ExaConnection {
                 "#
             );
 
+            #[allow(clippy::cast_possible_truncation)]
             let _ = query(&query_str)
-                .bind(elapsed.as_nanos())
+                .bind(elapsed.as_nanos() as i64)
                 .bind(migration.version)
                 .execute(self)
                 .await?;

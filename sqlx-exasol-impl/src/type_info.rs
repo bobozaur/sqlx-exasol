@@ -339,11 +339,8 @@ impl Decimal {
     pub const MAX_16BIT_PRECISION: u32 = 5;
     pub const MAX_32BIT_PRECISION: u32 = 10;
     pub const MAX_64BIT_PRECISION: u32 = 20;
-    /// It's fine for this precision to "overflow".
-    /// The database will simply reject values too large.
-    pub const MAX_128BIT_PRECISION: u32 = 39;
     pub const MAX_PRECISION: u32 = 36;
-    pub const MAX_SCALE: u32 = 35;
+    pub const MAX_SCALE: u32 = 36;
 
     pub fn new(precision: u32, scale: u32) -> Self {
         Self { precision, scale }
@@ -458,7 +455,7 @@ impl IntervalDayToSecond {
     /// with the seconds, minutes, hours or even the days when the value exceeds 3 (the max
     /// milliseconds digits limit).
     ///
-    /// See: <`https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval`>
+    /// See: <https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval>
     ///
     /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't even know how
     /// to handle values above that.
