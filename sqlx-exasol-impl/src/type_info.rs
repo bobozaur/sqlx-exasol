@@ -345,17 +345,24 @@ impl StringLike {
     ///
     /// The absence of a charset means that the value can go into any (VAR)CHAR column.
     pub fn compatible(&self, ty: &ExaDataType) -> bool {
+        #[allow(clippy::match_like_matches_macro, reason = "better readability")]
+        #[allow(clippy::match_same_arms, reason = "better readability")]
         match ty {
-            // Allow decoding GEOMETRY / HASHTYPE data to strings
-            ExaDataType::Geometry { .. } | ExaDataType::HashType
-                if self.character_set == Some(Charset::Utf8) =>
-            {
-                true
+            // Allow decoding GEOMETRY data to strings
+            ExaDataType::Geometry { .. } if self.character_set == Some(Charset::Utf8) => true,
+            // Allow decoding HASHTYPE data to strings
+            ExaDataType::HashType if self.character_set == Some(Charset::Utf8) => true,
+            ExaDataType::Char(other) | ExaDataType::Varchar(other) => {
+                match (self.character_set, other.character_set) {
+                    // Short circuits since there's no comparison
+                    (None, _) | (_, None) => true,
+                    // UTF-8 can also accommodate ASCII data
+                    (Some(Charset::Utf8), _) => true,
+                    // ASCII check must be stricter
+                    (Some(Charset::Ascii), Some(Charset::Ascii)) => true,
+                    _ => false,
+                }
             }
-            ExaDataType::Char(other) | ExaDataType::Varchar(other) => matches!(
-                (self.character_set, other.character_set),
-                (Some(Charset::Utf8), _) | (Some(Charset::Ascii), Some(Charset::Ascii) | None)
-            ),
             _ => false,
         }
     }

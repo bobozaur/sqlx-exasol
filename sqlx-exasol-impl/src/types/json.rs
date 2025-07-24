@@ -27,7 +27,8 @@ where
     T: Serialize,
 {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append(&self.0)?;
+        let value = serde_json::to_string(&self.0)?;
+        buf.append(&value)?;
         Ok(IsNull::No)
     }
 }
@@ -37,6 +38,9 @@ where
     T: 'r + Deserialize<'r>,
 {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        T::deserialize(value.value).map(Json).map_err(From::from)
+        <&str>::deserialize(value.value)
+            .and_then(serde_json::from_str)
+            .map(Json)
+            .map_err(From::from)
     }
 }
