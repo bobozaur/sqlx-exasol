@@ -47,7 +47,7 @@ impl Display for ExaTypeInfo {
 
 impl TypeInfo for ExaTypeInfo {
     fn is_null(&self) -> bool {
-        matches!(self.data_type, ExaDataType::Null)
+        false
     }
 
     /// We're going against `sqlx` here, but knowing the full data type definition
@@ -81,7 +81,6 @@ impl TypeInfo for ExaTypeInfo {
 #[serde(rename_all = "UPPERCASE")]
 #[serde(tag = "type")]
 pub enum ExaDataType {
-    Null,
     /// The BOOLEAN data type.
     Boolean,
     /// The CHAR data type.
@@ -94,22 +93,15 @@ pub enum ExaDataType {
     Double,
     /// The `GEOMETRY` data type.
     #[serde(rename_all = "camelCase")]
-    Geometry {
-        srid: u16,
-    },
+    Geometry { srid: u16 },
     /// The `INTERVAL DAY TO SECOND` data type.
     #[serde(rename = "INTERVAL DAY TO SECOND")]
     #[serde(rename_all = "camelCase")]
-    IntervalDayToSecond {
-        precision: u32,
-        fraction: u32,
-    },
+    IntervalDayToSecond { precision: u32, fraction: u32 },
     /// The `INTERVAL YEAR TO MONTH` data type.
     #[serde(rename = "INTERVAL YEAR TO MONTH")]
     #[serde(rename_all = "camelCase")]
-    IntervalYearToMonth {
-        precision: u32,
-    },
+    IntervalYearToMonth { precision: u32 },
     /// The TIMESTAMP data type.
     Timestamp,
     /// The TIMESTAMP WITH LOCAL TIME ZONE data type.
@@ -130,7 +122,6 @@ pub enum ExaDataType {
 
 impl ExaDataType {
     // Data type names
-    const NULL: &'static str = "NULL";
     const BOOLEAN: &'static str = "BOOLEAN";
     const CHAR: &'static str = "CHAR";
     const DATE: &'static str = "DATE";
@@ -164,45 +155,36 @@ impl ExaDataType {
     /// instance.
     pub fn compatible(&self, other: &Self) -> bool {
         match self {
-            ExaDataType::Null => true,
-            ExaDataType::Boolean => matches!(other, ExaDataType::Boolean | ExaDataType::Null),
+            ExaDataType::Boolean => matches!(other, ExaDataType::Boolean),
             ExaDataType::Char(s) | ExaDataType::Varchar(s) => s.compatible(other),
-            ExaDataType::Date => matches!(other, ExaDataType::Date | ExaDataType::Null),
+            ExaDataType::Date => matches!(other, ExaDataType::Date),
             ExaDataType::Decimal(d) => d.compatible(other),
-            ExaDataType::Double => matches!(other, ExaDataType::Double | ExaDataType::Null),
+            ExaDataType::Double => matches!(other, ExaDataType::Double),
             ExaDataType::Geometry { .. } => matches!(
                 other,
                 ExaDataType::Geometry { .. }
                     | ExaDataType::Char { .. }
                     | ExaDataType::Varchar { .. }
-                    | ExaDataType::Null
             ),
-            ExaDataType::IntervalDayToSecond { .. } => matches!(
-                other,
-                ExaDataType::IntervalDayToSecond { .. } | ExaDataType::Null
-            ),
-            ExaDataType::IntervalYearToMonth { .. } => matches!(
-                other,
-                ExaDataType::IntervalYearToMonth { .. } | ExaDataType::Null
-            ),
-            ExaDataType::Timestamp => matches!(other, ExaDataType::Timestamp | ExaDataType::Null),
-            ExaDataType::TimestampWithLocalTimeZone => matches!(
-                other,
-                ExaDataType::TimestampWithLocalTimeZone | ExaDataType::Null
-            ),
+            ExaDataType::IntervalDayToSecond { .. } => {
+                matches!(other, ExaDataType::IntervalDayToSecond { .. })
+            }
+            ExaDataType::IntervalYearToMonth { .. } => {
+                matches!(other, ExaDataType::IntervalYearToMonth { .. })
+            }
+            ExaDataType::Timestamp => matches!(other, ExaDataType::Timestamp),
+            ExaDataType::TimestampWithLocalTimeZone => {
+                matches!(other, ExaDataType::TimestampWithLocalTimeZone)
+            }
             ExaDataType::HashType => matches!(
                 other,
-                ExaDataType::HashType
-                    | ExaDataType::Varchar { .. }
-                    | ExaDataType::Char { .. }
-                    | ExaDataType::Null
+                ExaDataType::HashType | ExaDataType::Varchar { .. } | ExaDataType::Char { .. }
             ),
         }
     }
 
     fn full_name(&self) -> DataTypeName {
         match self {
-            ExaDataType::Null => Self::NULL.into(),
             ExaDataType::Boolean => Self::BOOLEAN.into(),
             ExaDataType::Date => Self::DATE.into(),
             ExaDataType::Double => Self::DOUBLE.into(),
@@ -232,7 +214,6 @@ impl ExaDataType {
 impl AsRef<str> for ExaDataType {
     fn as_ref(&self) -> &str {
         match self {
-            ExaDataType::Null => Self::NULL,
             ExaDataType::Boolean => Self::BOOLEAN,
             ExaDataType::Char { .. } => Self::CHAR,
             ExaDataType::Date => Self::DATE,
@@ -329,7 +310,7 @@ impl Decimal {
     fn compatible(self, ty: &ExaDataType) -> bool {
         let (precision, scale) = match ty {
             // Short-circuit if we are encoding a Rust decimal type as they have arbitrary precision.
-            ExaDataType::Decimal(Decimal { precision: None, .. }) | ExaDataType::Null => return true,
+            ExaDataType::Decimal(Decimal { precision: None, .. })  => return true,
             ExaDataType::Decimal(Decimal { precision: Some(precision), scale }) => (*precision, *scale),
             _ => return false,
         };
@@ -365,7 +346,6 @@ impl StringLike {
     /// The absence of a charset means that the value can go into any (VAR)CHAR column.
     pub fn compatible(&self, ty: &ExaDataType) -> bool {
         match ty {
-            ExaDataType::Null => true,
             // Allow decoding GEOMETRY / HASHTYPE data to strings
             ExaDataType::Geometry { .. } | ExaDataType::HashType
                 if self.character_set == Some(Charset::Utf8) =>
@@ -411,12 +391,6 @@ impl Display for Charset {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_null_name() {
-        let data_type = ExaDataType::Null;
-        assert_eq!(data_type.full_name().as_ref(), "NULL");
-    }
 
     #[test]
     fn test_boolean_name() {

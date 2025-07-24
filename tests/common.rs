@@ -213,11 +213,11 @@ async fn it_can_bind_null_and_non_null_issue_540(
 #[sqlx_exasol::test]
 async fn it_can_bind_only_null_issue_540(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let row = sqlx_exasol::query("SELECT ?")
-        .bind(None::<i32>)
+        .bind(None::<String>)
         .fetch_one(&mut *conn)
         .await?;
-
-    let v0: Option<i32> = row.get(0);
+    
+    let v0: Option<String> = row.get(0);
 
     assert_eq!(v0, None);
 

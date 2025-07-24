@@ -4,7 +4,7 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{arguments::ExaBuffer, type_info::ExaDataType, ExaTypeInfo, Exasol};
+use crate::{arguments::ExaBuffer, ExaTypeInfo, Exasol};
 
 impl<T> Encode<'_, Exasol> for Option<T>
 where
@@ -15,7 +15,7 @@ where
         if let Some(v) = self {
             v.produces()
         } else {
-            Some(ExaDataType::Null.into())
+            Some(T::type_info())
         }
     }
 

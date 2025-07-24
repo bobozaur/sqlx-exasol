@@ -187,11 +187,10 @@ impl<'a> TryFrom<&'a ExaTypeInfo> for AnyTypeInfo {
     fn try_from(type_info: &'a ExaTypeInfo) -> Result<Self, Self::Error> {
         Ok(AnyTypeInfo {
             kind: match &type_info.data_type {
-                ExaDataType::Null => AnyTypeInfoKind::Null,
                 ExaDataType::Boolean => AnyTypeInfoKind::Bool,
                 ExaDataType::Decimal(_) => AnyTypeInfoKind::BigInt,
                 ExaDataType::Double => AnyTypeInfoKind::Double,
-                ExaDataType::HashType | ExaDataType::Char{..} | ExaDataType::Varchar{..} => {
+                ExaDataType::Char{..} | ExaDataType::Varchar{..} => {
                     AnyTypeInfoKind::Text
                 }
                 _ => {
