@@ -14,11 +14,13 @@ use sqlx_core::{
 use crate::{
     arguments::ExaBuffer,
     database::Exasol,
-    type_info::{ExaDataType, ExaTypeInfo, IntervalDayToSecond},
+    type_info::{ExaDataType, ExaTypeInfo},
     value::ExaValueRef,
 };
 
 /// A duration interval as a representation of the `INTERVAL DAY TO SECOND` datatype.
+///
+/// Note that the sign of the whole type is held by the `days` field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
 pub struct ExaIntervalDayToSecond {
     pub days: i32,
@@ -30,11 +32,11 @@ pub struct ExaIntervalDayToSecond {
 
 impl Type<Exasol> for ExaIntervalDayToSecond {
     fn type_info() -> ExaTypeInfo {
-        let ids = IntervalDayToSecond::new(
-            IntervalDayToSecond::MAX_PRECISION,
-            IntervalDayToSecond::MAX_SUPPORTED_FRACTION,
-        );
-        ExaDataType::IntervalDayToSecond(ids).into()
+        ExaDataType::IntervalDayToSecond {
+            precision: ExaDataType::INTERVAL_DTS_MAX_PRECISION,
+            fraction: ExaDataType::INTERVAL_DTS_MAX_FRACTION,
+        }
+        .into()
     }
 }
 
@@ -49,9 +51,9 @@ impl Encode<'_, Exasol> for ExaIntervalDayToSecond {
         // 1 space + 2 hours + 1 column + 2 minutes + 1 column + 2 seconds +
         // 1 dot + max milliseconds fraction +
         // 1 quote
-        2 + IntervalDayToSecond::MAX_PRECISION as usize
+        2 + ExaDataType::INTERVAL_DTS_MAX_PRECISION as usize
             + 10
-            + IntervalDayToSecond::MAX_SUPPORTED_FRACTION as usize
+            + ExaDataType::INTERVAL_DTS_MAX_FRACTION as usize
             + 1
     }
 }
@@ -64,10 +66,11 @@ impl<'r> Decode<'r, Exasol> for ExaIntervalDayToSecond {
 
 impl Display for ExaIntervalDayToSecond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let plus = if self.days.is_negative() { "" } else { "+" };
         write!(
             f,
-            "{} {}:{}:{}.{}",
-            self.days, self.hours, self.minutes, self.seconds, self.milliseconds
+            "{}{} {}:{}:{}.{}",
+            plus, self.days, self.hours, self.minutes, self.seconds, self.milliseconds
         )
     }
 }

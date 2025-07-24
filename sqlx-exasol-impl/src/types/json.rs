@@ -8,14 +8,17 @@ use sqlx_core::{
 
 use crate::{
     arguments::ExaBuffer,
-    type_info::{Charset, ExaDataType, StringLike},
+    type_info::{ExaDataType, StringLike},
     ExaTypeInfo, ExaValueRef, Exasol,
 };
 
 impl<T> Type<Exasol> for Json<T> {
     fn type_info() -> ExaTypeInfo {
-        let string_like = StringLike::new(StringLike::MAX_VARCHAR_LEN, Charset::Utf8);
-        ExaDataType::Varchar(string_like).into()
+        ExaDataType::Varchar(StringLike {
+            size: StringLike::MAX_VARCHAR_LEN,
+            character_set: None,
+        })
+        .into()
     }
 }
 

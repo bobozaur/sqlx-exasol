@@ -39,7 +39,11 @@ default = ["any", "macros", "migrate", "json"]
 
 derive = ["sqlx/derive", "sqlx-exasol-macros?/derive"]
 macros = ["derive", "sqlx/macros", "sqlx-exasol-macros/macros"]
-migrate = ["sqlx/migrate", "sqlx-exasol-impl/migrate", "sqlx-exasol-macros?/migrate"]
+migrate = [
+    "sqlx/migrate",
+    "sqlx-exasol-impl/migrate",
+    "sqlx-exasol-macros?/migrate",
+]
 
 # Base runtime features without TLS
 runtime-async-std = ["sqlx/runtime-async-std"]
@@ -169,6 +173,7 @@ anyhow = { workspace = true }
 dotenvy = { workspace = true }
 futures-util = { workspace = true }
 paste = { workspace = true }
+serde = { workspace = true }
 url = { workspace = true }
 
 [workspace.lints.clippy]

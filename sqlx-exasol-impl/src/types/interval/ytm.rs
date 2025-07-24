@@ -11,11 +11,13 @@ use sqlx_core::{
 use crate::{
     arguments::ExaBuffer,
     database::Exasol,
-    type_info::{ExaDataType, ExaTypeInfo, IntervalYearToMonth},
+    type_info::{ExaDataType, ExaTypeInfo},
     value::ExaValueRef,
 };
 
 /// A duration interval as a representation of the `INTERVAL YEAR TO MONTH` datatype.
+///
+/// Note that the sign of the whole type is held by the `years` field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
 pub struct ExaIntervalYearToMonth {
     pub years: i32,
@@ -24,8 +26,10 @@ pub struct ExaIntervalYearToMonth {
 
 impl Type<Exasol> for ExaIntervalYearToMonth {
     fn type_info() -> ExaTypeInfo {
-        let iym = IntervalYearToMonth::new(IntervalYearToMonth::MAX_PRECISION);
-        ExaDataType::IntervalYearToMonth(iym).into()
+        ExaDataType::IntervalYearToMonth {
+            precision: ExaDataType::INTERVAL_YTM_MAX_PRECISION,
+        }
+        .into()
     }
 }
 
@@ -37,7 +41,7 @@ impl Encode<'_, Exasol> for ExaIntervalYearToMonth {
 
     fn size_hint(&self) -> usize {
         // 1 quote + 1 sign + max year precision + 1 dash + 2 months + 1 quote
-        2 + IntervalYearToMonth::MAX_PRECISION as usize + 4
+        2 + ExaDataType::INTERVAL_YTM_MAX_PRECISION as usize + 4
     }
 }
 
@@ -49,7 +53,8 @@ impl<'r> Decode<'r, Exasol> for ExaIntervalYearToMonth {
 
 impl Display for ExaIntervalYearToMonth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.years, self.months)
+        let plus = if self.years.is_negative() { "" } else { "+" };
+        write!(f, "{}{}-{}", plus, self.years, self.months)
     }
 }
 

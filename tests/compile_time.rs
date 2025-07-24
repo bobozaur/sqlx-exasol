@@ -1,3 +1,6 @@
+#![cfg(feature = "migrate")]
+#![cfg(feature = "macros")]
+
 extern crate sqlx_exasol as sqlx;
 
 mod macros;

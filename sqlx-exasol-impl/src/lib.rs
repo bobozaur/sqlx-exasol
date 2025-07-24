@@ -73,3 +73,11 @@ impl_column_index_for_statement!(ExaStatement);
 // ###################
 type SqlxError = sqlx_core::Error;
 type SqlxResult<T> = sqlx_core::Result<T>;
+
+// TODO:
+// is ExaDataType::NULL useful?
+// introduce max len checks for data types into their encode impl if needed. Intervals might need it.
+// Impl the ExaHasArrayType or something trait to limit 1 dimensional arrays.
+// Write compile time type override tests
+// Create a table when describing and use `DESCRIBE` to get nullability for SELECTs?
+// document the explicit removal of Uuid from compile_time queries

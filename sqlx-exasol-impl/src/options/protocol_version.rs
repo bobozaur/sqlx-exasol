@@ -19,6 +19,7 @@ pub enum ProtocolVersion {
     V2 = 2,
     V3 = 3,
     V4 = 4,
+    V5 = 5,
 }
 
 impl FromStr for ProtocolVersion {
@@ -30,6 +31,7 @@ impl FromStr for ProtocolVersion {
             "2" => Ok(ProtocolVersion::V2),
             "3" => Ok(ProtocolVersion::V3),
             "4" => Ok(ProtocolVersion::V4),
+            "5" => Ok(ProtocolVersion::V5),
             _ => Err(ExaConfigError::InvalidParameter(PARAM_PROTOCOL_VERSION)),
         }
     }
@@ -50,6 +52,7 @@ impl TryFrom<u8> for ProtocolVersion {
             2 => Ok(Self::V2),
             3 => Ok(Self::V3),
             4 => Ok(Self::V4),
+            5 => Ok(Self::V5),
             _ => Err(ExaConfigError::InvalidParameter(PARAM_PROTOCOL_VERSION)),
         }
     }
@@ -57,6 +60,6 @@ impl TryFrom<u8> for ProtocolVersion {
 
 impl Display for ProtocolVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", *self as u8)
+        write!(f, "v{}", *self as u8)
     }
 }

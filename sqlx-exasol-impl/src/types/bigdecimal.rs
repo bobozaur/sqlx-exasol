@@ -17,8 +17,11 @@ use crate::{
 impl Type<Exasol> for BigDecimal {
     fn type_info() -> ExaTypeInfo {
         // A somewhat non-sensical value used to allow decoding any DECIMAL value.
-        let decimal = Decimal::new(Decimal::SENTINEL_VALUE, Decimal::SENTINEL_VALUE);
-        ExaDataType::Decimal(decimal).into()
+        ExaDataType::Decimal(Decimal {
+            precision: None,
+            scale: Decimal::MAX_SCALE,
+        })
+        .into()
     }
 }
 

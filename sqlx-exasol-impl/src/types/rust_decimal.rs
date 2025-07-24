@@ -18,8 +18,11 @@ impl Type<Exasol> for rust_decimal::Decimal {
     fn type_info() -> ExaTypeInfo {
         // A somewhat non-sensical value used to allow decoding any DECIMAL value
         // with a supported scale.
-        let decimal = Decimal::new(Decimal::SENTINEL_VALUE, rust_decimal::Decimal::MAX_SCALE as u8);
-        ExaDataType::Decimal(decimal).into()
+        ExaDataType::Decimal(Decimal {
+            precision: None,
+            scale: rust_decimal::Decimal::MAX_SCALE as u8,
+        })
+        .into()
     }
 }
 

@@ -191,7 +191,7 @@ impl<'a> TryFrom<&'a ExaTypeInfo> for AnyTypeInfo {
                 ExaDataType::Boolean => AnyTypeInfoKind::Bool,
                 ExaDataType::Decimal(_) => AnyTypeInfoKind::BigInt,
                 ExaDataType::Double => AnyTypeInfoKind::Double,
-                ExaDataType::HashType(_) | ExaDataType::Char(_) | ExaDataType::Varchar(_) => {
+                ExaDataType::HashType | ExaDataType::Char{..} | ExaDataType::Varchar{..} => {
                     AnyTypeInfoKind::Text
                 }
                 _ => {

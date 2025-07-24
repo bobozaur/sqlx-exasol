@@ -31,10 +31,6 @@ impl_type_checking!(
         i64,
         f64,
         String | &str,
-
-        // External types
-        #[cfg(feature = "uuid")]
-        sqlx::types::Uuid,
     },
     ParamChecking::Weak,
     feature-types: _info => None,

@@ -603,7 +603,7 @@ async fn it_works_on_large_datasets(mut con: PoolConnection<Exasol>) -> anyhow::
 }
 
 #[sqlx_exasol::test]
-async fn test_schema_selected(
+async fn it_selects_schema(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
@@ -620,7 +620,7 @@ async fn test_schema_selected(
 }
 
 #[sqlx_exasol::test]
-async fn test_schema_switch(
+async fn it_switches_schema(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
@@ -644,7 +644,7 @@ async fn test_schema_switch(
 }
 
 #[sqlx_exasol::test]
-async fn test_schema_switch_from_attr(
+async fn it_switches_schema_from_attr(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
@@ -673,7 +673,7 @@ async fn test_schema_switch_from_attr(
 }
 
 #[sqlx_exasol::test]
-async fn test_schema_close_and_empty_attr(
+async fn it_closes_schema_and_returns_none(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
@@ -696,7 +696,7 @@ async fn test_schema_close_and_empty_attr(
 }
 
 #[sqlx_exasol::test]
-async fn test_comment_stmts(
+async fn it_accepts_comment_only_stmt(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
@@ -712,7 +712,7 @@ async fn test_comment_stmts(
 }
 
 #[sqlx_exasol::test]
-async fn test_connection_flush_on_drop(
+async fn it_flushes_on_drop(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {

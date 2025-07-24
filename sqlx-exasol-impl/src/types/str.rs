@@ -17,8 +17,11 @@ use crate::{
 
 impl Type<Exasol> for str {
     fn type_info() -> ExaTypeInfo {
-        let string_like = StringLike::new(StringLike::MAX_VARCHAR_LEN, Charset::Utf8);
-        ExaDataType::Varchar(string_like).into()
+        ExaDataType::Varchar(StringLike {
+            size: StringLike::MAX_VARCHAR_LEN,
+            character_set: Some(Charset::Utf8),
+        })
+        .into()
     }
 }
 
@@ -54,11 +57,11 @@ impl Type<Exasol> for String {
 
 impl Encode<'_, Exasol> for String {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Exasol>>::encode(&**self, buf)
+        <&str as Encode<Exasol>>::encode(self.as_ref(), buf)
     }
 
     fn size_hint(&self) -> usize {
-        <&str as Encode<Exasol>>::size_hint(&&**self)
+        <&str as Encode<Exasol>>::size_hint(&self.as_ref())
     }
 }
 
@@ -70,13 +73,10 @@ impl Decode<'_, Exasol> for String {
 
 impl Encode<'_, Exasol> for Cow<'_, str> {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        match self {
-            Cow::Borrowed(str) => <&str as Encode<Exasol>>::encode(*str, buf),
-            Cow::Owned(str) => <&str as Encode<Exasol>>::encode(&**str, buf),
-        }
+        <&str as Encode<Exasol>>::encode(self.as_ref(), buf)
     }
 
     fn size_hint(&self) -> usize {
-        <&str as Encode<Exasol>>::size_hint(&&**self)
+        <&str as Encode<Exasol>>::size_hint(&self.as_ref())
     }
 }

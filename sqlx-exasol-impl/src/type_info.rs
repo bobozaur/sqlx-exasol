@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    fmt::{Arguments, Display},
-};
+use std::fmt::{Arguments, Display};
 
 use arrayvec::ArrayString;
 use serde::{Deserialize, Serialize};
@@ -85,24 +82,54 @@ impl TypeInfo for ExaTypeInfo {
 #[serde(tag = "type")]
 pub enum ExaDataType {
     Null,
+    /// The BOOLEAN data type.
     Boolean,
+    /// The CHAR data type.
     Char(StringLike),
+    /// The DATE data type.
     Date,
+    /// The DECIMAL data type.
     Decimal(Decimal),
+    /// The DOUBLE data type.
     Double,
-    Geometry(Geometry),
+    /// The `GEOMETRY` data type.
+    #[serde(rename_all = "camelCase")]
+    Geometry {
+        srid: u16,
+    },
+    /// The `INTERVAL DAY TO SECOND` data type.
     #[serde(rename = "INTERVAL DAY TO SECOND")]
-    IntervalDayToSecond(IntervalDayToSecond),
+    #[serde(rename_all = "camelCase")]
+    IntervalDayToSecond {
+        precision: u32,
+        fraction: u32,
+    },
+    /// The `INTERVAL YEAR TO MONTH` data type.
     #[serde(rename = "INTERVAL YEAR TO MONTH")]
-    IntervalYearToMonth(IntervalYearToMonth),
+    #[serde(rename_all = "camelCase")]
+    IntervalYearToMonth {
+        precision: u32,
+    },
+    /// The TIMESTAMP data type.
     Timestamp,
+    /// The TIMESTAMP WITH LOCAL TIME ZONE data type.
     #[serde(rename = "TIMESTAMP WITH LOCAL TIME ZONE")]
     TimestampWithLocalTimeZone,
+    /// The VARCHAR data type.
     Varchar(StringLike),
-    HashType(HashType),
+    /// The Exasol `HASHTYPE` data type.
+    ///
+    /// NOTE: Exasol returns the size of the column string representation which depends on the
+    /// `HASHTYPE_FORMAT` database parameter. So a UUID could have a size of 32 for HEX, 36 for
+    /// UUID, 22 for BASE64, etc.
+    ///
+    /// That makes it impossible to compare a type's predefined size and the size returned for a
+    /// column to check for compatibility.
+    HashType,
 }
 
 impl ExaDataType {
+    // Data type names
     const NULL: &'static str = "NULL";
     const BOOLEAN: &'static str = "BOOLEAN";
     const CHAR: &'static str = "CHAR";
@@ -117,6 +144,20 @@ impl ExaDataType {
     const VARCHAR: &'static str = "VARCHAR";
     const HASHTYPE: &'static str = "HASHTYPE";
 
+    // Datatype constants
+    pub(crate) const INTERVAL_YTM_MAX_PRECISION: u32 = 9;
+    /// Accuracy is limited to milliseconds, see: <https://docs.exasol.com/db/latest/sql_references/data_types/datatypedetails.htm#Interval>.
+    ///
+    /// The fraction has the weird behavior of shifting the milliseconds up the value and mixing it
+    /// with the seconds, minutes, hours or even the days when the value exceeds 3 (the max
+    /// milliseconds digits limit) even though the maximum value is 9.
+    ///
+    /// See: <https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval>
+    ///
+    /// Therefore, we'll only be handling fractions smaller or equal to 3.
+    pub(crate) const INTERVAL_DTS_MAX_FRACTION: u32 = 3;
+    pub(crate) const INTERVAL_DTS_MAX_PRECISION: u32 = 9;
+
     /// Returns `true` if this instance is compatible with the other one provided.
     ///
     /// Compatibility means that the [`self`] instance is bigger/able to accommodate the other
@@ -125,44 +166,35 @@ impl ExaDataType {
         match self {
             ExaDataType::Null => true,
             ExaDataType::Boolean => matches!(other, ExaDataType::Boolean | ExaDataType::Null),
-            ExaDataType::Char(c) | ExaDataType::Varchar(c) => c.compatible(other),
-            ExaDataType::Date => matches!(
-                other,
-                ExaDataType::Date
-                    | ExaDataType::Char(_)
-                    | ExaDataType::Varchar(_)
-                    | ExaDataType::Null
-            ),
+            ExaDataType::Char(s) | ExaDataType::Varchar(s) => s.compatible(other),
+            ExaDataType::Date => matches!(other, ExaDataType::Date | ExaDataType::Null),
             ExaDataType::Decimal(d) => d.compatible(other),
-            ExaDataType::Double => match other {
-                ExaDataType::Double | ExaDataType::Null => true,
-                ExaDataType::Decimal(d) if d.scale > 0 => true,
-                _ => false,
-            },
-            ExaDataType::Geometry(g) => g.compatible(other),
-            ExaDataType::IntervalDayToSecond(ids) => ids.compatible(other),
-            ExaDataType::IntervalYearToMonth(iym) => iym.compatible(other),
-            ExaDataType::Timestamp => matches!(
+            ExaDataType::Double => matches!(other, ExaDataType::Double | ExaDataType::Null),
+            ExaDataType::Geometry { .. } => matches!(
                 other,
-                ExaDataType::Timestamp
-                    | ExaDataType::TimestampWithLocalTimeZone
-                    | ExaDataType::Char(_)
-                    | ExaDataType::Varchar(_)
+                ExaDataType::Geometry { .. }
+                    | ExaDataType::Char { .. }
+                    | ExaDataType::Varchar { .. }
                     | ExaDataType::Null
             ),
+            ExaDataType::IntervalDayToSecond { .. } => matches!(
+                other,
+                ExaDataType::IntervalDayToSecond { .. } | ExaDataType::Null
+            ),
+            ExaDataType::IntervalYearToMonth { .. } => matches!(
+                other,
+                ExaDataType::IntervalYearToMonth { .. } | ExaDataType::Null
+            ),
+            ExaDataType::Timestamp => matches!(other, ExaDataType::Timestamp | ExaDataType::Null),
             ExaDataType::TimestampWithLocalTimeZone => matches!(
                 other,
-                ExaDataType::TimestampWithLocalTimeZone
-                    | ExaDataType::Timestamp
-                    | ExaDataType::Char(_)
-                    | ExaDataType::Varchar(_)
-                    | ExaDataType::Null
+                ExaDataType::TimestampWithLocalTimeZone | ExaDataType::Null
             ),
-            ExaDataType::HashType(_) => matches!(
+            ExaDataType::HashType => matches!(
                 other,
-                ExaDataType::HashType(_)
-                    | ExaDataType::Varchar(_)
-                    | ExaDataType::Char(_)
+                ExaDataType::HashType
+                    | ExaDataType::Varchar { .. }
+                    | ExaDataType::Char { .. }
                     | ExaDataType::Null
             ),
         }
@@ -176,22 +208,23 @@ impl ExaDataType {
             ExaDataType::Double => Self::DOUBLE.into(),
             ExaDataType::Timestamp => Self::TIMESTAMP.into(),
             ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE.into(),
-            ExaDataType::Char(c) | ExaDataType::Varchar(c) => {
-                format_args!("{}({}) {}", self.as_ref(), c.size, c.character_set).into()
+            ExaDataType::Char(s) | ExaDataType::Varchar(s) => match s.character_set {
+                Some(c) => format_args!("{}({}) {c}", self.as_ref(), s.size).into(),
+                None => format_args!("{}({})", self.as_ref(), s.size).into(),
+            },
+            ExaDataType::Decimal(d) => match d.precision {
+                Some(p) => format_args!("{}({}, {})", self.as_ref(), p, d.scale).into(),
+                None => format_args!("{}(*, {})", self.as_ref(), d.scale).into(),
+            },
+            ExaDataType::Geometry { srid } => format_args!("{}({srid})", self.as_ref()).into(),
+            ExaDataType::IntervalDayToSecond {
+                precision,
+                fraction,
+            } => format_args!("INTERVAL DAY({precision}) TO SECOND({fraction})").into(),
+            ExaDataType::IntervalYearToMonth { precision } => {
+                format_args!("INTERVAL YEAR({precision}) TO MONTH").into()
             }
-            ExaDataType::Decimal(d) => {
-                format_args!("{}({}, {})", self.as_ref(), d.precision, d.scale).into()
-            }
-            ExaDataType::Geometry(g) => format_args!("{}({})", self.as_ref(), g.srid).into(),
-            ExaDataType::IntervalDayToSecond(ids) => format_args!(
-                "INTERVAL DAY({}) TO SECOND({})",
-                ids.precision, ids.fraction
-            )
-            .into(),
-            ExaDataType::IntervalYearToMonth(iym) => {
-                format_args!("INTERVAL YEAR({}) TO MONTH", iym.precision).into()
-            }
-            ExaDataType::HashType(_) => format_args!("{}", self.as_ref()).into(),
+            ExaDataType::HashType => format_args!("{}", self.as_ref()).into(),
         }
     }
 }
@@ -201,17 +234,17 @@ impl AsRef<str> for ExaDataType {
         match self {
             ExaDataType::Null => Self::NULL,
             ExaDataType::Boolean => Self::BOOLEAN,
-            ExaDataType::Char(_) => Self::CHAR,
+            ExaDataType::Char { .. } => Self::CHAR,
             ExaDataType::Date => Self::DATE,
             ExaDataType::Decimal(_) => Self::DECIMAL,
             ExaDataType::Double => Self::DOUBLE,
-            ExaDataType::Geometry(_) => Self::GEOMETRY,
-            ExaDataType::IntervalDayToSecond(_) => Self::INTERVAL_DAY_TO_SECOND,
-            ExaDataType::IntervalYearToMonth(_) => Self::INTERVAL_YEAR_TO_MONTH,
+            ExaDataType::Geometry { .. } => Self::GEOMETRY,
+            ExaDataType::IntervalDayToSecond { .. } => Self::INTERVAL_DAY_TO_SECOND,
+            ExaDataType::IntervalYearToMonth { .. } => Self::INTERVAL_YEAR_TO_MONTH,
             ExaDataType::Timestamp => Self::TIMESTAMP,
             ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
-            ExaDataType::Varchar(_) => Self::VARCHAR,
-            ExaDataType::HashType(_) => Self::HASHTYPE,
+            ExaDataType::Varchar { .. } => Self::VARCHAR,
+            ExaDataType::HashType => Self::HASHTYPE,
         }
     }
 }
@@ -254,52 +287,97 @@ impl From<Arguments<'_>> for DataTypeName {
     }
 }
 
+/// The `DECIMAL` data type.
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Decimal {
+    pub(crate) precision: Option<u8>,
+    pub(crate) scale: u8,
+}
+
+impl Decimal {
+    /// Max precision values for signed integers.
+    pub(crate) const MAX_8BIT_PRECISION: u8 = 3;
+    pub(crate) const MAX_16BIT_PRECISION: u8 = 5;
+    pub(crate) const MAX_32BIT_PRECISION: u8 = 10;
+    pub(crate) const MAX_64BIT_PRECISION: u8 = 20;
+
+    /// Max supported values.
+    pub(crate) const MAX_PRECISION: u8 = 36;
+    #[allow(dead_code)]
+    pub(crate) const MAX_SCALE: u8 = 36;
+
+    /// The purpose of this is to be able to tell if some [`Decimal`] fits inside another
+    /// [`Decimal`].
+    ///
+    /// Therefore, we consider cases such as:
+    /// - DECIMAL(10, 1) != DECIMAL(9, 2)
+    /// - DECIMAL(10, 1) != DECIMAL(10, 2)
+    /// - DECIMAL(10, 1) < DECIMAL(11, 2)
+    /// - DECIMAL(10, 1) < DECIMAL(17, 4)
+    ///
+    /// - DECIMAL(10, 1) > DECIMAL(9, 1)
+    /// - DECIMAL(10, 1) = DECIMAL(10, 1)
+    /// - DECIMAL(10, 1) < DECIMAL(11, 1)
+    ///
+    /// This boils down to:
+    /// `a.scale >= b.scale AND (a.precision - a.scale) >= (b.precision - b.scale)`
+    ///
+    /// However, decimal Rust types require special handling because they can hold virtually any
+    /// decoded value. Therefore, an absent precision means that the comparison must be skipped.
+    #[rustfmt::skip] // just to skip rules formatting
+    fn compatible(self, ty: &ExaDataType) -> bool {
+        let (precision, scale) = match ty {
+            // Short-circuit if we are encoding a Rust decimal type as they have arbitrary precision.
+            ExaDataType::Decimal(Decimal { precision: None, .. }) | ExaDataType::Null => return true,
+            ExaDataType::Decimal(Decimal { precision: Some(precision), scale }) => (*precision, *scale),
+            _ => return false,
+        };
+
+        // If we're decoding to a Rust decimal type then we can accept any DECIMAL precision.
+        let self_diff = self.precision.map_or(Decimal::MAX_PRECISION, |p| p - self.scale);
+        let other_diff = precision - scale;
+
+        self.scale >= scale && self_diff >= other_diff
+    }
+}
+
 /// Common inner type for string like data types, such as `VARCHAR` or `CHAR`.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StringLike {
-    size: usize,
-    character_set: Charset,
+    pub(crate) size: usize,
+    /// The absence of a charset
+    pub(crate) character_set: Option<Charset>,
 }
 
 impl StringLike {
-    pub const MAX_VARCHAR_LEN: usize = 2_000_000;
-    pub const MAX_CHAR_LEN: usize = 2000;
+    pub(crate) const MAX_VARCHAR_LEN: usize = 2_000_000;
+    #[allow(dead_code)]
+    pub(crate) const MAX_CHAR_LEN: usize = 2000;
 
-    pub fn new(size: usize, character_set: Charset) -> Self {
-        Self {
-            size,
-            character_set,
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
-    pub fn character_set(&self) -> Charset {
-        self.character_set
-    }
-
-    /// Strings are complex and ensuring one fits inside a database column would imply a lot of
-    /// overhead.
+    /// We don't care much about the size but we do care about the charset.
     ///
-    /// So just let the database do its thing and throw an error.
-    #[allow(clippy::unused_self)]
+    /// If the column charset is ASCII, UTF-8 strings like Rust's might not be encoded and stored as
+    /// expected. Conversely, if the column charset is UTF-8, an ASCII only type not be the best
+    /// type to decode it to.
+    ///
+    /// The absence of a charset means that the value can go into any (VAR)CHAR column.
     pub fn compatible(&self, ty: &ExaDataType) -> bool {
-        matches!(
-            ty,
-            ExaDataType::Char(_)
-                | ExaDataType::Varchar(_)
-                | ExaDataType::Null
-                | ExaDataType::Date
-                | ExaDataType::Geometry(_)
-                | ExaDataType::HashType(_)
-                | ExaDataType::IntervalDayToSecond(_)
-                | ExaDataType::IntervalYearToMonth(_)
-                | ExaDataType::Timestamp
-                | ExaDataType::TimestampWithLocalTimeZone
-        )
+        match ty {
+            ExaDataType::Null => true,
+            // Allow decoding GEOMETRY / HASHTYPE data to strings
+            ExaDataType::Geometry { .. } | ExaDataType::HashType
+                if self.character_set == Some(Charset::Utf8) =>
+            {
+                true
+            }
+            ExaDataType::Char(other) | ExaDataType::Varchar(other) => matches!(
+                (self.character_set, other.character_set),
+                (Some(Charset::Utf8), _) | (Some(Charset::Ascii), Some(Charset::Ascii) | None)
+            ),
+            _ => false,
+        }
     }
 }
 
@@ -326,209 +404,6 @@ impl Display for Charset {
     }
 }
 
-/// The `DECIMAL` data type.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Decimal {
-    precision: u8,
-    scale: u8,
-}
-
-impl Decimal {
-    /// Special value used along with actual decimal types.
-    /// Because those types can hold virtually any Exasol DECIMAL value while also being encodable
-    /// we need a way to "turn off" compatibility checks sometimes.
-    pub(crate) const SENTINEL_VALUE: u8 = u8::MAX;
-    pub(crate) const MAX_8BIT_PRECISION: u8 = 3;
-    pub(crate) const MAX_16BIT_PRECISION: u8 = 5;
-    pub(crate) const MAX_32BIT_PRECISION: u8 = 10;
-    pub(crate) const MAX_64BIT_PRECISION: u8 = 20;
-
-    pub const MAX_PRECISION: u8 = 36;
-    pub const MAX_SCALE: u8 = 36;
-
-    pub(crate) fn new(precision: u8, scale: u8) -> Self {
-        Self { precision, scale }
-    }
-
-    fn compatible(self, ty: &ExaDataType) -> bool {
-        match ty {
-            ExaDataType::Decimal(d) => self >= *d,
-            ExaDataType::Double => self.scale > 0,
-            ExaDataType::Null => true,
-            _ => false,
-        }
-    }
-}
-
-#[rustfmt::skip] // just to skip rules formatting
-/// The purpose of this is to be able to tell if some [`Decimal`] fits inside another [`Decimal`].
-///
-/// Therefore, we consider cases such as:
-/// - DECIMAL(10, 1) != DECIMAL(9, 2)
-/// - DECIMAL(10, 1) != DECIMAL(10, 2)
-/// - DECIMAL(10, 1) < DECIMAL(11, 2)
-/// - DECIMAL(10, 1) < DECIMAL(17, 4)
-///
-/// - DECIMAL(10, 1) > DECIMAL(9, 1)
-/// - DECIMAL(10, 1) = DECIMAL(10, 1)
-/// - DECIMAL(10, 1) < DECIMAL(11, 1)
-///
-/// So, our rule will be:
-/// - if a.scale > b.scale, a > b if and only if (a.precision - a.scale) >= (b.precision - b.scale)
-/// - if a.scale == b.scale, a == b if and only if (a.precision - a.scale) == (b.precision - b.scale)
-/// - if a.scale < b.scale, a < b if and only if (a.precision - a.scale) <= (b.precision - b.scale)
-///
-/// However, decimal Rust types require special handling because they can hold virtually any decoded value.
-/// Therefore, encountering the [`Decimal::SENTINEL_VALUE`] precision means that the comparison must be skipped.
-impl PartialOrd for Decimal {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if other.precision == Decimal::SENTINEL_VALUE {
-            return Some(Ordering::Greater);
-        }
-
-        let self_diff = self.precision - self.scale;
-        let other_diff = other.precision - other.scale;
-
-        let scale_cmp = self.scale.partial_cmp(&other.scale);
-        let diff_cmp = self_diff.partial_cmp(&other_diff);
-
-        #[allow(clippy::match_same_arms, reason = "better readability if split")]
-        match (scale_cmp, diff_cmp) {
-            (Some(Ordering::Greater), Some(Ordering::Greater)) => Some(Ordering::Greater),
-            (Some(Ordering::Greater), Some(Ordering::Equal)) => Some(Ordering::Greater),
-            (Some(Ordering::Equal), ord) => ord,
-            (Some(Ordering::Less), Some(Ordering::Less)) => Some(Ordering::Less),
-            (Some(Ordering::Less), Some(Ordering::Equal)) => Some(Ordering::Less),
-            _ => None,
-        }
-    }
-}
-
-/// The `GEOMETRY` data type.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Geometry {
-    srid: u16,
-}
-
-impl Geometry {
-    pub fn new(srid: u16) -> Self {
-        Self { srid }
-    }
-
-    pub fn srid(self) -> u16 {
-        self.srid
-    }
-
-    pub fn compatible(self, ty: &ExaDataType) -> bool {
-        match ty {
-            ExaDataType::Geometry(g) => self.srid == g.srid,
-            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
-            _ => false,
-        }
-    }
-}
-
-/// The `INTERVAL DAY TO SECOND` data type.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct IntervalDayToSecond {
-    precision: u32,
-    fraction: u32,
-}
-
-impl PartialOrd for IntervalDayToSecond {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let precision_cmp = self.precision.partial_cmp(&other.precision);
-        let fraction_cmp = self.fraction.partial_cmp(&other.fraction);
-
-        match (precision_cmp, fraction_cmp) {
-            (Some(Ordering::Equal), Some(Ordering::Equal)) => Some(Ordering::Equal),
-            (Some(Ordering::Equal | Ordering::Less), Some(Ordering::Less))
-            | (Some(Ordering::Less), Some(Ordering::Equal)) => Some(Ordering::Less),
-            (Some(Ordering::Equal | Ordering::Greater), Some(Ordering::Greater))
-            | (Some(Ordering::Greater), Some(Ordering::Equal)) => Some(Ordering::Greater),
-            _ => None,
-        }
-    }
-}
-
-impl IntervalDayToSecond {
-    /// The fraction has the weird behavior of shifting the milliseconds up the value and mixing it
-    /// with the seconds, minutes, hours or even the days when the value exceeds 3 (the max
-    /// milliseconds digits limit).
-    ///
-    /// See: <https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval>
-    ///
-    /// Therefore, we'll only be handling fractions smaller or equal to 3, as I don't even know how
-    /// to handle values above that.
-    pub const MAX_SUPPORTED_FRACTION: u32 = 3;
-    pub const MAX_PRECISION: u32 = 9;
-
-    pub fn new(precision: u32, fraction: u32) -> Self {
-        Self {
-            precision,
-            fraction,
-        }
-    }
-
-    pub fn precision(self) -> u32 {
-        self.precision
-    }
-
-    pub fn fraction(self) -> u32 {
-        self.fraction
-    }
-
-    pub fn compatible(self, ty: &ExaDataType) -> bool {
-        match ty {
-            ExaDataType::IntervalDayToSecond(i) => self >= *i,
-            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
-            _ => false,
-        }
-    }
-}
-
-/// The `INTERVAL YEAR TO MONTH` data type.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
-#[serde(rename_all = "camelCase")]
-pub struct IntervalYearToMonth {
-    precision: u32,
-}
-
-impl IntervalYearToMonth {
-    pub const MAX_PRECISION: u32 = 9;
-
-    pub fn new(precision: u32) -> Self {
-        Self { precision }
-    }
-
-    pub fn precision(self) -> u32 {
-        self.precision
-    }
-
-    pub fn compatible(self, ty: &ExaDataType) -> bool {
-        match ty {
-            ExaDataType::IntervalYearToMonth(i) => self >= *i,
-            ExaDataType::Varchar(_) | ExaDataType::Char(_) | ExaDataType::Null => true,
-            _ => false,
-        }
-    }
-}
-
-/// The Exasol `HASHTYPE` data type.
-///
-/// NOTE: Exasol returns the size of the column string representation which depends on the
-/// `HASHTYPE_FORMAT` database parameter. So a UUID could have a size of 32 for HEX, 36 for
-/// UUID, 22 for BASE64, etc.
-///
-/// That makes it impossible to compare a type's predefined size and the size returned for a
-/// column to check for compatibility.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, PartialOrd)]
-#[serde(rename_all = "camelCase")]
-pub struct HashType {}
-
 /// Mainly adding these so that we ensure the inlined type names won't panic when created with their
 /// max values.
 ///
@@ -551,8 +426,10 @@ mod tests {
 
     #[test]
     fn test_max_char_name() {
-        let string_like = StringLike::new(StringLike::MAX_CHAR_LEN, Charset::Ascii);
-        let data_type = ExaDataType::Char(string_like);
+        let data_type = ExaDataType::Char(StringLike {
+            size: StringLike::MAX_CHAR_LEN,
+            character_set: Some(Charset::Ascii),
+        });
         assert_eq!(
             data_type.full_name().as_ref(),
             format!("CHAR({}) ASCII", StringLike::MAX_CHAR_LEN)
@@ -567,7 +444,10 @@ mod tests {
 
     #[test]
     fn test_max_decimal_name() {
-        let decimal = Decimal::new(Decimal::MAX_PRECISION, Decimal::MAX_SCALE);
+        let decimal = Decimal {
+            precision: Some(Decimal::MAX_PRECISION),
+            scale: Decimal::MAX_SCALE,
+        };
         let data_type = ExaDataType::Decimal(decimal);
         assert_eq!(
             data_type.full_name().as_ref(),
@@ -587,8 +467,7 @@ mod tests {
 
     #[test]
     fn test_max_geometry_name() {
-        let geometry = Geometry::new(u16::MAX);
-        let data_type = ExaDataType::Geometry(geometry);
+        let data_type = ExaDataType::Geometry { srid: u16::MAX };
         assert_eq!(
             data_type.full_name().as_ref(),
             format!("GEOMETRY({})", u16::MAX)
@@ -597,30 +476,30 @@ mod tests {
 
     #[test]
     fn test_max_interval_day_name() {
-        let ids = IntervalDayToSecond::new(
-            IntervalDayToSecond::MAX_PRECISION,
-            IntervalDayToSecond::MAX_SUPPORTED_FRACTION,
-        );
-        let data_type = ExaDataType::IntervalDayToSecond(ids);
+        let data_type = ExaDataType::IntervalDayToSecond {
+            precision: ExaDataType::INTERVAL_DTS_MAX_PRECISION,
+            fraction: ExaDataType::INTERVAL_DTS_MAX_FRACTION,
+        };
         assert_eq!(
             data_type.full_name().as_ref(),
             format!(
                 "INTERVAL DAY({}) TO SECOND({})",
-                IntervalDayToSecond::MAX_PRECISION,
-                IntervalDayToSecond::MAX_SUPPORTED_FRACTION
+                ExaDataType::INTERVAL_DTS_MAX_PRECISION,
+                ExaDataType::INTERVAL_DTS_MAX_FRACTION
             )
         );
     }
 
     #[test]
     fn test_max_interval_year_name() {
-        let iym = IntervalYearToMonth::new(IntervalYearToMonth::MAX_PRECISION);
-        let data_type = ExaDataType::IntervalYearToMonth(iym);
+        let data_type = ExaDataType::IntervalYearToMonth {
+            precision: ExaDataType::INTERVAL_YTM_MAX_PRECISION,
+        };
         assert_eq!(
             data_type.full_name().as_ref(),
             format!(
                 "INTERVAL YEAR({}) TO MONTH",
-                IntervalYearToMonth::MAX_PRECISION,
+                ExaDataType::INTERVAL_YTM_MAX_PRECISION,
             )
         );
     }
@@ -642,8 +521,10 @@ mod tests {
 
     #[test]
     fn test_max_varchar_name() {
-        let string_like = StringLike::new(StringLike::MAX_VARCHAR_LEN, Charset::Ascii);
-        let data_type = ExaDataType::Varchar(string_like);
+        let data_type = ExaDataType::Char(StringLike {
+            size: StringLike::MAX_VARCHAR_LEN,
+            character_set: Some(Charset::Ascii),
+        });
         assert_eq!(
             data_type.full_name().as_ref(),
             format!("VARCHAR({}) ASCII", StringLike::MAX_VARCHAR_LEN)
