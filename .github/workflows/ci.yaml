@@ -128,7 +128,7 @@ jobs:
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,migrate,bigdecimal,chrono,rust_decimal,time,uuid -- --nocapture
+        run: cargo test --features runtime-tokio,migrate,ascii,bigdecimal,chrono,json,rust_decimal,time,uuid -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 

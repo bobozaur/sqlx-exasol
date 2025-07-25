@@ -73,8 +73,3 @@ impl_column_index_for_statement!(ExaStatement);
 // ###################
 type SqlxError = sqlx_core::Error;
 type SqlxResult<T> = sqlx_core::Result<T>;
-
-// TODO:
-// introduce max len checks for data types into their encode impl if needed. Intervals might need it.
-// Impl the ExaHasArrayType or something trait to limit 1 dimensional arrays.
-// Create a table when describing and use `DESCRIBE` to get nullability for SELECTs?

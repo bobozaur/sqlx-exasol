@@ -22,7 +22,11 @@ const NUMERIC_I64_RANGE: Range<i64> = -999_999_999_999_999_999..1_000_000_000_00
 
 impl Type<Exasol> for i8 {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal{ precision: Some(Decimal::MAX_8BIT_PRECISION), scale: 0}).into()
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_8BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
     }
 }
 
@@ -46,7 +50,11 @@ impl Decode<'_, Exasol> for i8 {
 
 impl Type<Exasol> for i16 {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal{precision: Some(Decimal::MAX_16BIT_PRECISION), scale: 0}).into()
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_16BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
     }
 }
 
@@ -70,7 +78,11 @@ impl Decode<'_, Exasol> for i16 {
 
 impl Type<Exasol> for i32 {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal{precision: Some(Decimal::MAX_32BIT_PRECISION), scale: 0}).into()
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_32BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
     }
 }
 
@@ -94,7 +106,11 @@ impl Decode<'_, Exasol> for i32 {
 
 impl Type<Exasol> for i64 {
     fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal{precision: Some(Decimal::MAX_64BIT_PRECISION), scale: 0}).into()
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_64BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
     }
 }
 

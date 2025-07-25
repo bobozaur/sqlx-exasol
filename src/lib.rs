@@ -222,7 +222,7 @@ pub use sqlx_exasol_impl::*;
 
 pub mod types {
     pub use sqlx::types::*;
-    pub use sqlx_exasol_impl::types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth, ExaIter};
+    pub use sqlx_exasol_impl::types::*;
 }
 
 pub mod any {

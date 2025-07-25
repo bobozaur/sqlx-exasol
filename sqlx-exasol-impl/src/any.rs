@@ -190,9 +190,7 @@ impl<'a> TryFrom<&'a ExaTypeInfo> for AnyTypeInfo {
                 ExaDataType::Boolean => AnyTypeInfoKind::Bool,
                 ExaDataType::Decimal(_) => AnyTypeInfoKind::BigInt,
                 ExaDataType::Double => AnyTypeInfoKind::Double,
-                ExaDataType::Char{..} | ExaDataType::Varchar{..} => {
-                    AnyTypeInfoKind::Text
-                }
+                ExaDataType::Char { .. } | ExaDataType::Varchar { .. } => AnyTypeInfoKind::Text,
                 _ => {
                     return Err(sqlx_core::Error::AnyDriverError(
                         format!("Any driver does not support Exasol type {type_info:?}").into(),

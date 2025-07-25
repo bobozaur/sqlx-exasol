@@ -67,6 +67,7 @@ tls-rustls-ring-native-roots = [
 any = ["sqlx/any", "sqlx-exasol-impl/any"]
 
 # Types
+ascii = ["sqlx-exasol-impl/ascii"]
 bigdecimal = ["sqlx/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
 chrono = ["sqlx/chrono", "sqlx-exasol-impl/chrono"]
 json = ["sqlx/json", "sqlx-exasol-impl/json"]
@@ -87,6 +88,7 @@ sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
 # External
 anyhow = { version = "1", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
+ascii = { version = "1", default-features = false, features = ["std", "serde"] }
 async-compression = { version = "0.4", default-features = false, features = [
     "futures-io",
     "gzip",

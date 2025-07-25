@@ -3,7 +3,17 @@
 
 extern crate sqlx_exasol as sqlx;
 
+use sqlx::migrate::Migrator;
+use sqlx_exasol::Type;
+
 mod macros;
+
+#[allow(dead_code)]
+static MIGRATOR: Migrator = sqlx_exasol::migrate!("tests/migrations_compile_time");
+
+#[derive(Type)]
+#[sqlx(transparent)]
+struct Stuff(i8);
 
 test_compile_time_type!(
     bool,

@@ -42,8 +42,12 @@ test_type_invalid!(naive_date_str<String>::"DATE"::("'2023-08-12'"));
 test_type_invalid!(datetime_utc_str<String>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'"));
 test_type_invalid!(datetime_local_str<String>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591000'"));
 
-// Declaring a column as ASCII means it won't support UTF8 strings
+// Declaring a column as ASCII means we can't encode UTF8 strings
 test_type_invalid!(utf8_in_ascii<String>::"VARCHAR(100) ASCII"::("first value 🦀", "second value 🦀"));
+
+// Declaring a column as UTF8 means we can't decode to an ASCII string
+#[cfg(feature = "ascii")]
+test_type_invalid!(ascii_in_utf8<sqlx_exasol::types::AsciiString>::"VARCHAR(100) UTF8"::(sqlx_exasol::types::AsciiString::from_ascii("first value").unwrap(), sqlx_exasol::types::AsciiString::from_ascii("second value").unwrap()));
 
 // Test using strings with interval types.
 test_type_invalid!(interval_ytm_str<String>::"INTERVAL YEAR TO MONTH"::("+01-05"));

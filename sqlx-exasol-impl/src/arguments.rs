@@ -209,7 +209,10 @@ impl serde_json::ser::Formatter for ExaJsonStrFormatter {
     where
         W: ?Sized + std::io::Write,
     {
-        #[allow(clippy::enum_glob_use, reason = "plays better with conditional compilation")]
+        #[allow(
+            clippy::enum_glob_use,
+            reason = "plays better with conditional compilation"
+        )]
         use serde_json::ser::CharEscape::*;
 
         #[allow(clippy::needless_raw_string_hashes, reason = "false positive")]

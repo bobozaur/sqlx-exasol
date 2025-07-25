@@ -31,9 +31,17 @@ impl_type_checking!(
         i64,
         f64,
         String | &str,
+        crate::types::ExaIntervalYearToMonth,
+        crate::types::ExaIntervalDayToSecond,
+
+        #[cfg(feature = "json")]
+        sqlx::types::JsonValue,
+
+        #[cfg(feature = "ascii")]
+        crate::types::AsciiString | &crate::types::AsciiStr
     },
     ParamChecking::Weak,
-    feature-types: _info => None,
+    feature-types: info => info.__type_feature_gate(),
     datetime-types: {
         chrono: {
             sqlx::types::chrono::NaiveDate,

@@ -13,6 +13,29 @@ pub struct ExaTypeInfo {
     pub(crate) data_type: ExaDataType,
 }
 
+impl ExaTypeInfo {
+    #[doc(hidden)]
+    #[allow(clippy::must_use_candidate)]
+    pub fn __type_feature_gate(&self) -> Option<&'static str> {
+        match self.data_type {
+            ExaDataType::Date
+            | ExaDataType::Timestamp
+            | ExaDataType::TimestampWithLocalTimeZone => Some("time"),
+            ExaDataType::Decimal(decimal)
+                if decimal.scale > 0 || decimal.precision > Some(Decimal::MAX_64BIT_PRECISION) =>
+            {
+                Some("bigdecimal")
+            }
+            ExaDataType::Char(string_like) | ExaDataType::Varchar(string_like)
+                if matches!(string_like.character_set, Some(Charset::Ascii)) =>
+            {
+                Some("ascii")
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Manually implemented because we only want to serialize the `data_type` field while also
 /// flattening the structure.
 ///
