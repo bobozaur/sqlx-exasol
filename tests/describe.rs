@@ -1,10 +1,8 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::{Column, Executor, Type, TypeInfo};
-use sqlx_core::pool::PoolConnection;
-use sqlx_exasol::Exasol;
+use sqlx_exasol::{pool::PoolConnection, Column, Exasol, Executor, Type, TypeInfo};
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let d = conn.describe("SELECT * FROM tweet").await?;
 
@@ -18,15 +16,15 @@ async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
     assert_eq!(d.nullable(2), None);
     assert_eq!(d.nullable(3), None);
 
-    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(18, 0)");
+    assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(20, 0)");
     assert_eq!(d.columns()[1].type_info().name(), "TIMESTAMP");
     assert_eq!(d.columns()[2].type_info().name(), "VARCHAR(2000000) UTF8");
-    assert_eq!(d.columns()[3].type_info().name(), "DECIMAL(18, 0)");
+    assert_eq!(d.columns()[3].type_info().name(), "DECIMAL(20, 0)");
 
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_describes_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r"
@@ -56,7 +54,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_describes_columns_and_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r"
@@ -103,7 +101,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn test_boolean(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute(
         r"
@@ -133,7 +131,7 @@ CREATE TABLE with_hashtype_and_tinyint (
     Ok(())
 }
 
-#[sqlx::test(migrations = "tests/setup")]
+#[sqlx_exasol::test(migrations = "tests/setup")]
 async fn uses_alias_name(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let d = conn
         .describe("SELECT text AS tweet_text FROM tweet")

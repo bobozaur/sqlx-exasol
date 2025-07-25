@@ -5,20 +5,15 @@ mod macros;
 
 use std::iter;
 
-use anyhow::Result as AnyResult;
 use futures_util::{
     future::{try_join, try_join3, try_join_all},
     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 };
-use rustls::crypto::{aws_lc_rs, CryptoProvider};
-use sqlx::{Connection, Executor};
-use sqlx_core::{
-    error::BoxDynError,
-    pool::{PoolConnection, PoolOptions},
-};
 use sqlx_exasol::{
+    error::BoxDynError,
     etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
-    ExaConnectOptions, Exasol,
+    pool::{PoolConnection, PoolOptions},
+    Connection, ExaConnectOptions, Exasol, Executor,
 };
 
 const NUM_ROWS: usize = 1_000_000;
@@ -132,14 +127,12 @@ test_etl!(
 // ################ Failures ################
 // ##########################################
 #[ignore]
-#[sqlx::test]
-async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
+#[sqlx_exasol::test]
+async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -159,14 +152,12 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
 }
 
 #[ignore]
-#[sqlx::test]
-async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
+#[sqlx_exasol::test]
+async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -188,14 +179,14 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
 }
 
 #[ignore]
-#[sqlx::test]
-async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
+#[sqlx_exasol::test]
+async fn test_etl_transaction_import_rollback(
+    mut conn: PoolConnection<Exasol>,
+) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -212,24 +203,24 @@ async fn test_etl_transaction_import_rollback(mut conn: PoolConnection<Exasol>) 
 
     tx.rollback().await?;
 
-    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+    let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
         .fetch_one(&mut *conn)
         .await?;
 
-    assert_eq!(num_rows, NUM_ROWS as u64);
+    assert_eq!(num_rows, NUM_ROWS as i64);
 
     Ok(())
 }
 
 #[ignore]
-#[sqlx::test]
-async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
-    CryptoProvider::install_default(aws_lc_rs::default_provider()).ok();
-
+#[sqlx_exasol::test]
+async fn test_etl_transaction_import_commit(
+    mut conn: PoolConnection<Exasol>,
+) -> anyhow::Result<()> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    sqlx::query("INSERT INTO TEST_ETL VALUES (?)")
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -247,11 +238,11 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 
     tx.commit().await?;
 
-    let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+    let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
         .fetch_one(&mut *conn)
         .await?;
 
-    assert_eq!(num_rows, (NUM_ROWS + num_writers) as u64);
+    assert_eq!(num_rows, (NUM_ROWS + num_writers) as i64);
 
     Ok(())
 }
@@ -261,10 +252,10 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // //
 // // This will thus fail, because Exasol will just keep sending new requests.
 // #[ignore]
-// #[sqlx::test]
-// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> AnyResult<()> {
+// #[sqlx_exasol::test]
+// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 //
-//     async fn pipe_close_writers(mut writer: ExaImport) -> AnyResult<()> {
+//     async fn pipe_close_writers(mut writer: ExaImport) -> anyhow::Result<()> {
 //         writer.close().await?;
 //         Ok(())
 //     }
@@ -284,7 +275,7 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 //         .await
 //         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-//     let num_rows: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+//     let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
 //         .fetch_one(&mut *conn)
 //         .await?;
 
@@ -297,7 +288,7 @@ async fn test_etl_transaction_import_commit(mut conn: PoolConnection<Exasol>) ->
 // ############### Utilities ################
 // ##########################################
 
-async fn read_data(mut reader: ExaExport) -> AnyResult<()> {
+async fn read_data(mut reader: ExaExport) -> anyhow::Result<()> {
     let mut buf = String::new();
     reader.read_to_string(&mut buf).await?;
     Ok(())
@@ -320,7 +311,7 @@ async fn drop_some_readers(idx: usize, mut reader: ExaExport) -> Result<(), BoxD
     Ok(())
 }
 
-async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
+async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
     // test if flushing is fine even before any write.
     writer.flush().await?;
 
@@ -333,7 +324,7 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> Any
     Ok(())
 }
 
-async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> AnyResult<()> {
+async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
     let mut buf = vec![0; 5120].into_boxed_slice();
     let mut read = 1;
 

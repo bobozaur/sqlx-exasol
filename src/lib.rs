@@ -56,8 +56,8 @@
 //! - [`f32`], [`f64`]
 //! - [`str`], [`String`], [`std::borrow::Cow<str>`]
 //! - `chrono` feature: [`chrono::DateTime<Utc>`], [`chrono::DateTime<Utc>`],
-//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`], [`Months`] (analog of
-//!   [`chrono::Months`])
+//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`],
+//!   [`crate::types::chrono::Months`] (analog of [`chrono::Months`])
 //! - `uuid` feature: [`uuid::Uuid`]
 //! - `rust_decimal` feature: [`rust_decimal::Decimal`]
 //!
@@ -100,7 +100,7 @@
 //! let pool = ExaPool::connect(&env::var("DATABASE_URL").unwrap()).await?;
 //! let mut con = pool.acquire().await?;
 //!
-//! sqlx::query("CREATE SCHEMA RUST_DOC_TEST")
+//! sqlx_exasol::query("CREATE SCHEMA RUST_DOC_TEST")
 //!     .execute(&mut *con)
 //!     .await?;
 //! #
@@ -109,7 +109,7 @@
 //! # };
 //! ```
 //!
-//! Array-like parameter binding, also featuring the [`ExaIter`] adapter.
+//! Array-like parameter binding, also featuring the [`crate::types::ExaIter`] adapter.
 //! An important thing to note is that the parameter sets must be of equal length,
 //! otherwise an error is thrown:
 //! ```rust,no_run
@@ -125,9 +125,9 @@
 //! let params1 = vec![1, 2, 3];
 //! let params2 = HashSet::from([1, 2, 3]);
 //!
-//! sqlx::query("INSERT INTO MY_TABLE VALUES (?, ?)")
+//! sqlx_exasol::query("INSERT INTO MY_TABLE VALUES (?, ?)")
 //!     .bind(&params1)
-//!     .bind(ExaIter::from(&params2))
+//!     .bind(types::ExaIter::new(params2.iter()))
 //!     .execute(&mut *con)
 //!     .await?;
 //! #
@@ -217,65 +217,23 @@
 //! nullable or not, so the driver cannot implicitly decide whether a `NULL` value can go into a
 //! certain database column or not until it actually tries.
 
-/// Gets rid of unused dependencies warning from dev-dependencies.
-mod arguments;
-mod column;
-mod connection;
-mod database;
-mod error;
-#[cfg(feature = "migrate")]
-mod migrate;
-mod options;
-mod query_result;
-mod responses;
-mod row;
-mod statement;
-#[cfg(feature = "migrate")]
-mod testing;
-mod transaction;
-mod type_info;
-mod types;
-mod value;
+pub use sqlx::*;
+pub use sqlx_exasol_impl::*;
 
-pub use arguments::ExaArguments;
-pub use column::ExaColumn;
-#[cfg(feature = "etl")]
-pub use connection::etl;
-pub use connection::ExaConnection;
-pub use database::Exasol;
-pub use options::{ExaConnectOptions, ExaConnectOptionsBuilder, ExaSslMode, ProtocolVersion};
-pub use query_result::ExaQueryResult;
-pub use responses::{ExaAttributes, ExaDatabaseError, SessionInfo};
-pub use row::ExaRow;
-use sqlx_core::{
-    executor::Executor, impl_acquire, impl_column_index_for_row, impl_column_index_for_statement,
-    impl_into_arguments_for_arguments,
-};
-pub use statement::ExaStatement;
-pub use transaction::ExaTransactionManager;
-pub use type_info::ExaTypeInfo;
-pub use types::ExaIter;
-#[cfg(feature = "chrono")]
-pub use types::Months;
-pub use value::{ExaValue, ExaValueRef};
+pub mod types {
+    pub use sqlx::types::*;
+    pub use sqlx_exasol_impl::types::*;
+}
 
-/// An alias for [`Pool`][sqlx_core::pool::Pool], specialized for Exasol.
-pub type ExaPool = sqlx_core::pool::Pool<Exasol>;
+pub mod any {
+    pub use sqlx::any::*;
+    pub use sqlx_exasol_impl::any::DRIVER;
+}
+#[cfg(feature = "macros")]
+pub use sqlx_exasol_macros;
+#[cfg(feature = "macros")]
+mod macros;
 
-/// An alias for [`PoolOptions`][sqlx_core::pool::PoolOptions], specialized for Exasol.
-pub type ExaPoolOptions = sqlx_core::pool::PoolOptions<Exasol>;
-
-/// An alias for [`Executor<'_, Database = Exasol>`][Executor].
-pub trait ExaExecutor<'c>: Executor<'c, Database = Exasol> {}
-impl<'c, T: Executor<'c, Database = Exasol>> ExaExecutor<'c> for T {}
-
-impl_into_arguments_for_arguments!(ExaArguments);
-impl_acquire!(Exasol, ExaConnection);
-impl_column_index_for_row!(ExaRow);
-impl_column_index_for_statement!(ExaStatement);
-
-// ###################
-// ##### Aliases #####
-// ###################
-type SqlxError = sqlx_core::Error;
-type SqlxResult<T> = sqlx_core::Result<T>;
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub mod ty_match;

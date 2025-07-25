@@ -2,10 +2,9 @@
 
 use std::path::Path;
 
-use sqlx::{migrate::Migrator, pool::PoolConnection, Executor, Row};
-use sqlx_exasol::{ExaConnection, Exasol};
+use sqlx_exasol::{migrate::Migrator, pool::PoolConnection, ExaConnection, Exasol, Executor, Row};
 
-#[sqlx::test(migrations = false)]
+#[sqlx_exasol::test(migrations = false)]
 async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     clean_up(&mut conn).await?;
 
@@ -27,7 +26,7 @@ async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx_exasol::test(migrations = false)]
 async fn reversible(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     clean_up(&mut conn).await?;
 

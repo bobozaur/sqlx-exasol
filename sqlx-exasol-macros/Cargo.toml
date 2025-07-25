@@ -1,0 +1,28 @@
+[package]
+name = "sqlx-exasol-macros"
+description = "Macros support for sqlx-exasol. Not meant to be used directly."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+
+[lib]
+proc-macro = true
+
+[features]
+derive = ["sqlx-macros-core/derive"]
+macros = ["sqlx-macros-core/macros", "sqlx-exasol-impl/macros"]
+migrate = ["sqlx-macros-core/migrate", "sqlx-exasol-impl/migrate"]
+
+[dependencies]
+sqlx-macros-core = { workspace = true }
+sqlx-exasol-impl = { workspace = true }
+syn = { workspace = true }
+quote = { workspace = true }
+
+[lints]
+workspace = true
