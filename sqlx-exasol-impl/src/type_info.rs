@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_max_varchar_name() {
-        let data_type = ExaDataType::Char(StringLike {
+        let data_type = ExaDataType::Varchar(StringLike {
             size: StringLike::MAX_VARCHAR_LEN,
             character_set: Some(Charset::Ascii),
         });
