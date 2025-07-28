@@ -240,4 +240,4 @@ jobs:
         run: cargo run -p sqlx-exasol-cli -- migrate run tests/migrations
         
       - name: Run tests
-        run: cargo test --features runtime-tokio -- test_compile_time --ignored --nocapture
+        run: cargo test --features runtime-tokio,migrate,macros -- test_compile_time --ignored --nocapture

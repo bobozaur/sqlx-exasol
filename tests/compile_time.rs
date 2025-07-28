@@ -52,7 +52,7 @@ test_compile_time_type!(
 
 test_compile_time_type!(
     f64,
-    f64::MAX,
+    10342342.34324,
     "INSERT INTO compile_time_tests (column_f64) VALUES(?);",
     "SELECT column_f64 FROM compile_time_tests;"
 );

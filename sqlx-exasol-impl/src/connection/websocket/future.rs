@@ -175,6 +175,8 @@ impl<'a> ExecuteBatch<'a> {
         }
 
         let query = query.trim();
+        // NOTE: Using [`char`] as the iterator element for the sake of `char::is_whitespace` which
+        //       is more exhaustive than `u8::is_ascii_whitespace`.
         let mut chars = query.char_indices().peekable();
         let mut state = Inside::Statement;
         let mut statements = Vec::new();
