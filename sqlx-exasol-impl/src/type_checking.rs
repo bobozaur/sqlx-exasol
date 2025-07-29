@@ -31,7 +31,7 @@ mod sqlx_exasol {
 }
 
 impl_type_checking!(
-    Exasol {        
+    Exasol {
         bool,
         i8,
         i16,
@@ -39,10 +39,10 @@ impl_type_checking!(
         i64,
         f64,
         String | &str,
-        
+
         sqlx_exasol::types::ExaIntervalYearToMonth,
         sqlx_exasol::types::ExaIntervalDayToSecond,
-        
+
         #[cfg(feature = "uuid")]
         sqlx_exasol::types::Uuid,
     },

@@ -6,7 +6,10 @@ extern crate sqlx_exasol as sqlx;
 mod macros;
 
 use sqlx::migrate::Migrator;
-use sqlx_exasol::{types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth}, Type};
+use sqlx_exasol::{
+    types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth},
+    Type,
+};
 
 #[allow(dead_code)]
 static MIGRATOR: Migrator = sqlx_exasol::migrate!("tests/migrations_compile_time");
@@ -98,7 +101,13 @@ test_compile_time_type!(
 test_compile_time_type!(
     interval_dts,
     ExaIntervalDayToSecond,
-    ExaIntervalDayToSecond { days: -1, hours: 0, minutes: 0, seconds: 0, milliseconds: 0 },
+    ExaIntervalDayToSecond {
+        days: -1,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        milliseconds: 0
+    },
     "INSERT INTO compile_time_tests (column_interval_dts) VALUES(?);",
     "SELECT column_interval_dts FROM compile_time_tests;"
 );
@@ -106,7 +115,10 @@ test_compile_time_type!(
 test_compile_time_type!(
     interval_ytm,
     ExaIntervalYearToMonth,
-    ExaIntervalYearToMonth { years: -1, months: 0 },
+    ExaIntervalYearToMonth {
+        years: -1,
+        months: 0
+    },
     "INSERT INTO compile_time_tests (column_interval_ytm) VALUES(?);",
     "SELECT column_interval_ytm FROM compile_time_tests;"
 );
