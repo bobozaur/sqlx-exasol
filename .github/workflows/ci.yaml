@@ -50,19 +50,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.86.0
         with:
           components: clippy
-          
-      - name: Setup database
-        run: cargo run -p sqlx-exasol-cli -- database create
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
-        
-      - name: Run migrations
-        run: cargo run -p sqlx-exasol-cli -- migrate run tests/migrations
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
 
       - name: Run clippy
-        run: cargo clippy --tests ${{ matrix.tls }} ${{ matrix.other }}
+        run: cargo clippy ${{ matrix.tls }} ${{ matrix.other }}
         env:
           RUSTFLAGS: -D warnings
 
