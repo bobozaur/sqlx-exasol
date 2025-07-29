@@ -171,15 +171,25 @@ jobs:
       
       - name: Setup database
         run: cargo run -p sqlx-exasol-cli -- database create
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
         
       - name: Run migrations
         run: cargo run -p sqlx-exasol-cli -- migrate run tests/migrations
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
         
       - name: Run preferred crates tests
         run: cargo test --features runtime-tokio,migrate,macros,bigdecimal,time,json,uuid -- test_compile_time --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
         
       - name: Run chrono tests
         run: cargo test --features runtime-tokio,migrate,macros,chrono -- test_compile_time_chrono --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
         
       - name: Run rust_decimal tests
         run: cargo test --features runtime-tokio,migrate,macros,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.no-tls-url }}
