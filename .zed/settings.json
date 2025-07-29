@@ -13,7 +13,6 @@
             "macros",
             "any",
             // Types
-            "ascii",
             "bigdecimal",
             "chrono",
             "rust_decimal",

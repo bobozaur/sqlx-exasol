@@ -26,8 +26,10 @@ exclude = ["tests/*"]
 [package.metadata.docs.rs]
 features = [
     "etl",
+    "bigdecimal",
     "chrono",
     "rust_decimal",
+    "time",
     "uuid",
     "compression",
     "migrate",
@@ -67,13 +69,12 @@ tls-rustls-ring-native-roots = [
 any = ["sqlx/any", "sqlx-exasol-impl/any"]
 
 # Types
-ascii = ["sqlx-exasol-impl/ascii"]
-bigdecimal = ["sqlx/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
-chrono = ["sqlx/chrono", "sqlx-exasol-impl/chrono"]
-json = ["sqlx/json", "sqlx-exasol-impl/json"]
-rust_decimal = ["sqlx/rust_decimal", "sqlx-exasol-impl/rust_decimal"]
-time = ["sqlx/time", "sqlx-exasol-impl/time"]
-uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid"]
+bigdecimal = ["sqlx/bigdecimal", "sqlx-exasol-impl/bigdecimal", "sqlx-exasol-macros?/bigdecimal"]
+chrono = ["sqlx/chrono", "sqlx-exasol-impl/chrono", "sqlx-exasol-macros?/chrono"]
+json = ["sqlx/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
+rust_decimal = ["sqlx/rust_decimal", "sqlx-exasol-impl/rust_decimal", "sqlx-exasol-macros?/rust_decimal"]
+time = ["sqlx/time", "sqlx-exasol-impl/time", "sqlx-exasol-macros?/time"]
+uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid", "sqlx-exasol-macros?/uuid"]
 
 # Driver specific features
 compression = ["sqlx-exasol-impl/compression"]
@@ -88,7 +89,6 @@ sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
 # External
 anyhow = { version = "1", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
-ascii = { version = "1", default-features = false, features = ["std", "serde"] }
 async-compression = { version = "0.4", default-features = false, features = [
     "futures-io",
     "gzip",

@@ -1,5 +1,3 @@
-#[cfg(feature = "ascii")]
-pub mod ascii;
 #[cfg(feature = "bigdecimal")]
 mod bigdecimal;
 mod bool;
@@ -21,7 +19,5 @@ mod time;
 #[cfg(feature = "uuid")]
 mod uuid;
 
-#[cfg(feature = "ascii")]
-pub use ascii::{AsciiStr, AsciiString};
 pub use interval::{ExaIntervalDayToSecond, ExaIntervalYearToMonth};
 pub use iter::ExaIter;

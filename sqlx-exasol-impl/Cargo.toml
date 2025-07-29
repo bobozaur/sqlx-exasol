@@ -17,7 +17,6 @@ migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
 macros = ["dep:sqlx-macros-core", "sqlx-macros-core?/macros"]
 
 # Type Integration features
-ascii = ["dep:ascii"]
 bigdecimal = ["sqlx-core/bigdecimal", "dep:bigdecimal"]
 chrono = ["sqlx-core/chrono", "dep:chrono"]
 json = ["sqlx-core/json"]
@@ -52,7 +51,6 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 # Feature flagged optional dependencies
-ascii = {workspace = true, optional = true }
 async-compression = { workspace = true, optional = true }
 bigdecimal = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }

@@ -26,11 +26,6 @@ impl ExaTypeInfo {
             {
                 Some("bigdecimal")
             }
-            ExaDataType::Char(string_like) | ExaDataType::Varchar(string_like)
-                if matches!(string_like.character_set, Some(Charset::Ascii)) =>
-            {
-                Some("ascii")
-            }
             _ => None,
         }
     }
@@ -107,7 +102,8 @@ pub enum ExaDataType {
     /// The BOOLEAN data type.
     Boolean,
     /// The CHAR data type.
-    Char(StringLike),
+    #[serde(rename_all = "camelCase")]
+    Char { size: usize, character_set: Charset },
     /// The DATE data type.
     Date,
     /// The DECIMAL data type.
@@ -131,7 +127,8 @@ pub enum ExaDataType {
     #[serde(rename = "TIMESTAMP WITH LOCAL TIME ZONE")]
     TimestampWithLocalTimeZone,
     /// The VARCHAR data type.
-    Varchar(StringLike),
+    #[serde(rename_all = "camelCase")]
+    Varchar { size: usize, character_set: Charset },
     /// The Exasol `HASHTYPE` data type.
     ///
     /// NOTE: Exasol returns the size of the column string representation which depends on the
@@ -159,7 +156,7 @@ impl ExaDataType {
     const HASHTYPE: &'static str = "HASHTYPE";
 
     // Datatype constants
-    pub(crate) const INTERVAL_YTM_MAX_PRECISION: u32 = 9;
+    //
     /// Accuracy is limited to milliseconds, see: <https://docs.exasol.com/db/latest/sql_references/data_types/datatypedetails.htm#Interval>.
     ///
     /// The fraction has the weird behavior of shifting the milliseconds up the value and mixing it
@@ -171,6 +168,8 @@ impl ExaDataType {
     /// Therefore, we'll only be handling fractions smaller or equal to 3.
     pub(crate) const INTERVAL_DTS_MAX_FRACTION: u32 = 3;
     pub(crate) const INTERVAL_DTS_MAX_PRECISION: u32 = 9;
+    pub(crate) const INTERVAL_YTM_MAX_PRECISION: u32 = 9;
+    pub(crate) const VARCHAR_MAX_LEN: usize = 2_000_000;
 
     /// Returns `true` if this instance is compatible with the other one provided.
     ///
@@ -179,7 +178,13 @@ impl ExaDataType {
     pub fn compatible(&self, other: &Self) -> bool {
         match self {
             ExaDataType::Boolean => matches!(other, ExaDataType::Boolean),
-            ExaDataType::Char(s) | ExaDataType::Varchar(s) => s.compatible(other),
+            ExaDataType::Char { .. } | ExaDataType::Varchar { .. } => matches!(
+                other,
+                ExaDataType::Char { .. }
+                    | ExaDataType::Varchar { .. }
+                    | ExaDataType::Geometry { .. }
+                    | ExaDataType::HashType
+            ),
             ExaDataType::Date => matches!(other, ExaDataType::Date),
             ExaDataType::Decimal(d) => d.compatible(other),
             ExaDataType::Double => matches!(other, ExaDataType::Double),
@@ -213,10 +218,14 @@ impl ExaDataType {
             ExaDataType::Double => Self::DOUBLE.into(),
             ExaDataType::Timestamp => Self::TIMESTAMP.into(),
             ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE.into(),
-            ExaDataType::Char(s) | ExaDataType::Varchar(s) => match s.character_set {
-                Some(c) => format_args!("{}({}) {c}", self.as_ref(), s.size).into(),
-                None => format_args!("{}({})", self.as_ref(), s.size).into(),
-            },
+            ExaDataType::Char {
+                size,
+                character_set,
+            }
+            | ExaDataType::Varchar {
+                size,
+                character_set,
+            } => format_args!("{}({}) {}", self.as_ref(), size, character_set).into(),
             ExaDataType::Decimal(d) => match d.precision {
                 Some(p) => format_args!("{}({}, {})", self.as_ref(), p, d.scale).into(),
                 None => format_args!("{}(*, {})", self.as_ref(), d.scale).into(),
@@ -295,6 +304,7 @@ impl From<Arguments<'_>> for DataTypeName {
 #[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Decimal {
+    /// The absence of precision means universal compatibility.
     pub(crate) precision: Option<u8>,
     pub(crate) scale: u8,
 }
@@ -346,51 +356,6 @@ impl Decimal {
     }
 }
 
-/// Common inner type for string like data types, such as `VARCHAR` or `CHAR`.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct StringLike {
-    pub(crate) size: usize,
-    /// The absence of a charset
-    pub(crate) character_set: Option<Charset>,
-}
-
-impl StringLike {
-    pub(crate) const MAX_VARCHAR_LEN: usize = 2_000_000;
-    #[allow(dead_code)]
-    pub(crate) const MAX_CHAR_LEN: usize = 2000;
-
-    /// We don't care much about the size but we do care about the charset.
-    ///
-    /// If the column charset is ASCII, UTF-8 strings like Rust's might not be encoded and stored as
-    /// expected. Conversely, if the column charset is UTF-8, an ASCII only type not be the best
-    /// type to decode it to.
-    ///
-    /// The absence of a charset means that the value can go into any (VAR)CHAR column.
-    pub fn compatible(&self, ty: &ExaDataType) -> bool {
-        #[allow(clippy::match_like_matches_macro, reason = "better readability")]
-        #[allow(clippy::match_same_arms, reason = "better readability")]
-        match ty {
-            // Allow decoding GEOMETRY data to strings
-            ExaDataType::Geometry { .. } if self.character_set == Some(Charset::Utf8) => true,
-            // Allow decoding HASHTYPE data to strings
-            ExaDataType::HashType if self.character_set == Some(Charset::Utf8) => true,
-            ExaDataType::Char(other) | ExaDataType::Varchar(other) => {
-                match (self.character_set, other.character_set) {
-                    // Short circuits since there's no comparison
-                    (None, _) | (_, None) => true,
-                    // UTF-8 can also accommodate ASCII data
-                    (Some(Charset::Utf8), _) => true,
-                    // ASCII check must be stricter
-                    (Some(Charset::Ascii), Some(Charset::Ascii)) => true,
-                    _ => false,
-                }
-            }
-            _ => false,
-        }
-    }
-}
-
 /// Exasol supported character sets.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -430,13 +395,13 @@ mod tests {
 
     #[test]
     fn test_max_char_name() {
-        let data_type = ExaDataType::Char(StringLike {
-            size: StringLike::MAX_CHAR_LEN,
-            character_set: Some(Charset::Ascii),
-        });
+        let data_type = ExaDataType::Char {
+            size: ExaDataType::VARCHAR_MAX_LEN,
+            character_set: Charset::Ascii,
+        };
         assert_eq!(
             data_type.full_name().as_ref(),
-            format!("CHAR({}) ASCII", StringLike::MAX_CHAR_LEN)
+            format!("CHAR({}) ASCII", ExaDataType::VARCHAR_MAX_LEN)
         );
     }
 
@@ -525,13 +490,13 @@ mod tests {
 
     #[test]
     fn test_max_varchar_name() {
-        let data_type = ExaDataType::Varchar(StringLike {
-            size: StringLike::MAX_VARCHAR_LEN,
-            character_set: Some(Charset::Ascii),
-        });
+        let data_type = ExaDataType::Varchar {
+            size: ExaDataType::VARCHAR_MAX_LEN,
+            character_set: Charset::Ascii,
+        };
         assert_eq!(
             data_type.full_name().as_ref(),
-            format!("VARCHAR({}) ASCII", StringLike::MAX_VARCHAR_LEN)
+            format!("VARCHAR({}) ASCII", ExaDataType::VARCHAR_MAX_LEN)
         );
     }
 }

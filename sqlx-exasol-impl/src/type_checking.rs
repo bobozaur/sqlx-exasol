@@ -1,5 +1,4 @@
 #[allow(unused_imports)]
-use sqlx_core as sqlx;
 use sqlx_core::{describe::Describe, impl_type_checking};
 use sqlx_macros_core::{
     database::{CachingDescribeBlocking, DatabaseExt},
@@ -22,8 +21,17 @@ impl DatabaseExt for Exasol {
     }
 }
 
+mod sqlx_exasol {
+    pub mod types {
+        #[allow(unused_imports, reason = "used in type checking")]
+        pub use sqlx_core::types::*;
+
+        pub use crate::types::*;
+    }
+}
+
 impl_type_checking!(
-    Exasol {
+    Exasol {        
         bool,
         i8,
         i16,
@@ -31,39 +39,33 @@ impl_type_checking!(
         i64,
         f64,
         String | &str,
-        crate::types::ExaIntervalYearToMonth,
-        crate::types::ExaIntervalDayToSecond,
-
-        #[cfg(feature = "json")]
-        sqlx::types::JsonValue,
-
-        #[cfg(feature = "ascii")]
-        crate::types::AsciiString | &crate::types::AsciiStr
+        sqlx_exasol::types::ExaIntervalYearToMonth,
+        sqlx_exasol::types::ExaIntervalDayToSecond,
     },
     ParamChecking::Weak,
     feature-types: info => info.__type_feature_gate(),
     datetime-types: {
         chrono: {
-            sqlx::types::chrono::NaiveDate,
+            sqlx_exasol::types::chrono::NaiveDate,
 
-            sqlx::types::chrono::NaiveDateTime,
+            sqlx_exasol::types::chrono::NaiveDateTime,
 
-            sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+            sqlx_exasol::types::chrono::DateTime<sqlx_exasol::types::chrono::Utc>,
         },
         time: {
-            sqlx::types::time::Date,
+            sqlx_exasol::types::time::Date,
 
-            sqlx::types::time::PrimitiveDateTime,
+            sqlx_exasol::types::time::PrimitiveDateTime,
 
-            sqlx::types::time::OffsetDateTime,
+            sqlx_exasol::types::time::OffsetDateTime,
         },
     },
     numeric-types: {
         bigdecimal: {
-            sqlx::types::BigDecimal,
+            sqlx_exasol::types::BigDecimal,
         },
         rust_decimal: {
-            sqlx::types::Decimal,
+            sqlx_exasol::types::Decimal,
         },
     },
 );

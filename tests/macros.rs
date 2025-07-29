@@ -200,7 +200,7 @@ macro_rules! test_etl_multi_threaded {
 
 #[macro_export]
 macro_rules! test_compile_time_type {
-    ($col:ident, $ty:tt, $value:expr, $insert:expr, $select:expr) => {
+    ($col:ident, $ty:ty, $value:expr, $insert:expr, $select:expr) => {
         paste::item! {
             #[ignore]
             #[sqlx_exasol::test(migrations = "tests/migrations_compile_time")]
@@ -303,9 +303,5 @@ macro_rules! test_compile_time_type {
                 Ok(())
             }
         }
-    };
-
-    ($ty:tt, $value:expr, $insert:literal, $select:literal) => {
-        test_compile_time_type!($ty, $ty, $value, $insert, $select);
     };
 }
