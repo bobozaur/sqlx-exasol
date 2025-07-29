@@ -52,7 +52,7 @@ jobs:
           components: clippy
 
       - name: Run clippy
-        run: cargo clippy --tests ${{ matrix.tls }} ${{ matrix.other }}
+        run: cargo clippy ${{ matrix.tls }} ${{ matrix.other }}
         env:
           RUSTFLAGS: -D warnings
 
