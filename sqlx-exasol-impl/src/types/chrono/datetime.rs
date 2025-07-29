@@ -11,7 +11,6 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
-    types::TS_ENC_LEN,
     value::ExaValueRef,
 };
 
@@ -30,7 +29,11 @@ impl Encode<'_, Exasol> for NaiveDateTime {
     }
 
     fn size_hint(&self) -> usize {
-        TS_ENC_LEN
+        // 1 quote +
+        // 4 years + 1 dash + 2 months + 1 dash + 2 days +
+        // 1 space + 2 hours + 2 minutes + 2 seconds + 9 subseconds +
+        // 1 quote
+        28
     }
 }
 
@@ -55,7 +58,11 @@ impl Encode<'_, Exasol> for DateTime<Utc> {
     }
 
     fn size_hint(&self) -> usize {
-        TS_ENC_LEN
+        // 1 quote +
+        // 4 years + 1 dash + 2 months + 1 dash + 2 days +
+        // 1 space + 2 hours + 2 minutes + 2 seconds + 9 subseconds +
+        // 1 quote
+        28
     }
 }
 
@@ -78,7 +85,11 @@ impl Encode<'_, Exasol> for DateTime<Local> {
     }
 
     fn size_hint(&self) -> usize {
-        TS_ENC_LEN
+        // 1 quote +
+        // 4 years + 1 dash + 2 months + 1 dash + 2 days +
+        // 1 space + 2 hours + 2 minutes + 2 seconds + 9 subseconds +
+        // 1 quote
+        28
     }
 }
 
