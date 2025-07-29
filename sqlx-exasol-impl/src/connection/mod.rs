@@ -11,6 +11,7 @@ use futures_util::{FutureExt, SinkExt};
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
+    executor::Executor,
     transaction::Transaction,
 };
 use websocket::{socket::WithExaSocket, ExaWebSocket};
@@ -111,13 +112,24 @@ impl ExaConnection {
         }
 
         let (ws, session_info) = ws_result?;
-        let con = Self {
+        let mut con = Self {
             ws,
             log_settings: LogSettings::default(),
             session_info,
         };
 
+        con.configure_session().await?;
+
         Ok(con)
+    }
+
+    /// Sets session parameters for the open connection.
+    async fn configure_session(&mut self) -> SqlxResult<()> {
+        // We rely on this for consistent size output for HASHTYPE columns.
+        // This allows to reliably use UUID at compile-time.
+        self.execute("ALTER SESSION SET HASHTYPE_FORMAT = 'HEX';")
+            .await?;
+        Ok(())
     }
 }
 

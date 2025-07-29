@@ -1,11 +1,11 @@
-use serde::Deserialize;
+use ::serde::{Deserialize, Serialize};
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
     types::Type,
 };
-use time::Date;
+use time::{serde, Date};
 
 use crate::{
     arguments::ExaBuffer,
@@ -22,7 +22,7 @@ impl Type<Exasol> for Date {
 
 impl Encode<'_, Exasol> for Date {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append(self)?;
+        buf.append(DateSer(self))?;
         Ok(IsNull::No)
     }
 
@@ -34,6 +34,16 @@ impl Encode<'_, Exasol> for Date {
 
 impl Decode<'_, Exasol> for Date {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+        DateDe::deserialize(value.value)
+            .map(|v| v.0)
+            .map_err(From::from)
     }
 }
+
+#[derive(Serialize)]
+struct DateSer<'a>(#[serde(serialize_with = "date::serialize")] &'a Date);
+
+#[derive(Deserialize)]
+struct DateDe(#[serde(deserialize_with = "date::deserialize")] Date);
+
+serde::format_description!(date, Date, "[year]-[month]-[day]");

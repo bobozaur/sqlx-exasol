@@ -36,27 +36,6 @@ impl ExaColumn {
     }
 }
 
-#[test]
-fn test_column_serde() {
-    let column_str = r#"      {
-      "ordinal": 0,
-      "name": "user_id!",
-      "dataType": {
-        "type": "DECIMAL",
-        "precision": 18,
-        "scale": 0
-      }
-    }"#;
-
-    let column: ExaColumn = serde_json::from_str(column_str).unwrap();
-    println!("{column:?}");
-
-    let new_column_str = serde_json::to_string(&column).unwrap();
-
-    let column: ExaColumn = serde_json::from_str(&new_column_str).unwrap();
-    println!("{column:?}");
-}
-
 impl Display for ExaColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.data_type)

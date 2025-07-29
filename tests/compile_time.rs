@@ -6,7 +6,7 @@ extern crate sqlx_exasol as sqlx;
 mod macros;
 
 use sqlx::migrate::Migrator;
-use sqlx_exasol::Type;
+use sqlx_exasol::{types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth}, Type};
 
 #[allow(dead_code)]
 static MIGRATOR: Migrator = sqlx_exasol::migrate!("tests/migrations_compile_time");
@@ -93,4 +93,65 @@ test_compile_time_type!(
     String::new(),
     "INSERT INTO compile_time_tests (column_varchar_ascii) VALUES(?);",
     "SELECT column_varchar_ascii FROM compile_time_tests;"
+);
+
+test_compile_time_type!(
+    interval_dts,
+    ExaIntervalDayToSecond,
+    ExaIntervalDayToSecond { days: -1, hours: 0, minutes: 0, seconds: 0, milliseconds: 0 },
+    "INSERT INTO compile_time_tests (column_interval_dts) VALUES(?);",
+    "SELECT column_interval_dts FROM compile_time_tests;"
+);
+
+test_compile_time_type!(
+    interval_ytm,
+    ExaIntervalYearToMonth,
+    ExaIntervalYearToMonth { years: -1, months: 0 },
+    "INSERT INTO compile_time_tests (column_interval_ytm) VALUES(?);",
+    "SELECT column_interval_ytm FROM compile_time_tests;"
+);
+
+#[cfg(feature = "time")]
+test_compile_time_type!(
+    time_date,
+    sqlx_exasol::types::time::Date,
+    sqlx_exasol::types::time::Date::from_calendar_date(2000, 10.try_into().unwrap(), 10).unwrap(),
+    "INSERT INTO compile_time_tests (column_date) VALUES(?);",
+    "SELECT column_date FROM compile_time_tests;"
+);
+
+#[cfg(all(feature = "chrono", not(feature = "time")))]
+test_compile_time_type!(
+    chrono_date,
+    sqlx_exasol::types::chrono::NaiveDate,
+    sqlx_exasol::types::chrono::NaiveDate::from_ymd_opt(2000, 10, 10).unwrap(),
+    "INSERT INTO compile_time_tests (column_date) VALUES(?);",
+    "SELECT column_date FROM compile_time_tests;"
+);
+
+#[cfg(feature = "bigdecimal")]
+test_compile_time_type!(
+    bigdecimal,
+    sqlx_exasol::types::BigDecimal,
+    sqlx_exasol::types::BigDecimal::new(2000u16.into(), 10),
+    "INSERT INTO compile_time_tests (column_decimal) VALUES(?);",
+    "SELECT column_decimal FROM compile_time_tests;"
+);
+
+#[cfg(all(feature = "rust_decimal", not(feature = "bigdecimal")))]
+test_compile_time_type!(
+    rust_decimal,
+    sqlx_exasol::types::Decimal,
+    sqlx_exasol::types::Decimal::new(2000, 10),
+    "INSERT INTO compile_time_tests (column_decimal) VALUES(?);",
+    "SELECT column_decimal FROM compile_time_tests;"
+);
+
+#[cfg(feature = "uuid")]
+test_compile_time_type!(
+    uuid,
+    sqlx_exasol::types::Uuid,
+    sqlx_exasol::types::Uuid::from_u64_pair(12_345_789, 12_345_789),
+    "INSERT INTO compile_time_tests (column_uuid) VALUES(?);",
+    "SELECT column_uuid FROM compile_time_tests;"
 );

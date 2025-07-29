@@ -103,7 +103,7 @@ pub enum ExaDataType {
     Boolean,
     /// The CHAR data type.
     #[serde(rename_all = "camelCase")]
-    Char { size: usize, character_set: Charset },
+    Char { size: u32, character_set: Charset },
     /// The DATE data type.
     Date,
     /// The DECIMAL data type.
@@ -128,16 +128,13 @@ pub enum ExaDataType {
     TimestampWithLocalTimeZone,
     /// The VARCHAR data type.
     #[serde(rename_all = "camelCase")]
-    Varchar { size: usize, character_set: Charset },
+    Varchar { size: u32, character_set: Charset },
     /// The Exasol `HASHTYPE` data type.
     ///
     /// NOTE: Exasol returns the size of the column string representation which depends on the
-    /// `HASHTYPE_FORMAT` database parameter. So a UUID could have a size of 32 for HEX, 36 for
-    /// UUID, 22 for BASE64, etc.
-    ///
-    /// That makes it impossible to compare a type's predefined size and the size returned for a
-    /// column to check for compatibility.
-    HashType,
+    /// `HASHTYPE_FORMAT` database parameter. We set the parameter to `HEX` whenever we open a
+    /// connection to allow us to reliably use the column size.
+    HashType { size: u16 },
 }
 
 impl ExaDataType {
@@ -169,7 +166,12 @@ impl ExaDataType {
     pub(crate) const INTERVAL_DTS_MAX_FRACTION: u32 = 3;
     pub(crate) const INTERVAL_DTS_MAX_PRECISION: u32 = 9;
     pub(crate) const INTERVAL_YTM_MAX_PRECISION: u32 = 9;
-    pub(crate) const VARCHAR_MAX_LEN: usize = 2_000_000;
+    pub(crate) const VARCHAR_MAX_LEN: u32 = 2_000_000;
+    #[allow(dead_code)]
+    pub(crate) const CHAR_MAX_LEN: u32 = 2_000;
+    // 1024 * 2 because we set HASHTYPE_FORMAT to HEX.
+    #[allow(dead_code)]
+    pub(crate) const HASHTYPE_MAX_LEN: u16 = 2048;
 
     /// Returns `true` if this instance is compatible with the other one provided.
     ///
@@ -180,20 +182,12 @@ impl ExaDataType {
             ExaDataType::Boolean => matches!(other, ExaDataType::Boolean),
             ExaDataType::Char { .. } | ExaDataType::Varchar { .. } => matches!(
                 other,
-                ExaDataType::Char { .. }
-                    | ExaDataType::Varchar { .. }
-                    | ExaDataType::Geometry { .. }
-                    | ExaDataType::HashType
+                ExaDataType::Char { .. } | ExaDataType::Varchar { .. }
             ),
             ExaDataType::Date => matches!(other, ExaDataType::Date),
             ExaDataType::Decimal(d) => d.compatible(other),
             ExaDataType::Double => matches!(other, ExaDataType::Double),
-            ExaDataType::Geometry { .. } => matches!(
-                other,
-                ExaDataType::Geometry { .. }
-                    | ExaDataType::Char { .. }
-                    | ExaDataType::Varchar { .. }
-            ),
+            ExaDataType::Geometry { .. } => matches!(other, ExaDataType::Geometry { .. }),
             ExaDataType::IntervalDayToSecond { .. } => {
                 matches!(other, ExaDataType::IntervalDayToSecond { .. })
             }
@@ -204,10 +198,9 @@ impl ExaDataType {
             ExaDataType::TimestampWithLocalTimeZone => {
                 matches!(other, ExaDataType::TimestampWithLocalTimeZone)
             }
-            ExaDataType::HashType => matches!(
-                other,
-                ExaDataType::HashType | ExaDataType::Varchar { .. } | ExaDataType::Char { .. }
-            ),
+            ExaDataType::HashType { size } => {
+                matches!(other, ExaDataType::HashType { size: other_size } if size == other_size)
+            }
         }
     }
 
@@ -238,7 +231,10 @@ impl ExaDataType {
             ExaDataType::IntervalYearToMonth { precision } => {
                 format_args!("INTERVAL YEAR({precision}) TO MONTH").into()
             }
-            ExaDataType::HashType => format_args!("{}", self.as_ref()).into(),
+            // We get the HEX len, which is double the byte count.
+            ExaDataType::HashType { size } => {
+                format_args!("{}({} BYTE)", self.as_ref(), size / 2).into()
+            }
         }
     }
 }
@@ -257,7 +253,7 @@ impl AsRef<str> for ExaDataType {
             ExaDataType::Timestamp => Self::TIMESTAMP,
             ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
             ExaDataType::Varchar { .. } => Self::VARCHAR,
-            ExaDataType::HashType => Self::HASHTYPE,
+            ExaDataType::HashType { .. } => Self::HASHTYPE,
         }
     }
 }
@@ -396,12 +392,12 @@ mod tests {
     #[test]
     fn test_max_char_name() {
         let data_type = ExaDataType::Char {
-            size: ExaDataType::VARCHAR_MAX_LEN,
+            size: ExaDataType::CHAR_MAX_LEN,
             character_set: Charset::Ascii,
         };
         assert_eq!(
             data_type.full_name().as_ref(),
-            format!("CHAR({}) ASCII", ExaDataType::VARCHAR_MAX_LEN)
+            format!("CHAR({}) ASCII", ExaDataType::CHAR_MAX_LEN)
         );
     }
 
@@ -497,6 +493,17 @@ mod tests {
         assert_eq!(
             data_type.full_name().as_ref(),
             format!("VARCHAR({}) ASCII", ExaDataType::VARCHAR_MAX_LEN)
+        );
+    }
+
+    #[test]
+    fn test_max_hashbyte_name() {
+        let data_type = ExaDataType::HashType {
+            size: ExaDataType::HASHTYPE_MAX_LEN,
+        };
+        assert_eq!(
+            data_type.full_name().as_ref(),
+            format!("HASHTYPE({} BYTE)", ExaDataType::HASHTYPE_MAX_LEN / 2)
         );
     }
 }
