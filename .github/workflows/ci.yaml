@@ -155,16 +155,6 @@ jobs:
         run: cargo run -p sqlx-exasol-cli -- database drop -y
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-
-      - name: Setup database (to drop)
-        run: cargo run -p sqlx-exasol-cli -- database create
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-          
-      - name: Drop database (existent)
-        run: cargo run -p sqlx-exasol-cli -- database drop -y
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           
       - name: Setup database
         run: cargo run -p sqlx-exasol-cli -- database create
@@ -188,5 +178,10 @@ jobs:
 
       - name: Run rust_decimal tests
         run: cargo test --features runtime-tokio,migrate,macros,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          
+      - name: Drop database (existent)
+        run: cargo run -p sqlx-exasol-cli -- database drop -y
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
