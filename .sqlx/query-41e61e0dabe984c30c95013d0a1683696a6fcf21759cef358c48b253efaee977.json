@@ -1,0 +1,24 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_i32 FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_i32",
+        "dataType": {
+          "type": "DECIMAL",
+          "precision": 10,
+          "scale": 0
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "41e61e0dabe984c30c95013d0a1683696a6fcf21759cef358c48b253efaee977"
+}

@@ -1,0 +1,18 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_char_ascii) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "CHAR",
+          "size": 16,
+          "characterSet": "ASCII"
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "062a5e324734a06c158364ca58ef70099acd533ec5fe97f594f3bf6436f65265"
+}

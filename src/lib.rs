@@ -55,11 +55,11 @@
 //! - [`i8`], [`i16`], [`i32`], [`i64`], [`i128`]
 //! - [`f32`], [`f64`]
 //! - [`str`], [`String`], [`std::borrow::Cow<str>`]
-//! - `chrono` feature: [`chrono::DateTime<Utc>`], [`chrono::DateTime<Utc>`],
-//!   [`chrono::NaiveDateTime`], [`chrono::NaiveDate`], [`chrono::Duration`],
-//!   [`crate::types::chrono::Months`] (analog of [`chrono::Months`])
-//! - `uuid` feature: [`uuid::Uuid`]
-//! - `rust_decimal` feature: [`rust_decimal::Decimal`]
+//! - `chrono` feature: [`crate::types::chrono::DateTime<Utc>`],
+//!   [`crate::types::chrono::DateTime<Utc>`], [`crate::types::chrono::NaiveDateTime`],
+//!   [`crate::types::chrono::NaiveDate`],
+//! - `uuid` feature: [`crate::types::Uuid`]
+//! - `rust_decimal` feature: [`crate::types::Decimal`]
 //!
 //! ## Supported Exasol datatypes:
 //! All Exasol datatypes are supported in some way, also depdending on the additional types used
@@ -75,8 +75,8 @@
 //!
 //! The data is always in `CSV` format and job configuration can be done through the
 //! [`etl::ImportBuilder`] and [`etl::ExportBuilder`] structs. The workers implement
-//! [`futures_io::AsyncWrite`] and [`futures_io::AsyncRead`] respectively, providing great
-//! flexibility in terms of how the data is processed.
+//! `AsyncWrite` and `AsyncRead` respectively, providing great flexibility in terms of how the data
+//! is processed.
 //!
 //! The general flow of an ETL job is:
 //! - build the job through [`etl::ImportBuilder`] or [`etl::ExportBuilder`]

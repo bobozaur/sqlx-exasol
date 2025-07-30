@@ -25,6 +25,7 @@ use crate::{
 pub struct WithRustlsSocketMaker(Arc<ServerConfig>);
 
 impl WithRustlsSocketMaker {
+    #[cfg_attr(feature = "native-tls", allow(dead_code))]
     pub fn new(cert: &Certificate, key_pair: &KeyPair) -> SqlxResult<Self> {
         tracing::trace!("creating 'rustls' socket spawner");
 

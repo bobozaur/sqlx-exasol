@@ -14,12 +14,12 @@ use crate::{error::ToSqlxError, SqlxError, SqlxResult};
 
 #[cfg(feature = "native-tls")]
 pub type WithTlsSocketMaker = native_tls::WithNativeTlsSocketMaker;
-#[cfg(feature = "rustls")]
+#[cfg(all(feature = "rustls", not(feature = "native-tls")))]
 pub type WithTlsSocketMaker = rustls::WithRustlsSocketMaker;
 
 #[cfg(feature = "native-tls")]
 pub type WithTlsSocket = native_tls::WithNativeTlsSocket;
-#[cfg(feature = "rustls")]
+#[cfg(all(feature = "rustls", not(feature = "native-tls")))]
 pub type WithTlsSocket = rustls::WithRustlsSocket;
 
 /// Returns the dedicated [`impl WithSocketMaker`] for the chosen TLS implementation.
@@ -41,7 +41,7 @@ pub fn with_worker() -> SqlxResult<WithTlsSocketMaker> {
 
     #[cfg(feature = "native-tls")]
     return native_tls::WithNativeTlsSocketMaker::new(&cert, &key_pair);
-    #[cfg(feature = "rustls")]
+    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
     return rustls::WithRustlsSocketMaker::new(&cert, &key_pair);
 }
 

@@ -70,7 +70,6 @@ runs:
     - name: Create connection strings
       id: connection-strings
       run: |
-        DATABASE_URL="exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563"
-        echo "no-tls-url=$DATABASE_URL?ssl-mode=disabled" >> $GITHUB_OUTPUT
-        echo "tls-url=$DATABASE_URL?ssl-mode=required" >> $GITHUB_OUTPUT
+        DATABASE_URL="exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563/test"
+        echo "url=$DATABASE_URL" >> $GITHUB_OUTPUT
       shell: bash

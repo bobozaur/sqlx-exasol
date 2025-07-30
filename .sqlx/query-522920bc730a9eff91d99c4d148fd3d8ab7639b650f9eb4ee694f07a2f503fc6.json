@@ -1,0 +1,18 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_interval_dts) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "INTERVAL DAY TO SECOND",
+          "precision": 2,
+          "fraction": 3
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "522920bc730a9eff91d99c4d148fd3d8ab7639b650f9eb4ee694f07a2f503fc6"
+}

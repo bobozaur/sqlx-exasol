@@ -1,0 +1,23 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_uuid FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_uuid",
+        "dataType": {
+          "type": "HASHTYPE",
+          "size": 32
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "653ed8098c4599902a2af5d9f0bee1179e8e875a80446e04f6b7447f94eb2fd1"
+}

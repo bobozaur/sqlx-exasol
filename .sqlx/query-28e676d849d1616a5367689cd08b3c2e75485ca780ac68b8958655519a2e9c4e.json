@@ -1,0 +1,22 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_f64 FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_f64",
+        "dataType": {
+          "type": "DOUBLE"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "28e676d849d1616a5367689cd08b3c2e75485ca780ac68b8958655519a2e9c4e"
+}

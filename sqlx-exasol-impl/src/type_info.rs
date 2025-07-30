@@ -33,8 +33,7 @@ impl ExaTypeInfo {
 
 /// Manually implemented because we only want to serialize the `data_type` field while also
 /// flattening the structure.
-///
-/// On [`Deserialize`] we simply convert from the [`ExaDataType`] to this.
+// NOTE: On [`Deserialize`] we simply convert from the [`ExaDataType`] to this.
 impl Serialize for ExaTypeInfo {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

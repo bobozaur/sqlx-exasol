@@ -206,6 +206,7 @@ impl Connection for ExaConnection {
 
 #[cfg(test)]
 #[cfg(feature = "migrate")]
+#[allow(clippy::large_futures, reason = "silencing clippy")]
 mod tests {
     use std::num::NonZeroUsize;
 

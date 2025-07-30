@@ -24,10 +24,11 @@ impl TestSupport for Exasol {
     }
 
     fn cleanup_test(db_name: &str) -> BoxFuture<'_, Result<(), Error>> {
+        #[allow(clippy::large_futures, reason = "silencing clippy")]
         Box::pin(async move {
             let mut conn = MASTER_POOL
                 .get()
-                .expect("cleanup_test() invoked outside `#[sqlx::test]")
+                .expect("cleanup_test() invoked outside `#[sqlx_exasol::test]")
                 .acquire()
                 .await?;
 
@@ -118,6 +119,7 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         "DATABASE_URL changed at runtime, database differs"
     );
 
+    #[allow(clippy::large_futures, reason = "silencing clippy")]
     let mut conn = master_pool.acquire().await?;
 
     cleanup_old_dbs(&mut conn).await?;

@@ -7,25 +7,7 @@
     "rust-analyzer": {
       "initialization_options": {
         "cargo": {
-          "features": [
-            // SQLx
-            "migrate",
-            "macros",
-            "any",
-            // Types
-            "bigdecimal",
-            "chrono",
-            "rust_decimal",
-            "time",
-            "uuid",
-            // Driver
-            "etl",
-            "compression",
-            // Runtime
-            "runtime-tokio",
-            // TLS
-            "tls-native-tls"
-          ]
+          "features": "all"
         }
       }
     }

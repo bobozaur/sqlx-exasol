@@ -16,7 +16,7 @@
 //! ends when all the workers receive EOF. They can be dropped afterwards.
 //!
 //! ETL jobs can use TLS, compression, or both and will do so in a
-//! consistent manner with the [`ExaConnection`] they are executed on.
+//! consistent manner with the [`crate::ExaConnection`] they are executed on.
 //! That means that if the connection uses TLS / compression, so will the ETL job.
 //!
 //! **NOTE:** Trying to run ETL jobs with TLS without an ETL TLS feature flag results

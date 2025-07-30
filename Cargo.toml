@@ -69,10 +69,22 @@ tls-rustls-ring-native-roots = [
 any = ["sqlx/any", "sqlx-exasol-impl/any"]
 
 # Types
-bigdecimal = ["sqlx/bigdecimal", "sqlx-exasol-impl/bigdecimal", "sqlx-exasol-macros?/bigdecimal"]
-chrono = ["sqlx/chrono", "sqlx-exasol-impl/chrono", "sqlx-exasol-macros?/chrono"]
+bigdecimal = [
+    "sqlx/bigdecimal",
+    "sqlx-exasol-impl/bigdecimal",
+    "sqlx-exasol-macros?/bigdecimal",
+]
+chrono = [
+    "sqlx/chrono",
+    "sqlx-exasol-impl/chrono",
+    "sqlx-exasol-macros?/chrono",
+]
 json = ["sqlx/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
-rust_decimal = ["sqlx/rust_decimal", "sqlx-exasol-impl/rust_decimal", "sqlx-exasol-macros?/rust_decimal"]
+rust_decimal = [
+    "sqlx/rust_decimal",
+    "sqlx-exasol-impl/rust_decimal",
+    "sqlx-exasol-macros?/rust_decimal",
+]
 time = ["sqlx/time", "sqlx-exasol-impl/time", "sqlx-exasol-macros?/time"]
 uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid", "sqlx-exasol-macros?/uuid"]
 

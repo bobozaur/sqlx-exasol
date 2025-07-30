@@ -1,0 +1,18 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_i8) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "DECIMAL",
+          "precision": 3,
+          "scale": 0
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "91e31f8260972a96aad75a4438b2727a48449fd70fd28d44d2d9d67c5e0059ec"
+}

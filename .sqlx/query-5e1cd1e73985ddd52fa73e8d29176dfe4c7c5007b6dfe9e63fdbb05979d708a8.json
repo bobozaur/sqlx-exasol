@@ -1,0 +1,18 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_varchar_utf8) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "VARCHAR",
+          "size": 16,
+          "characterSet": "UTF8"
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5e1cd1e73985ddd52fa73e8d29176dfe4c7c5007b6dfe9e63fdbb05979d708a8"
+}

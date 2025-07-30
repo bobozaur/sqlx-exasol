@@ -1,0 +1,17 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_interval_ytm) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "INTERVAL YEAR TO MONTH",
+          "precision": 2
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d365eb26b4c8f44b659383e2e16d116eda810ec34c915172f0981d90b94ca5c3"
+}

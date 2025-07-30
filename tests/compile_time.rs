@@ -1,5 +1,6 @@
 #![cfg(feature = "migrate")]
 #![cfg(feature = "macros")]
+#![allow(deprecated)]
 
 extern crate sqlx_exasol as sqlx;
 

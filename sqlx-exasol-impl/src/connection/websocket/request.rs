@@ -324,7 +324,7 @@ pub struct ExaLoginRequest<'a> {
 impl ExaLoginRequest<'_> {
     /// Encrypts the password with the provided key.
     ///
-    /// When connecting using [`Login::Credentials`], Exasol first sends out a public key to encrypt
+    /// When connecting using [`LoginCreds`], Exasol first sends out a public key to encrypt
     /// the password with.
     pub fn encrypt_password(&mut self, key: &RsaPublicKey) -> SqlxResult<()> {
         let LoginRef::Credentials { password, .. } = &mut self.login else {
