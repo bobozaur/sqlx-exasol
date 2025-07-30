@@ -69,9 +69,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        compression: [",compression", ""]
+        compression: ["--features compression", ""]
         include:
-          - tls: ",native-tls"
+          - tls: "--features native-tls"
             url_ext: "?ssl-mode=required"
           - tls: ""
             url_ext: "?ssl-mode=disabled"
@@ -94,7 +94,7 @@ jobs:
 
       - name: Unit tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate${{ matrix.tls }}${{ matrix.compression }} -- --nocapture
+        run: cargo test -p sqlx-exasol-impl --features migrate ${{ matrix.tls }} ${{ matrix.compression }} -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}${{ matrix.url_ext }}
 
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        tls: [",tls-native-tls", ",tls-rustls-aws-lc-rs", ""]
+        tls: ["--features tls-native-tls", "--features tls-rustls-aws-lc-rs", ""]
     steps:
       - uses: actions/checkout@v4
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,compression,etl${{ matrix.tls }} -- test_etl --ignored --nocapture
+        run: cargo test --features runtime-tokio,compression,etl ${{ matrix.tls }} -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
@@ -177,7 +177,7 @@ jobs:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
 
       - name: Run migrations
-        run: cargo run -p sqlx-exasol-cli -- migrate run --source tests/migrations
+        run: cargo run -p sqlx-exasol-cli -- migrate run --source tests/migrations_compile_time
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
           
@@ -190,7 +190,6 @@ jobs:
         run: cargo test --features runtime-tokio,${{ matrix.features }} -- ${{ matrix.filter }} --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-          SQLX_OFFLINE: true
           
       - name: Drop database (existent)
         run: cargo run -p sqlx-exasol-cli -- database drop -y
