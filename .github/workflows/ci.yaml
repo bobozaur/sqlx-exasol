@@ -69,8 +69,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        tls: [",native-tls", ""]
         compression: [",compression", ""]
+        include:
+          - tls: ",native-tls"
+            url_ext: "?ssl-mode=required"
+          - tls: ""
+            url_ext: "?ssl-mode=disabled"
     steps:
       - uses: actions/checkout@v4
 
@@ -92,13 +96,14 @@ jobs:
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test -p sqlx-exasol-impl --features migrate${{ matrix.tls }}${{ matrix.compression }} -- --nocapture
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}${{ matrix.url_ext }}
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --all-features --nocapture
+        run: cargo test --all-features -- --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}?compression=false
+          SQLX_OFFLINE: true
 
   etl_tests:
     name: ETL tests
@@ -126,14 +131,24 @@ jobs:
 
       - name: ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,migrate,compression,etl${{ matrix.tls }} -- test_etl --ignored --nocapture
+        run: cargo test --features runtime-tokio,compression,etl${{ matrix.tls }} -- test_etl --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
 
   compile_time_tests:
     name: Compile time tests
     needs: clippy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - features: "bigdecimal,time,json,uuid"
+            filter: "test_compile_time"
+          - features: "chrono"
+            filter: "test_compile_time_chrono"
+          - features: "rust_decimal"
+            filter: "test_compile_time_rust_decimal"
     steps:
       - uses: actions/checkout@v4
 
@@ -154,34 +169,30 @@ jobs:
       - name: Drop database (non-existent)
         run: cargo run -p sqlx-exasol-cli -- database drop -y
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
           
       - name: Setup database
         run: cargo run -p sqlx-exasol-cli -- database create
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
 
       - name: Run migrations
-        run: cargo run -p sqlx-exasol-cli -- migrate run tests/migrations
+        run: cargo run -p sqlx-exasol-cli -- migrate run --source tests/migrations
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
+          
+      - name: Run prepare
+        run: cargo run -p sqlx-exasol-cli -- prepare -- --tests --all-features
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
 
-      - name: Run preferred crates tests
-        run: cargo test --features runtime-tokio,migrate,macros,bigdecimal,time,json,uuid -- test_compile_time --ignored --nocapture
+      - name: Run tests
+        run: cargo test --features runtime-tokio,${{ matrix.features }} -- ${{ matrix.filter }} --ignored --nocapture
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-
-      - name: Run chrono tests
-        run: cargo test --features runtime-tokio,migrate,macros,chrono -- test_compile_time_chrono --ignored --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-
-      - name: Run rust_decimal tests
-        run: cargo test --features runtime-tokio,migrate,macros,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
+          SQLX_OFFLINE: true
           
       - name: Drop database (existent)
         run: cargo run -p sqlx-exasol-cli -- database drop -y
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test

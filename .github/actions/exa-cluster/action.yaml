@@ -66,5 +66,5 @@ runs:
 
     - name: Create connection string
       id: connection-string
-      run: echo "url=exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563/test" >> $GITHUB_OUTPUT
+      run: echo "url=exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563" >> $GITHUB_OUTPUT
       shell: bash
