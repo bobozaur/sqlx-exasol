@@ -8,12 +8,9 @@ inputs:
     description: "Number of nodes to spawn in the cluster"
     required: true
 outputs:
-  no-tls-url:
-    description: "Connection string for the database with TLS disabled"
-    value: ${{ steps.connection-strings.outputs.no-tls-url }}
-  tls-url:
-    description: "Connection string for the database with TLS enabled"
-    value: ${{ steps.connection-strings.outputs.tls-url }}
+  url:
+    description: "Connection string for the database"
+    value: ${{ steps.connection-string.outputs.url }}
 runs:
   using: "composite"
   steps:
@@ -67,9 +64,7 @@ runs:
         done
       shell: bash
 
-    - name: Create connection strings
-      id: connection-strings
-      run: |
-        DATABASE_URL="exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563/test"
-        echo "url=$DATABASE_URL" >> $GITHUB_OUTPUT
+    - name: Create connection string
+      id: connection-string
+      run: echo "url=exa://sys:exasol@10.10.10.11..1$NUM_NODES:8563/test" >> $GITHUB_OUTPUT
       shell: bash
