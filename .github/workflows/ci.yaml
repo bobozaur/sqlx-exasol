@@ -67,14 +67,6 @@ jobs:
     name: Connection tests
     needs: clippy
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        compression: ["--features compression", ""]
-        include:
-          - tls: "--features native-tls"
-            url_ext: "?ssl-mode=required"
-          - tls: ""
-            url_ext: "?ssl-mode=disabled"
     steps:
       - uses: actions/checkout@v4
 
@@ -94,9 +86,19 @@ jobs:
 
       - name: Unit tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate ${{ matrix.tls }} ${{ matrix.compression }} -- --nocapture
+        run: |
+          compressions=( "--features compression" "" )
+          tls_features=( "--features native-tls" "" )
+          ssl_mode=( "required" "disabled" )
+          
+          for i in 0 1; do
+            for j in 0 1; do
+              export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=${ssl_mode[$j]}"
+              cargo test -p sqlx-exasol-impl --features migrate ${tls_features[$j]} ${compressions[$i]} -- --nocapture
+            done
+          done
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}${{ matrix.url_ext }}
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
@@ -109,9 +111,6 @@ jobs:
     name: ETL tests
     needs: clippy
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        tls: ["--features tls-native-tls", "--features tls-rustls-aws-lc-rs", ""]
     steps:
       - uses: actions/checkout@v4
 
@@ -131,7 +130,12 @@ jobs:
 
       - name: ETL tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,compression,etl ${{ matrix.tls }} -- test_etl --ignored --nocapture
+        run: |
+          tls_features=( "--features tls-native-tls" "--features tls-rustls-aws-lc-rs" "" )
+          
+          for i in 0 1 2; do
+            cargo test --features runtime-tokio,compression,etl ${tls_features[$i]} -- test_etl --ignored --nocapture
+          done
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
@@ -140,15 +144,6 @@ jobs:
     name: Compile time tests
     needs: clippy
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - features: "bigdecimal,time,json,uuid"
-            filter: "test_compile_time"
-          - features: "chrono"
-            filter: "test_compile_time_chrono"
-          - features: "rust_decimal"
-            filter: "test_compile_time_rust_decimal"
     steps:
       - uses: actions/checkout@v4
 
@@ -187,7 +182,13 @@ jobs:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
 
       - name: Run tests
-        run: cargo test --features runtime-tokio,${{ matrix.features }} -- ${{ matrix.filter }} --ignored --nocapture
+        run: |
+          features=( "bigdecimal,time,json,uuid" "chrono" "rust_decimal" )
+          filters=( "test_compile_time" "test_compile_time_chrono" "test_compile_time_rust_decimal" )
+          
+          for i in 0 1 2; do
+            cargo test --features runtime-tokio,${features[$i]} -- ${filters[$i]} --ignored --nocapture
+          done
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
           
