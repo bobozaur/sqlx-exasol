@@ -84,19 +84,35 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
-      - name: Unit tests
+      - name: Unit tests (no TLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: |
-          compressions=( "--features compression" "" )
-          tls_features=( "--features native-tls" "" )
-          ssl_mode=( "required" "disabled" )
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
+          cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+
+      - name: Unit tests (no TLS, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |          
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
+          cargo test -p sqlx-exasol-impl --features migrate,compression -- --ignored --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           
-          for i in 0 1; do
-            for j in 0 1; do
-              export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=${ssl_mode[$j]}"
-              cargo test -p sqlx-exasol-impl --features migrate ${tls_features[$j]} ${compressions[$i]} -- --nocapture
-            done
-          done
+      - name: Unit tests (with TLS, no compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |          
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
+          cargo test -p sqlx-exasol-impl --features migrate,native-tls -- --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          
+      - name: Unit tests (with TLS, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |          
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
+          cargo test -p sqlx-exasol-impl --features migrate,native-tls,compression -- --ignored --nocapture
         env:
           BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
@@ -128,16 +144,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
-      - name: ETL tests
+      - name: ETL tests (no TLS)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: |
-          tls_features=( "--features tls-native-tls" "--features tls-rustls-aws-lc-rs" "" )
-          
-          for i in 0 1 2; do
-            cargo test --features runtime-tokio,compression,etl ${tls_features[$i]} -- test_etl --ignored --nocapture
-          done
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
+          cargo test --features runtime-tokio,compression,etl -- test_etl --ignored --nocapture
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: ETL tests (NativeTLS)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
+          cargo test --features runtime-tokio,compression,etl,tls-native-tls -- test_etl --ignored --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: ETL tests (Rustls)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
+          cargo test --features runtime-tokio,compression,etl,tls-rustls-aws-lc-rs -- test_etl --ignored --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
 
   compile_time_tests:
@@ -181,14 +212,18 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
 
-      - name: Run tests
-        run: |
-          features=( "bigdecimal,time,json,uuid" "chrono" "rust_decimal" )
-          filters=( "test_compile_time" "test_compile_time_chrono" "test_compile_time_rust_decimal" )
+      - name: Run tests (preferred crates)
+        run: cargo test --features runtime-tokio,bigdecimal,time,uuid -- test_compile_time --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
           
-          for i in 0 1 2; do
-            cargo test --features runtime-tokio,${features[$i]} -- ${filters[$i]} --ignored --nocapture
-          done
+      - name: Run tests (chrono)
+        run: cargo test --features runtime-tokio,chrono -- test_compile_time_chrono --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
+          
+      - name: Run tests (rust_decimal)
+        run: cargo test --features runtime-tokio,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
           
