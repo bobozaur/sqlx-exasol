@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{error::ExaConfigError, PARAM_SSL_MODE};
+use super::{error::ExaConfigError, SSL_MODE};
 
 /// Options for controlling the desired security state of the connection to the Exasol server.
 ///
@@ -32,20 +32,37 @@ pub enum ExaSslMode {
     VerifyIdentity,
 }
 
+impl ExaSslMode {
+    const DISABLED: &str = "disabled";
+    const PREFERRED: &str = "preferred";
+    const REQUIRED: &str = "required";
+    const VERIFY_CA: &str = "verify_ca";
+    const VERIFY_IDENTITY: &str = "verify_identity";
+}
+
 impl FromStr for ExaSslMode {
     type Err = ExaConfigError;
 
     fn from_str(s: &str) -> Result<Self, ExaConfigError> {
         Ok(match &*s.to_ascii_lowercase() {
-            "disabled" => ExaSslMode::Disabled,
-            "preferred" => ExaSslMode::Preferred,
-            "required" => ExaSslMode::Required,
-            "verify_ca" => ExaSslMode::VerifyCa,
-            "verify_identity" => ExaSslMode::VerifyIdentity,
-
-            _ => {
-                return Err(ExaConfigError::InvalidParameter(PARAM_SSL_MODE));
-            }
+            Self::DISABLED => ExaSslMode::Disabled,
+            Self::PREFERRED => ExaSslMode::Preferred,
+            Self::REQUIRED => ExaSslMode::Required,
+            Self::VERIFY_CA => ExaSslMode::VerifyCa,
+            Self::VERIFY_IDENTITY => ExaSslMode::VerifyIdentity,
+            _ => Err(ExaConfigError::InvalidParameter(SSL_MODE))?,
         })
+    }
+}
+
+impl AsRef<str> for ExaSslMode {
+    fn as_ref(&self) -> &str {
+        match self {
+            ExaSslMode::Disabled => Self::DISABLED,
+            ExaSslMode::Preferred => Self::PREFERRED,
+            ExaSslMode::Required => Self::REQUIRED,
+            ExaSslMode::VerifyCa => Self::VERIFY_CA,
+            ExaSslMode::VerifyIdentity => Self::VERIFY_IDENTITY,
+        }
     }
 }

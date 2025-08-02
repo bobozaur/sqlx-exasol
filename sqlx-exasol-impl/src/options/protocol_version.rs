@@ -5,7 +5,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::{error::ExaConfigError, PARAM_PROTOCOL_VERSION};
+use super::{error::ExaConfigError, PROTOCOL_VERSION};
 
 /// Enum listing the protocol versions that can be used when establishing a websocket connection to
 /// Exasol. Defaults to the highest defined protocol version and falls back to the highest protocol
@@ -32,7 +32,7 @@ impl FromStr for ProtocolVersion {
             "3" => Ok(ProtocolVersion::V3),
             "4" => Ok(ProtocolVersion::V4),
             "5" => Ok(ProtocolVersion::V5),
-            _ => Err(ExaConfigError::InvalidParameter(PARAM_PROTOCOL_VERSION)),
+            _ => Err(ExaConfigError::InvalidParameter(PROTOCOL_VERSION)),
         }
     }
 }
@@ -53,7 +53,7 @@ impl TryFrom<u8> for ProtocolVersion {
             3 => Ok(Self::V3),
             4 => Ok(Self::V4),
             5 => Ok(Self::V5),
-            _ => Err(ExaConfigError::InvalidParameter(PARAM_PROTOCOL_VERSION)),
+            _ => Err(ExaConfigError::InvalidParameter(PROTOCOL_VERSION)),
         }
     }
 }

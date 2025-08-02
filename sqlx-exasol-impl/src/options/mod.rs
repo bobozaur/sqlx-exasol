@@ -34,18 +34,18 @@ const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
     None => unreachable!(),
 };
 
-const PARAM_ACCESS_TOKEN: &str = "access-token";
-const PARAM_REFRESH_TOKEN: &str = "refresh-token";
-const PARAM_PROTOCOL_VERSION: &str = "protocol-version";
-const PARAM_SSL_MODE: &str = "ssl-mode";
-const PARAM_SSL_CA: &str = "ssl-ca";
-const PARAM_SSL_CERT: &str = "ssl-cert";
-const PARAM_SSL_KEY: &str = "ssl-key";
-const PARAM_CACHE_CAP: &str = "statement-cache-capacity";
-const PARAM_FETCH_SIZE: &str = "fetch-size";
-const PARAM_QUERY_TIMEOUT: &str = "query-timeout";
-const PARAM_COMPRESSION: &str = "compression";
-const PARAM_FEEDBACK_INTERVAL: &str = "feedback-interval";
+const ACCESS_TOKEN: &str = "access-token";
+const REFRESH_TOKEN: &str = "refresh-token";
+const PROTOCOL_VERSION: &str = "protocol-version";
+const SSL_MODE: &str = "ssl-mode";
+const SSL_CA: &str = "ssl-ca";
+const SSL_CERT: &str = "ssl-cert";
+const SSL_KEY: &str = "ssl-key";
+const STATEMENT_CACHE_CAPACITY: &str = "statement-cache-capacity";
+const FETCH_SIZE: &str = "fetch-size";
+const QUERY_TIMEOUT: &str = "query-timeout";
+const COMPRESSION: &str = "compression";
+const FEEDBACK_INTERVAL: &str = "feedback-interval";
 
 /// Options for connecting to the Exasol database. Implementor of [`ConnectOptions`].
 ///
@@ -63,6 +63,7 @@ pub struct ExaConnectOptions {
     pub(crate) schema: Option<String>,
     pub(crate) compression: bool,
     pub(crate) log_settings: LogSettings,
+    hostname: String,
     login: Login,
     protocol_version: ProtocolVersion,
     fetch_size: usize,
@@ -125,67 +126,67 @@ impl ConnectOptions for ExaConnectOptions {
 
         for (name, value) in url.query_pairs() {
             match name.as_ref() {
-                PARAM_ACCESS_TOKEN => builder = builder.access_token(value.to_string()),
+                ACCESS_TOKEN => builder = builder.access_token(value.to_string()),
 
-                PARAM_REFRESH_TOKEN => builder = builder.refresh_token(value.to_string()),
+                REFRESH_TOKEN => builder = builder.refresh_token(value.to_string()),
 
-                PARAM_PROTOCOL_VERSION => {
+                PROTOCOL_VERSION => {
                     let protocol_version = value.parse::<ProtocolVersion>()?;
                     builder = builder.protocol_version(protocol_version);
                 }
 
-                PARAM_SSL_MODE => {
+                SSL_MODE => {
                     let ssl_mode = value.parse::<ExaSslMode>()?;
                     builder = builder.ssl_mode(ssl_mode);
                 }
 
-                PARAM_SSL_CA => {
+                SSL_CA => {
                     let ssl_ca = CertificateInput::File(PathBuf::from(value.to_string()));
                     builder = builder.ssl_ca(ssl_ca);
                 }
 
-                PARAM_SSL_CERT => {
+                SSL_CERT => {
                     let ssl_cert = CertificateInput::File(PathBuf::from(value.to_string()));
                     builder = builder.ssl_client_cert(ssl_cert);
                 }
 
-                PARAM_SSL_KEY => {
+                SSL_KEY => {
                     let ssl_key = CertificateInput::File(PathBuf::from(value.to_string()));
                     builder = builder.ssl_client_key(ssl_key);
                 }
 
-                PARAM_CACHE_CAP => {
+                STATEMENT_CACHE_CAPACITY => {
                     let capacity = value
                         .parse::<NonZeroUsize>()
-                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_CACHE_CAP))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(STATEMENT_CACHE_CAPACITY))?;
                     builder = builder.statement_cache_capacity(capacity);
                 }
 
-                PARAM_FETCH_SIZE => {
+                FETCH_SIZE => {
                     let fetch_size = value
                         .parse::<usize>()
-                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FETCH_SIZE))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(FETCH_SIZE))?;
                     builder = builder.fetch_size(fetch_size);
                 }
 
-                PARAM_QUERY_TIMEOUT => {
+                QUERY_TIMEOUT => {
                     let query_timeout = value
                         .parse::<u64>()
-                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_QUERY_TIMEOUT))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(QUERY_TIMEOUT))?;
                     builder = builder.query_timeout(query_timeout);
                 }
 
-                PARAM_COMPRESSION => {
+                COMPRESSION => {
                     let compression = value
                         .parse::<bool>()
-                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_COMPRESSION))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(COMPRESSION))?;
                     builder = builder.compression(compression);
                 }
 
-                PARAM_FEEDBACK_INTERVAL => {
+                FEEDBACK_INTERVAL => {
                     let feedback_interval = value
                         .parse::<u64>()
-                        .map_err(|_| ExaConfigError::InvalidParameter(PARAM_FEEDBACK_INTERVAL))?;
+                        .map_err(|_| ExaConfigError::InvalidParameter(FEEDBACK_INTERVAL))?;
                     builder = builder.feedback_interval(feedback_interval);
                 }
 
@@ -198,6 +199,70 @@ impl ConnectOptions for ExaConnectOptions {
         }
 
         builder.build()
+    }
+
+    fn to_url_lossy(&self) -> Url {
+        let mut url = Url::parse(&format!("{URL_SCHEME}://{}:{}", self.hostname, self.port))
+            .expect("generated URL must be correct");
+
+        if let Some(schema) = &self.schema {
+            url.set_path(schema);
+        }
+
+        match &self.login {
+            Login::Credentials { username, password } => {
+                url.set_username(username).ok();
+                url.set_password(Some(password)).ok();
+            }
+            Login::AccessToken { access_token } => {
+                url.query_pairs_mut()
+                    .append_pair(ACCESS_TOKEN, access_token);
+            }
+            Login::RefreshToken { refresh_token } => {
+                url.query_pairs_mut()
+                    .append_pair(REFRESH_TOKEN, refresh_token);
+            }
+        }
+
+        url.query_pairs_mut()
+            .append_pair(PROTOCOL_VERSION, &self.protocol_version.to_string());
+
+        url.query_pairs_mut()
+            .append_pair(SSL_MODE, self.ssl_mode.as_ref());
+
+        if let Some(ssl_ca) = &self.ssl_ca {
+            url.query_pairs_mut()
+                .append_pair(SSL_CA, &ssl_ca.to_string());
+        }
+
+        if let Some(ssl_cert) = &self.ssl_client_cert {
+            url.query_pairs_mut()
+                .append_pair(SSL_CERT, &ssl_cert.to_string());
+        }
+
+        if let Some(ssl_key) = &self.ssl_client_key {
+            url.query_pairs_mut()
+                .append_pair(SSL_KEY, &ssl_key.to_string());
+        }
+
+        url.query_pairs_mut().append_pair(
+            STATEMENT_CACHE_CAPACITY,
+            &self.statement_cache_capacity.to_string(),
+        );
+
+        url.query_pairs_mut()
+            .append_pair(FETCH_SIZE, &self.fetch_size.to_string());
+
+        url.query_pairs_mut()
+            .append_pair(QUERY_TIMEOUT, &self.query_timeout.to_string());
+
+        url.query_pairs_mut()
+            .append_pair(COMPRESSION, &self.compression.to_string());
+
+        url.query_pairs_mut()
+            .append_pair(FEEDBACK_INTERVAL, &self.feedback_interval.to_string());
+
+        url
     }
 
     fn connect(&self) -> futures_util::future::BoxFuture<'_, SqlxResult<Self::Connection>>
