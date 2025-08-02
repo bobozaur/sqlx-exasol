@@ -19,56 +19,24 @@ use sqlx_exasol::{
 const NUM_ROWS: usize = 1_000_000;
 
 test_etl_single_threaded!(
-    "uncompressed",
+    "simple",
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL"),
-);
-
-test_etl_single_threaded!(
-    "uncompressed_with_feature",
-    "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(false),
-    ImportBuilder::new("TEST_ETL").compression(false),
-    #[cfg(feature = "compression")]
+    ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_multi_threaded!(
-    "uncompressed",
+    "simple",
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL"),
-);
-
-test_etl_multi_threaded!(
-    "uncompressed_with_feature",
-    "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(false),
-    ImportBuilder::new("TEST_ETL").compression(false),
-    #[cfg(feature = "compression")]
-);
-
-test_etl_single_threaded!(
-    "compressed",
-    "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").compression(true),
-    #[cfg(feature = "compression")]
-);
-
-test_etl_multi_threaded!(
-    "compressed",
-    "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").compression(true),
-    #[cfg(feature = "compression")]
+    ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_single_threaded!(
     "query_export",
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Query("SELECT * FROM TEST_ETL")),
-    ImportBuilder::new("TEST_ETL"),
+    ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_single_threaded!(
@@ -76,16 +44,7 @@ test_etl_single_threaded!(
     0,
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL"),
-);
-
-test_etl_single_threaded!(
-    "multiple_workers_compressed",
-    0,
-    "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").compression(true),
-    #[cfg(feature = "compression")]
+    ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_multi_threaded!(
@@ -93,24 +52,14 @@ test_etl_multi_threaded!(
     0,
     "TEST_ETL",
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL"),
-);
-
-test_etl_multi_threaded!(
-    "multiple_workers_compressed",
-    0,
-    "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).compression(true),
-    ImportBuilder::new("TEST_ETL").compression(true),
-    #[cfg(feature = "compression")]
+    ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_single_threaded!(
     "all_arguments",
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")).num_readers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
-    ImportBuilder::new("TEST_ETL").skip(1).buffer_size(20000).columns(Some(&["col"])).num_writers(1).compression(false).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").trim(sqlx_exasol::etl::Trim::Both),
-    #[cfg(feature = "compression")]
+    ExportBuilder::new(ExportSource::Table("TEST_ETL")).num_readers(1).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").with_column_names(true),
+    ImportBuilder::new("TEST_ETL").skip(1).buffer_size(20000).columns(Some(&["col"])).num_writers(1).comment("test").encoding("ASCII").null("OH-NO").row_separator(sqlx_exasol::etl::RowSeparator::LF).column_separator("|").column_delimiter("\\\\").trim(sqlx_exasol::etl::Trim::Both)
 );
 
 test_etl!(
@@ -120,7 +69,7 @@ test_etl!(
     "TEST_ETL",
     |(r, w)| pipe_flush_writers(r, w),
     ExportBuilder::new(ExportSource::Table("TEST_ETL")),
-    ImportBuilder::new("TEST_ETL"),
+    ImportBuilder::new("TEST_ETL")
 );
 
 // ##########################################

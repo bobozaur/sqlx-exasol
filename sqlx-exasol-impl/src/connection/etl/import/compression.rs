@@ -21,14 +21,16 @@ pub enum ExaImportWriter {
 }
 
 impl ExaImportWriter {
+    #[allow(unused_variables, reason = "conditionally compiled")]
     pub fn new(socket: ExaSocket, buffer_size: usize, with_compression: bool) -> Self {
         let writer = ExaWriter::new(socket, buffer_size);
 
-        match with_compression {
-            #[cfg(feature = "compression")]
-            true => Self::Compressed(GzipEncoder::new(writer)),
-            _ => Self::Plain(writer),
+        #[cfg(feature = "compression")]
+        if with_compression {
+            return Self::Compressed(GzipEncoder::new(writer));
         }
+
+        Self::Plain(writer)
     }
 }
 

@@ -21,18 +21,18 @@ pub enum ExaExportReader {
 }
 
 impl ExaExportReader {
+    #[allow(unused_variables, reason = "conditionally compiled")]
     pub fn new(socket: ExaSocket, with_compression: bool) -> Self {
         let reader = ExaReader::new(socket);
 
-        match with_compression {
-            #[cfg(feature = "compression")]
-            true => {
-                let mut reader = GzipDecoder::new(reader);
-                reader.multiple_members(true);
-                Self::Compressed(reader)
-            }
-            _ => Self::Plain(reader),
+        #[cfg(feature = "compression")]
+        if with_compression {
+            let mut reader = GzipDecoder::new(reader);
+            reader.multiple_members(true);
+            return Self::Compressed(reader);
         }
+
+        Self::Plain(reader)
     }
 }
 

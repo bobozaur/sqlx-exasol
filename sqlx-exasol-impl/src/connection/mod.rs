@@ -211,41 +211,10 @@ mod tests {
     use std::num::NonZeroUsize;
 
     use futures_util::TryStreamExt;
-    use sqlx::{query, Executor};
+    use sqlx::Executor;
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
-    use crate::{CompressionMode, ExaConnectOptions, Exasol};
-
-    #[sqlx::test]
-    async fn test_compression_feature(
-        pool_opts: PoolOptions<Exasol>,
-        exa_opts: ExaConnectOptions,
-    ) -> Result<(), BoxDynError> {
-        let compression_enabled = match exa_opts.compression_mode {
-            CompressionMode::Disabled => false,
-            CompressionMode::Preferred => cfg!(feature = "compression"),
-            CompressionMode::Required => true,
-        };
-
-        let pool = pool_opts.connect_with(exa_opts).await?;
-        let mut con = pool.acquire().await?;
-        let schema = "TEST_SWITCH_SCHEMA";
-
-        con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
-            .await?;
-
-        let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
-            .fetch_one(&mut *con)
-            .await?;
-
-        con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
-            .await?;
-
-        assert_eq!(schema, new_schema);
-        assert_eq!(compression_enabled, con.attributes().compression_enabled());
-
-        Ok(())
-    }
+    use crate::{ExaConnectOptions, Exasol};
 
     #[sqlx::test]
     async fn test_stmt_cache(
@@ -264,11 +233,11 @@ mod tests {
         assert!(!con.as_ref().ws.statement_cache.contains(sql1));
         assert!(!con.as_ref().ws.statement_cache.contains(sql2));
 
-        query(sql1).execute(&mut *con).await?;
+        sqlx::query(sql1).execute(&mut *con).await?;
         assert!(con.as_ref().ws.statement_cache.contains(sql1));
         assert!(!con.as_ref().ws.statement_cache.contains(sql2));
 
-        query(sql2).execute(&mut *con).await?;
+        sqlx::query(sql2).execute(&mut *con).await?;
         assert!(!con.as_ref().ws.statement_cache.contains(sql1));
         assert!(con.as_ref().ws.statement_cache.contains(sql2));
 
@@ -305,7 +274,7 @@ mod tests {
         conn.execute("CREATE TABLE CLOSE_RESULTS_TEST ( col DECIMAL(3, 0) );")
             .await?;
 
-        query("INSERT INTO CLOSE_RESULTS_TEST VALUES(?)")
+        sqlx::query("INSERT INTO CLOSE_RESULTS_TEST VALUES(?)")
             .bind(vec![1i8; 10000])
             .execute(&mut *conn)
             .await?;

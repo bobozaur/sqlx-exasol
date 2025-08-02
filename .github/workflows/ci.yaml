@@ -86,35 +86,45 @@ jobs:
 
       - name: Unit tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
-          cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
+        run: cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
-      - name: Test compression feature enabled
+      - name: Test IO combos (no TLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |          
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
-          cargo test -p sqlx-exasol-impl --features migrate,compression -- test_compression_feature --nocapture
+        run: cargo test --features runtime-tokio,etl -- it_works_with_io_combo --ignored --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           
-      - name: Test compression feature override disabled
+      - name: Test IO combos (no TLS, with compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |          
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled&compression=disabled"
-          cargo test -p sqlx-exasol-impl --features migrate,compression -- test_compression_feature --nocapture
+        run: cargo test --features runtime-tokio,etl,compression -- it_works_with_io_combo --ignored  --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-
-      - name: Test no compression feature override required
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          
+      - name: Test IO combos (NativeTLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |          
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled&compression=required"
-          cargo test -p sqlx-exasol-impl --features migrate -- test_compression_feature --nocapture && false || true
+        run: cargo test --features runtime-tokio,etl,tls-native-tls -- it_works_with_io_combo --ignored --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          
+      - name: Test IO combos (NativeTLS, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-native-tls,compression -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          
+      - name: Test IO combos (Rustls, no compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-rustls -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          
+      - name: Test IO combos (Rustls, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-rustls,compression -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}

@@ -18,14 +18,16 @@ pub enum WithMaybeTlsSocketMaker {
 }
 
 impl WithMaybeTlsSocketMaker {
+    #[allow(unused_variables, reason = "conditionally compiled")]
     pub fn new(with_tls: bool) -> SqlxResult<Self> {
-        match with_tls {
-            #[cfg(feature = "tls")]
-            true => tls::with_worker().map(Self::Tls),
-            #[allow(unreachable_patterns, reason = "reachable with no TLS feature ")]
-            true => Err(SqlxError::Tls("No ETL TLS feature set".into())),
-            false => Ok(Self::NonTls),
+        #[cfg(feature = "tls")]
+        if with_tls {
+            return tls::with_worker().map(Self::Tls);
         }
+
+        with_tls
+            .then_some(Self::NonTls)
+            .ok_or_else(|| SqlxError::Tls("No ETL TLS feature set".into()))
     }
 }
 

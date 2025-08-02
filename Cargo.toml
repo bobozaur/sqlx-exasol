@@ -54,15 +54,12 @@ runtime-tokio = ["sqlx/runtime-tokio"]
 # TLS features
 tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
 tls-rustls = ["sqlx/tls-rustls", "sqlx-exasol-impl/rustls"]
-tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "sqlx-exasol-impl/rustls"]
-tls-rustls-ring = ["sqlx/tls-rustls-ring", "sqlx-exasol-impl/rustls"]
-tls-rustls-ring-webpki = [
-    "sqlx/tls-rustls-ring-webpki",
-    "sqlx-exasol-impl/rustls",
-]
+tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "tls-rustls"]
+tls-rustls-ring = ["sqlx/tls-rustls-ring", "tls-rustls"]
+tls-rustls-ring-webpki = ["sqlx/tls-rustls-ring-webpki", "tls-rustls"]
 tls-rustls-ring-native-roots = [
     "sqlx/tls-rustls-ring-native-roots",
-    "sqlx-exasol-impl/rustls",
+    "tls-rustls",
 ]
 
 # Database

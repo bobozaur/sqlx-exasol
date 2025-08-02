@@ -30,11 +30,12 @@ pub enum MaybeCompressedWebSocket {
 impl MaybeCompressedWebSocket {
     /// Consumes `self` to output a possibly different variant, depending on whether compression is
     /// wanted and enabled.
+    #[allow(unused_variables, reason = "conditionally compiled")]
     pub fn maybe_compress(self, use_compression: bool) -> Self {
-        match (self, use_compression) {
+        match self {
             #[cfg(feature = "compression")]
-            (Self::Plain(plain), true) => MaybeCompressedWebSocket::Compressed(plain.into()),
-            (ws, _) => ws,
+            Self::Plain(plain) if use_compression => MaybeCompressedWebSocket::Compressed(plain.into()),
+            ws => ws,
         }
     }
 
