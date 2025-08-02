@@ -9,6 +9,8 @@ pub enum ExaConfigError {
     MissingHost,
     #[error("could not resolve hostname")]
     CouldNotResolve(#[from] std::io::Error),
+    #[error("no authentication method provided")]
+    MissingAuthMethod,
     #[error("multiple authentication methods provided")]
     MultipleAuthMethods,
     #[error("invalid URL scheme: {0}, expected: {}", URL_SCHEME)]

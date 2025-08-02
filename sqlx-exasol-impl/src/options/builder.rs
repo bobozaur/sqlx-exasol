@@ -69,6 +69,7 @@ impl ExaConnectOptionsBuilder {
             (Some(username), None, None) => Login::Credentials { username, password },
             (None, Some(access_token), None) => Login::AccessToken { access_token },
             (None, None, Some(refresh_token)) => Login::RefreshToken { refresh_token },
+            (None, None, None) => return Err(ExaConfigError::MissingAuthMethod.into()),
             _ => return Err(ExaConfigError::MultipleAuthMethods.into()),
         };
 

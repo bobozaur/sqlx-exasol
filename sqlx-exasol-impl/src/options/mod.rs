@@ -11,6 +11,7 @@ pub use protocol_version::ProtocolVersion;
 use sqlx_core::{
     connection::{ConnectOptions, LogSettings},
     net::tls::CertificateInput,
+    percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC},
 };
 pub use ssl_mode::ExaSslMode;
 use tracing::log;
@@ -107,21 +108,30 @@ impl ConnectOptions for ExaConnectOptions {
 
         let username = url.username();
         if !username.is_empty() {
-            builder = builder.username(username.to_owned());
+            let username = percent_decode_str(username)
+                .decode_utf8()
+                .map_err(SqlxError::config)?;
+            builder = builder.username(username.to_string());
         }
 
         if let Some(password) = url.password() {
-            builder = builder.password(password.to_owned());
+            let password = percent_decode_str(password)
+                .decode_utf8()
+                .map_err(SqlxError::config)?;
+            builder = builder.password(password.to_string());
         }
 
         if let Some(port) = url.port() {
             builder = builder.port(port);
         }
 
-        let opt_schema = url.path_segments().into_iter().flatten().next();
+        let path = url.path().trim_start_matches('/');
 
-        if let Some(schema) = opt_schema {
-            builder = builder.schema(schema.to_owned());
+        if !path.is_empty() {
+            let db_schema = percent_decode_str(path)
+                .decode_utf8()
+                .map_err(SqlxError::config)?;
+            builder = builder.schema(db_schema.to_string());
         }
 
         for (name, value) in url.query_pairs() {
@@ -212,7 +222,8 @@ impl ConnectOptions for ExaConnectOptions {
         match &self.login {
             Login::Credentials { username, password } => {
                 url.set_username(username).ok();
-                url.set_password(Some(password)).ok();
+                let password = utf8_percent_encode(password, NON_ALPHANUMERIC).to_string();
+                url.set_password(Some(&password)).ok();
             }
             Login::AccessToken { access_token } => {
                 url.query_pairs_mut()
@@ -225,7 +236,7 @@ impl ConnectOptions for ExaConnectOptions {
         }
 
         url.query_pairs_mut()
-            .append_pair(PROTOCOL_VERSION, &self.protocol_version.to_string());
+            .append_pair(PROTOCOL_VERSION, &(self.protocol_version as u8).to_string());
 
         url.query_pairs_mut()
             .append_pair(SSL_MODE, self.ssl_mode.as_ref());
@@ -352,5 +363,196 @@ impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {
             ssl_client_cert: value.ssl_client_cert.as_ref(),
             ssl_client_key: value.ssl_client_key.as_ref(),
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use super::*;
+
+    #[test]
+    fn test_from_url_basic() {
+        let url = "exa://user:pass@localhost:8563/schema";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+
+        assert_eq!(options.hostname, "localhost");
+        assert_eq!(options.port, 8563);
+        assert_eq!(options.schema.as_deref(), Some("schema"));
+
+        match &options.login {
+            Login::Credentials { username, password } => {
+                assert_eq!(username, "user");
+                assert_eq!(password, "pass");
+            }
+            _ => panic!("Expected credentials login"),
+        }
+    }
+
+    #[test]
+    fn test_from_url_with_query_params() {
+        let url = "exa://localhost:8563?access-token=token123&compression=true&fetch-size=1024";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+
+        match &options.login {
+            Login::AccessToken { access_token } => {
+                assert_eq!(access_token, "token123");
+            }
+            _ => panic!("Expected access token login"),
+        }
+
+        assert!(options.compression);
+        assert_eq!(options.fetch_size, 1024);
+    }
+
+    #[test]
+    fn test_from_url_refresh_token() {
+        let url = "exa://localhost:8563?refresh-token=refresh123";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+
+        match &options.login {
+            Login::RefreshToken { refresh_token } => {
+                assert_eq!(refresh_token, "refresh123");
+            }
+            _ => panic!("Expected refresh token login"),
+        }
+    }
+
+    #[test]
+    fn test_from_url_ssl_params() {
+        let url = "exa://user:p@ssw0rd@localhost:8563?ssl-mode=required&ssl-ca=/path/to/ca.crt";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+
+        assert_eq!(options.ssl_mode, ExaSslMode::Required);
+        assert!(options.ssl_ca.is_some());
+    }
+
+    #[test]
+    fn test_from_url_numeric_params() {
+        let url = "exa://user:p@ssw0rd@localhost:8563?statement-cache-capacity=50&\
+                   query-timeout=30&feedback-interval=10";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+
+        assert_eq!(
+            options.statement_cache_capacity,
+            NonZeroUsize::new(50).unwrap()
+        );
+        assert_eq!(options.query_timeout, 30);
+        assert_eq!(options.feedback_interval, 10);
+    }
+
+    #[test]
+    fn test_from_url_invalid_scheme() {
+        let url = "mysql://localhost:8563";
+        let result = ExaConnectOptions::from_str(url);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_url_unknown_parameter() {
+        let url = "exa://localhost:8563?unknown-param=value";
+        let result = ExaConnectOptions::from_str(url);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_to_url_lossy_credentials() {
+        let options = ExaConnectOptions::builder()
+            .host("localhost".to_string())
+            .port(8563)
+            .username("user".to_string())
+            .password("pass".to_string())
+            .schema("schema".to_string())
+            .build()
+            .unwrap();
+
+        let url = options.to_url_lossy();
+
+        assert_eq!(url.scheme(), "exa");
+        assert_eq!(url.host_str(), Some("localhost"));
+        assert_eq!(url.port(), Some(8563));
+        assert_eq!(url.path(), "/schema");
+        assert_eq!(url.username(), "user");
+        assert_eq!(url.password(), Some("pass"));
+    }
+
+    #[test]
+    fn test_to_url_lossy_access_token() {
+        let options = ExaConnectOptions::builder()
+            .host("localhost".to_string())
+            .access_token("token123".to_string())
+            .build()
+            .unwrap();
+
+        let url = options.to_url_lossy();
+
+        let query_pairs: std::collections::HashMap<String, String> =
+            url.query_pairs().into_owned().collect();
+
+        assert_eq!(query_pairs.get(ACCESS_TOKEN), Some(&"token123".to_string()));
+    }
+
+    #[test]
+    fn test_to_url_lossy_refresh_token() {
+        let options = ExaConnectOptions::builder()
+            .host("localhost".to_string())
+            .refresh_token("refresh123".to_string())
+            .build()
+            .unwrap();
+
+        let url = options.to_url_lossy();
+
+        let query_pairs: std::collections::HashMap<String, String> =
+            url.query_pairs().into_owned().collect();
+
+        assert_eq!(
+            query_pairs.get(REFRESH_TOKEN),
+            Some(&"refresh123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_to_url_lossy_all_params() {
+        let options = ExaConnectOptions::builder()
+            .host("localhost".to_string())
+            .port(8563)
+            .username("user".to_string())
+            .password("pass".to_string())
+            .schema("schema".to_string())
+            .compression(true)
+            .fetch_size(2048)
+            .query_timeout(60)
+            .feedback_interval(5)
+            .statement_cache_capacity(NonZeroUsize::new(200).unwrap())
+            .build()
+            .unwrap();
+
+        let url = options.to_url_lossy();
+
+        let query_pairs: std::collections::HashMap<String, String> =
+            url.query_pairs().into_owned().collect();
+
+        assert_eq!(query_pairs.get(COMPRESSION), Some(&"true".to_string()));
+        assert_eq!(query_pairs.get(FETCH_SIZE), Some(&"2048".to_string()));
+        assert_eq!(query_pairs.get(QUERY_TIMEOUT), Some(&"60".to_string()));
+        assert_eq!(query_pairs.get(FEEDBACK_INTERVAL), Some(&"5".to_string()));
+        assert_eq!(
+            query_pairs.get(STATEMENT_CACHE_CAPACITY),
+            Some(&"200".to_string())
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_conversion() {
+        let original_url = "exa://user:pass@localhost:8563/schema?compression=true&fetch-size=1024";
+        let options = ExaConnectOptions::from_str(original_url).unwrap();
+        let reconstructed_url = options.to_url_lossy();
+        let options2 = ExaConnectOptions::from_url(&reconstructed_url).unwrap();
+
+        assert_eq!(options.hostname, options2.hostname);
+        assert_eq!(options.port, options2.port);
+        assert_eq!(options.schema, options2.schema);
+        assert_eq!(options.compression, options2.compression);
+        assert_eq!(options.fetch_size, options2.fetch_size);
     }
 }
