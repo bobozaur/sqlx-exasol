@@ -1,4 +1,5 @@
 mod builder;
+mod compression;
 mod error;
 mod protocol_version;
 mod ssl_mode;
@@ -6,6 +7,7 @@ mod ssl_mode;
 use std::{borrow::Cow, net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
 pub use builder::ExaConnectOptionsBuilder;
+pub use compression::CompressionMode;
 use error::ExaConfigError;
 pub use protocol_version::ProtocolVersion;
 use sqlx_core::{
@@ -22,6 +24,7 @@ use crate::{
         websocket::request::{ExaLoginRequest, LoginRef},
         ExaConnection,
     },
+    error::ExaProtocolError,
     responses::ExaRwAttributes,
     SqlxError, SqlxResult,
 };
@@ -62,7 +65,7 @@ pub struct ExaConnectOptions {
     pub(crate) ssl_client_key: Option<CertificateInput>,
     pub(crate) statement_cache_capacity: NonZeroUsize,
     pub(crate) schema: Option<String>,
-    pub(crate) compression: bool,
+    pub(crate) compression_mode: CompressionMode,
     pub(crate) log_settings: LogSettings,
     hostname: String,
     login: Login,
@@ -187,10 +190,10 @@ impl ConnectOptions for ExaConnectOptions {
                 }
 
                 COMPRESSION => {
-                    let compression = value
-                        .parse::<bool>()
+                    let compression_mode = value
+                        .parse::<CompressionMode>()
                         .map_err(|_| ExaConfigError::InvalidParameter(COMPRESSION))?;
-                    builder = builder.compression(compression);
+                    builder = builder.compression_mode(compression_mode);
                 }
 
                 FEEDBACK_INTERVAL => {
@@ -268,7 +271,7 @@ impl ConnectOptions for ExaConnectOptions {
             .append_pair(QUERY_TIMEOUT, &self.query_timeout.to_string());
 
         url.query_pairs_mut()
-            .append_pair(COMPRESSION, &self.compression.to_string());
+            .append_pair(COMPRESSION, self.compression_mode.as_ref());
 
         url.query_pairs_mut()
             .append_pair(FEEDBACK_INTERVAL, &self.feedback_interval.to_string());
@@ -298,8 +301,10 @@ impl ConnectOptions for ExaConnectOptions {
     }
 }
 
-impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
-    fn from(value: &'a ExaConnectOptions) -> Self {
+impl<'a> TryFrom<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
+    type Error = ExaProtocolError;
+
+    fn try_from(value: &'a ExaConnectOptions) -> Result<Self, Self::Error> {
         let crate_version = option_env!("CARGO_PKG_VERSION").unwrap_or("UNKNOWN");
 
         let attributes = ExaRwAttributes::new(
@@ -308,18 +313,33 @@ impl<'a> From<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
             value.query_timeout,
         );
 
-        Self {
+        let compression_supported = cfg!(feature = "compression");
+
+        let use_compression = match value.compression_mode {
+            CompressionMode::Disabled => false,
+            CompressionMode::Preferred if !compression_supported => {
+                tracing::debug!("not using compression: compression support not compiled in");
+                false
+            }
+            CompressionMode::Preferred => true,
+            CompressionMode::Required if compression_supported => true,
+            CompressionMode::Required => return Err(ExaProtocolError::CompressionDisabled),
+        };
+
+        let output = Self {
             protocol_version: value.protocol_version,
             fetch_size: value.fetch_size,
             statement_cache_capacity: value.statement_cache_capacity,
             login: (&value.login).into(),
-            use_compression: value.compression,
+            use_compression,
             client_name: "sqlx-exasol",
             client_version: crate_version,
             client_os: std::env::consts::OS,
             client_runtime: "RUST",
             attributes,
-        }
+        };
+
+        Ok(output)
     }
 }
 
@@ -391,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_from_url_with_query_params() {
-        let url = "exa://localhost:8563?access-token=token123&compression=true&fetch-size=1024";
+        let url = "exa://localhost:8563?access-token=token123&compression=disabled&fetch-size=1024";
         let options = ExaConnectOptions::from_str(url).unwrap();
 
         match &options.login {
@@ -401,7 +421,7 @@ mod tests {
             _ => panic!("Expected access token login"),
         }
 
-        assert!(options.compression);
+        assert_eq!(options.compression_mode, CompressionMode::Disabled);
         assert_eq!(options.fetch_size, 1024);
     }
 
@@ -519,7 +539,7 @@ mod tests {
             .username("user".to_string())
             .password("pass".to_string())
             .schema("schema".to_string())
-            .compression(true)
+            .compression_mode(CompressionMode::Disabled)
             .fetch_size(2048)
             .query_timeout(60)
             .feedback_interval(5)
@@ -532,7 +552,7 @@ mod tests {
         let query_pairs: std::collections::HashMap<String, String> =
             url.query_pairs().into_owned().collect();
 
-        assert_eq!(query_pairs.get(COMPRESSION), Some(&"true".to_string()));
+        assert_eq!(query_pairs.get(COMPRESSION), Some(&"disabled".to_string()));
         assert_eq!(query_pairs.get(FETCH_SIZE), Some(&"2048".to_string()));
         assert_eq!(query_pairs.get(QUERY_TIMEOUT), Some(&"60".to_string()));
         assert_eq!(query_pairs.get(FEEDBACK_INTERVAL), Some(&"5".to_string()));
@@ -544,7 +564,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_conversion() {
-        let original_url = "exa://user:pass@localhost:8563/schema?compression=true&fetch-size=1024";
+        let original_url =
+            "exa://user:pass@localhost:8563/schema?compression=preferred&fetch-size=1024";
         let options = ExaConnectOptions::from_str(original_url).unwrap();
         let reconstructed_url = options.to_url_lossy();
         let options2 = ExaConnectOptions::from_url(&reconstructed_url).unwrap();
@@ -552,7 +573,7 @@ mod tests {
         assert_eq!(options.hostname, options2.hostname);
         assert_eq!(options.port, options2.port);
         assert_eq!(options.schema, options2.schema);
-        assert_eq!(options.compression, options2.compression);
+        assert_eq!(options.compression_mode, options2.compression_mode);
         assert_eq!(options.fetch_size, options2.fetch_size);
     }
 }

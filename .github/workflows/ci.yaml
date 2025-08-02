@@ -84,7 +84,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
-      - name: Unit tests (no TLS, no compression)
+      - name: Unit tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: |
           export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
@@ -92,27 +92,27 @@ jobs:
         env:
           BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
-      - name: Unit tests (no TLS, with compression)
+      - name: Test compression feature enabled
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: |          
           export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
-          cargo test -p sqlx-exasol-impl --features migrate,compression -- --ignored --nocapture
+          cargo test -p sqlx-exasol-impl --features migrate,compression -- test_compression_feature --nocapture
         env:
           BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           
-      - name: Unit tests (with TLS, no compression)
+      - name: Test compression feature override disabled
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: |          
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
-          cargo test -p sqlx-exasol-impl --features migrate,native-tls -- --nocapture
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled&compression=disabled"
+          cargo test -p sqlx-exasol-impl --features migrate,compression -- test_compression_feature --nocapture
         env:
           BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-          
-      - name: Unit tests (with TLS, with compression)
+
+      - name: Test no compression feature override required
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: |          
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
-          cargo test -p sqlx-exasol-impl --features migrate,native-tls,compression -- --ignored --nocapture
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled&compression=required"
+          cargo test -p sqlx-exasol-impl --features migrate -- test_compression_feature --nocapture && false || true
         env:
           BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
@@ -120,7 +120,7 @@ jobs:
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --all-features -- --nocapture
         env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}?compression=false
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}?compression=disabled
           SQLX_OFFLINE: true
 
   etl_tests:

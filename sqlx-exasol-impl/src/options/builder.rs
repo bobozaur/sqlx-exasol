@@ -6,7 +6,7 @@ use super::{
     error::ExaConfigError, ssl_mode::ExaSslMode, ExaConnectOptions, Login, ProtocolVersion,
     DEFAULT_CACHE_CAPACITY, DEFAULT_FETCH_SIZE, DEFAULT_PORT,
 };
-use crate::SqlxResult;
+use crate::{options::compression::CompressionMode, SqlxResult};
 
 /// Builder for [`ExaConnectOptions`].
 #[derive(Clone, Debug)]
@@ -26,7 +26,7 @@ pub struct ExaConnectOptionsBuilder {
     protocol_version: ProtocolVersion,
     fetch_size: usize,
     query_timeout: u64,
-    compression: bool,
+    compression_mode: CompressionMode,
     feedback_interval: u64,
 }
 
@@ -48,7 +48,7 @@ impl Default for ExaConnectOptionsBuilder {
             protocol_version: ProtocolVersion::V3,
             fetch_size: DEFAULT_FETCH_SIZE,
             query_timeout: 0,
-            compression: false,
+            compression_mode: CompressionMode::default(),
             feedback_interval: 1,
         }
     }
@@ -95,7 +95,7 @@ impl ExaConnectOptionsBuilder {
             protocol_version: self.protocol_version,
             fetch_size: self.fetch_size,
             query_timeout: self.query_timeout,
-            compression: self.compression,
+            compression_mode: self.compression_mode,
             feedback_interval: self.feedback_interval,
             log_settings: LogSettings::default(),
         };
@@ -194,14 +194,8 @@ impl ExaConnectOptionsBuilder {
     }
 
     #[must_use = "call build() to get connection options"]
-    pub fn compression(mut self, compression: bool) -> Self {
-        let feature_flag = cfg!(feature = "compression");
-
-        if feature_flag && !compression {
-            tracing::warn!("compression cannot be enabled without the 'compression' feature");
-        }
-
-        self.compression = compression && feature_flag;
+    pub fn compression_mode(mut self, compression_mode: CompressionMode) -> Self {
+        self.compression_mode = compression_mode;
         self
     }
 

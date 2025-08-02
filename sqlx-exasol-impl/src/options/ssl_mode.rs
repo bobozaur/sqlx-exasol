@@ -4,7 +4,7 @@ use super::{error::ExaConfigError, SSL_MODE};
 
 /// Options for controlling the desired security state of the connection to the Exasol server.
 ///
-/// It is used by the `ssl_mode` method of [`crate::options::builder::ExaConnectOptionsBuilder`].
+/// It is used by [`crate::options::builder::ExaConnectOptionsBuilder::ssl_mode`].
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum ExaSslMode {
     /// Establish an unencrypted connection.

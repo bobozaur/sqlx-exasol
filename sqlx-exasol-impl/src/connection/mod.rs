@@ -101,7 +101,7 @@ impl ExaConnection {
                 };
 
                 // Break if we successfully connect a websocket.
-                match ExaWebSocket::new(host, opts.port, socket, opts.into(), with_tls).await {
+                match ExaWebSocket::new(host, opts.port, socket, opts.try_into()?, with_tls).await {
                     Ok(ws) => {
                         ws_result = Ok(ws);
                         break;
@@ -214,16 +214,18 @@ mod tests {
     use sqlx::{query, Executor};
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
 
-    use crate::{ExaConnectOptions, Exasol};
+    use crate::{CompressionMode, ExaConnectOptions, Exasol};
 
-    #[ignore]
-    #[cfg(feature = "compression")]
     #[sqlx::test]
     async fn test_compression_feature(
         pool_opts: PoolOptions<Exasol>,
-        mut exa_opts: ExaConnectOptions,
+        exa_opts: ExaConnectOptions,
     ) -> Result<(), BoxDynError> {
-        exa_opts.compression = true;
+        let compression_enabled = match exa_opts.compression_mode {
+            CompressionMode::Disabled => false,
+            CompressionMode::Preferred => cfg!(feature = "compression"),
+            CompressionMode::Required => true,
+        };
 
         let pool = pool_opts.connect_with(exa_opts).await?;
         let mut con = pool.acquire().await?;
@@ -240,18 +242,9 @@ mod tests {
             .await?;
 
         assert_eq!(schema, new_schema);
+        assert_eq!(compression_enabled, con.attributes().compression_enabled());
 
         Ok(())
-    }
-
-    #[cfg(not(feature = "compression"))]
-    #[sqlx::test]
-    async fn test_enabled_compression_without_feature(
-        pool_opts: PoolOptions<Exasol>,
-        mut exa_opts: ExaConnectOptions,
-    ) {
-        exa_opts.compression = true;
-        assert!(pool_opts.connect_with(exa_opts).await.is_err());
     }
 
     #[sqlx::test]
