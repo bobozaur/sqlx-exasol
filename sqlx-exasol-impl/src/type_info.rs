@@ -67,12 +67,14 @@ impl TypeInfo for ExaTypeInfo {
         false
     }
 
-    /// We're going against `sqlx` here, but knowing the full data type definition
-    /// is actually very helpful when displaying error messages, so... ¯\_(ツ)_/¯.
+    /// We're going against `sqlx` here, but knowing the full data type definition is actually very
+    /// helpful when displaying error messages, so... ¯\_(ツ)_/¯. This is also due to Exasol's
+    /// limited number of data types. How would it look saying that a `DECIMAL` column does not fit
+    /// in some other `DECIMAL` data type?
     ///
-    /// In fact, error messages seem to be the only place where this is being used,
-    /// particularly when trying to decode a value but the data type provided by the
-    /// database does not match/fit inside the Rust data type.
+    /// In fact, error messages seem to be the only place where this is being used, particularly
+    /// when trying to decode a value but the data type provided by the database does not
+    /// match/fit inside the Rust data type.
     fn name(&self) -> &str {
         self.name.as_ref()
     }

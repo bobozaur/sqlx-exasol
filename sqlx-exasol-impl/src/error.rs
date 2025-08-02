@@ -5,7 +5,7 @@ use rsa::errors::Error as RsaError;
 use serde_json::error::Error as JsonError;
 use thiserror::Error as ThisError;
 
-use crate::{type_info::DataTypeName, SqlxError};
+use crate::SqlxError;
 
 /// Enum representing protocol implementation errors.
 #[derive(Debug, ThisError)]
@@ -20,8 +20,6 @@ pub enum ExaProtocolError {
     SendNotReady,
     #[error("no response received")]
     NoResponse,
-    #[error("type mismatch: expected SQL type `{0}` but was provided `{1}`")]
-    DatatypeMismatch(DataTypeName, DataTypeName),
     #[error("server closed connection; info: {0}")]
     WebSocketClosed(CloseError),
     #[error("feature 'compression' must be enabled to use compression")]

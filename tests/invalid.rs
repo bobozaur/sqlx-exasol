@@ -3,10 +3,10 @@
 mod macros;
 
 // Test columns that cannot support the datatype's max value.
-test_type_invalid!(i8_into_smaller<i8>::"DECIMAL(1, 0)"::(-5i8, 5i8));
-test_type_invalid!(i16_into_smaller<i16>::"DECIMAL(3, 0)"::(-12i16, 12i16));
-test_type_invalid!(i32_into_smaller<i32>::"DECIMAL(7, 0)"::(-12345i32, 12345i32));
-test_type_invalid!(i64_into_smaller<i64>::"DECIMAL(15, 0)"::(-1_234_567_890i64, 1_234_567_890i64));
+test_type_invalid!(i8_into_smaller<i8>::"DECIMAL(1, 0)"::(-15i8, 15i8));
+test_type_invalid!(i16_into_smaller<i16>::"DECIMAL(3, 0)"::(-1_234i16, 1_234i16));
+test_type_invalid!(i32_into_smaller<i32>::"DECIMAL(7, 0)"::(-12_345_678i32, 12_345_678i32));
+test_type_invalid!(i64_into_smaller<i64>::"DECIMAL(15, 0)"::(-1_234_567_890_123_456i64, 1_234_567_890_123_456i64));
 
 // Test incompatible types
 test_type_invalid!(i16_into_i8<i16>::"DECIMAL(3,0)"::(i16::MAX));

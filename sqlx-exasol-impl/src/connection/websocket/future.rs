@@ -19,7 +19,6 @@ use serde::{
     de::{DeserializeOwned, IgnoredAny},
     Serialize,
 };
-use sqlx_core::type_info::TypeInfo;
 
 use crate::{
     connection::{
@@ -106,19 +105,6 @@ impl WebSocketFuture for ExecutePrepared<'_> {
             match &mut self.state {
                 ExecutePreparedState::GetOrPrepare(future) => {
                     let prepared = ready!(future.poll_unpin(cx, ws))?;
-
-                    // Check the compatibility between provided parameter data types
-                    // and the ones expected by the database.
-                    let iter = std::iter::zip(prepared.parameters.as_ref(), &self.arguments.types);
-                    for (expected, provided) in iter {
-                        if !expected.type_compatible(provided) {
-                            return Err(ExaProtocolError::DatatypeMismatch(
-                                expected.name,
-                                provided.name,
-                            ))?;
-                        }
-                    }
-
                     let buf = std::mem::take(&mut self.arguments.buf);
                     let command = ExecutePreparedStmt::new(
                         prepared.statement_handle,
