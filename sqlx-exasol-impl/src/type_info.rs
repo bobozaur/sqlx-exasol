@@ -164,7 +164,9 @@ impl ExaDataType {
     /// See: <https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_dsinterval.htm?Highlight=fraction%20interval>
     ///
     /// Therefore, we'll only be handling fractions smaller or equal to 3.
+    #[allow(dead_code, reason = "used by optional dependency")]
     pub(crate) const INTERVAL_DTS_MAX_FRACTION: u32 = 3;
+    #[allow(dead_code, reason = "used by optional dependency")]
     pub(crate) const INTERVAL_DTS_MAX_PRECISION: u32 = 9;
     pub(crate) const INTERVAL_YTM_MAX_PRECISION: u32 = 9;
     pub(crate) const VARCHAR_MAX_LEN: u32 = 2_000_000;

@@ -17,12 +17,9 @@ use crate::{
 
 /// A duration interval as a representation of the `INTERVAL YEAR TO MONTH` datatype.
 ///
-/// Note that the sign of the whole type is held by the `years` field.
+/// The duration is expressed in months.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
-pub struct ExaIntervalYearToMonth {
-    pub years: i32,
-    pub months: u8,
-}
+pub struct ExaIntervalYearToMonth(pub i64);
 
 impl Type<Exasol> for ExaIntervalYearToMonth {
     fn type_info() -> ExaTypeInfo {
@@ -53,8 +50,10 @@ impl<'r> Decode<'r, Exasol> for ExaIntervalYearToMonth {
 
 impl Display for ExaIntervalYearToMonth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let plus = if self.years.is_negative() { "" } else { "+" };
-        write!(f, "{}{}-{}", plus, self.years, self.months)
+        let years = self.0 / 12;
+        let months = (self.0 % 12).abs();
+        let plus = if years.is_negative() { "" } else { "+" };
+        write!(f, "{plus}{years}-{months}")
     }
 }
 
@@ -87,10 +86,13 @@ impl<'de> Deserialize<'de> for ExaIntervalYearToMonth {
                 };
 
                 let (years, months) = value.rsplit_once('-').ok_or_else(input_err_fn)?;
-                let years = years.parse::<i32>().map_err(de::Error::custom)?;
-                let months = months.parse::<u8>().map_err(de::Error::custom)?;
+                let years = years.parse::<i64>().map_err(de::Error::custom)?;
+                let months = months.parse::<i64>().map_err(de::Error::custom)?;
 
-                Ok(ExaIntervalYearToMonth { years, months })
+                let sign = if years.is_negative() { -1 } else { 1 };
+                let total = years * 12 + months * sign;
+
+                Ok(ExaIntervalYearToMonth(total))
             }
         }
 

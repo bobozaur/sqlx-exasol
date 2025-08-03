@@ -2,10 +2,10 @@
 mod bigdecimal;
 mod bool;
 #[cfg(feature = "chrono")]
-mod chrono;
+pub mod chrono;
 mod float;
 mod int;
-mod interval;
+mod interval_ytm;
 mod iter;
 #[cfg(feature = "json")]
 mod json;
@@ -15,9 +15,9 @@ mod rust_decimal;
 mod str;
 mod text;
 #[cfg(feature = "time")]
-mod time;
+pub mod time;
 #[cfg(feature = "uuid")]
 mod uuid;
 
-pub use interval::{ExaIntervalDayToSecond, ExaIntervalYearToMonth};
+pub use interval_ytm::ExaIntervalYearToMonth;
 pub use iter::ExaIter;

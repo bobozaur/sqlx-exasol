@@ -1,4 +1,4 @@
-use sqlx_exasol::types::chrono::{DateTime, Local, NaiveDate, NaiveDateTime, Utc};
+use sqlx_exasol::types::chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeDelta, Utc};
 
 use crate::{test_type_array, test_type_valid};
 
@@ -20,3 +20,8 @@ test_type_array!(datetime_utc_array<DateTime<Utc>>::"TIMESTAMP"::(vec![NaiveDate
 test_type_valid!(datetime_local<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("'2023-08-12 19:22:36.591000'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap()));
 test_type_valid!(datetime_local_option<Option<DateTime<Local>>>::"TIMESTAMP WITH LOCAL TIME ZONE"::("NULL" => None::<DateTime<Local>>, "''" => None::<DateTime<Local>>, "'2023-08-12 19:22:36.591000'" => Some(NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap())));
 test_type_array!(datetime_local_array<DateTime<Local>>::"TIMESTAMP WITH LOCAL TIME ZONE"::(vec![NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap(), NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap(), NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap().and_local_timezone(Local).unwrap()]));
+
+test_type_valid!(duration<TimeDelta>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => TimeDelta::try_milliseconds(938_750_123).unwrap(), "'-10 20:45:50.123'" => TimeDelta::try_milliseconds(-938_750_123).unwrap()));
+test_type_valid!(duration_with_prec<TimeDelta>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => TimeDelta::try_milliseconds(938_750_123).unwrap(), "'-10 20:45:50.123'" => TimeDelta::try_milliseconds(-938_750_123).unwrap()));
+test_type_valid!(duration_option<Option<TimeDelta>>::"INTERVAL DAY TO SECOND"::("NULL" => None::<TimeDelta>, "''" => None::<TimeDelta>, "'10 20:45:50.123'" => Some(TimeDelta::try_milliseconds(938_750_123).unwrap())));
+test_type_array!(duration_array<TimeDelta>::"INTERVAL DAY TO SECOND"::(vec!["10 20:45:50.123", "10 20:45:50.123", "10 20:45:50.123"]));

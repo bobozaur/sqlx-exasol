@@ -22,11 +22,25 @@ impl DatabaseExt for Exasol {
 }
 
 mod sqlx_exasol {
+    #[allow(unused_imports, reason = "used in type checking")]
     pub mod types {
-        #[allow(unused_imports, reason = "used in type checking")]
         pub use sqlx_core::types::*;
 
         pub use crate::types::*;
+
+        #[cfg(feature = "chrono")]
+        pub mod chrono {
+            pub use sqlx_core::types::chrono::*;
+
+            pub use crate::types::chrono::*;
+        }
+
+        #[cfg(feature = "time")]
+        pub mod time {
+            pub use sqlx_core::types::time::*;
+
+            pub use crate::types::time::*;
+        }
     }
 }
 
@@ -41,7 +55,6 @@ impl_type_checking!(
         String | &str,
 
         sqlx_exasol::types::ExaIntervalYearToMonth,
-        sqlx_exasol::types::ExaIntervalDayToSecond,
 
         #[cfg(feature = "uuid")]
         sqlx_exasol::types::Uuid,

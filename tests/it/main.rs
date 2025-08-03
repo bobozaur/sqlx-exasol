@@ -18,7 +18,7 @@ mod float;
 mod from_row;
 mod geometry;
 mod int;
-mod interval;
+mod interval_ytm;
 mod invalid;
 mod io;
 #[cfg(feature = "json")]
