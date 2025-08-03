@@ -177,25 +177,41 @@ macro_rules! test_etl {
 
 #[macro_export]
 macro_rules! test_etl_single_threaded {
-        ($name:literal, $table:literal, $export:expr, $import:expr) => {
-            $crate::test_etl_single_threaded!($name, 1, $table, $export, $import);
-        };
+    ($name:literal, $table:literal, $export:expr, $import:expr) => {
+        $crate::test_etl_single_threaded!($name, 1, $table, $export, $import);
+    };
 
-        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr) => {
-            $crate::test_etl!("single_threaded", $name, $num_workers, $table, |(r,w)|  pipe(r, w), $export, $import);
-        }
-    }
+    ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr) => {
+        $crate::test_etl!(
+            "single_threaded",
+            $name,
+            $num_workers,
+            $table,
+            |(r, w)| pipe(r, w),
+            $export,
+            $import
+        );
+    };
+}
 
 #[macro_export]
 macro_rules! test_etl_multi_threaded {
-        ($name:literal, $table:literal, $export:expr, $import:expr) => {
-            $crate::test_etl_multi_threaded!($name, 1, $table, $export, $import);
-        };
+    ($name:literal, $table:literal, $export:expr, $import:expr) => {
+        $crate::test_etl_multi_threaded!($name, 1, $table, $export, $import);
+    };
 
-        ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr) => {
-            $crate::test_etl!("multi_threaded", $name, $num_workers, $table, |(r,w)|  sqlx_exasol::__rt::spawn(pipe(r, w)), $export, $import);
-        }
-    }
+    ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr) => {
+        $crate::test_etl!(
+            "multi_threaded",
+            $name,
+            $num_workers,
+            $table,
+            |(r, w)| sqlx_exasol::__rt::spawn(pipe(r, w)),
+            $export,
+            $import
+        );
+    };
+}
 
 #[macro_export]
 macro_rules! test_compile_time_type {

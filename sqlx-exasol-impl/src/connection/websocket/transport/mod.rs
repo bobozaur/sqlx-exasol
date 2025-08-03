@@ -34,7 +34,9 @@ impl MaybeCompressedWebSocket {
     pub fn maybe_compress(self, use_compression: bool) -> Self {
         match self {
             #[cfg(feature = "compression")]
-            Self::Plain(plain) if use_compression => MaybeCompressedWebSocket::Compressed(plain.into()),
+            Self::Plain(plain) if use_compression => {
+                MaybeCompressedWebSocket::Compressed(plain.into())
+            }
             ws => ws,
         }
     }
