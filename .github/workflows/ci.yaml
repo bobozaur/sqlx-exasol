@@ -95,36 +95,42 @@ jobs:
         run: cargo test --features runtime-tokio,etl -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
           
       - name: Test IO combos (no TLS, with compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features runtime-tokio,etl,compression -- it_works_with_io_combo --ignored  --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
           
       - name: Test IO combos (NativeTLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features runtime-tokio,etl,tls-native-tls -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
           
       - name: Test IO combos (NativeTLS, with compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features runtime-tokio,etl,tls-native-tls,compression -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
           
       - name: Test IO combos (Rustls, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features runtime-tokio,etl,tls-rustls -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
           
       - name: Test IO combos (Rustls, with compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
         run: cargo test --features runtime-tokio,etl,tls-rustls,compression -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
 
       - name: Integration connection tests
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}

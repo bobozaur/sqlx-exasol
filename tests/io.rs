@@ -34,8 +34,12 @@ async fn it_works_with_io_combo_preferred(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
-    let tls_supported = cfg!(any(feature = "tls-native-tls", feature = "tls-rustls"));
     let compression_supported = cfg!(feature = "compression");
+    let tls_supported = cfg!(any(
+        feature = "tls-native-tls",
+        feature = "tls-rustls-ring-webpki",
+        feature = "tls-rustls-ring-native-roots"
+    ));
 
     let mut url = exa_opts.to_url_lossy();
 

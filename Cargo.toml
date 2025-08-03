@@ -53,13 +53,14 @@ runtime-tokio = ["sqlx/runtime-tokio"]
 
 # TLS features
 tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
-tls-rustls = ["sqlx/tls-rustls", "sqlx-exasol-impl/rustls"]
-tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "tls-rustls"]
-tls-rustls-ring = ["sqlx/tls-rustls-ring", "tls-rustls"]
-tls-rustls-ring-webpki = ["sqlx/tls-rustls-ring-webpki", "tls-rustls"]
+tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "sqlx-exasol-impl/rustls"]
+tls-rustls-ring-webpki = [
+    "sqlx/tls-rustls-ring-webpki",
+    "sqlx-exasol-impl/rustls",
+]
 tls-rustls-ring-native-roots = [
     "sqlx/tls-rustls-ring-native-roots",
-    "tls-rustls",
+    "sqlx-exasol-impl/rustls",
 ]
 
 # Database
@@ -136,7 +137,16 @@ rand = { version = "0.8", default-features = false, features = [
     "std",
     "std_rng",
 ] }
+rcgen = { version = "0.13", default-features = false, features = [
+    "pem",
+    "crypto",
+] }
 rsa = { version = "0.9", default-features = false, features = ["pem", "std"] }
+rust_decimal = { version = "1", default-features = false, features = ["serde"] }
+rustls = { version = "0.23", default-features = false, features = [
+    "std",
+    "tls12",
+] }
 serde = { version = "1", default-features = false, features = ["derive", "rc"] }
 serde_json = { version = "1", default-features = false, features = [
     "std",
@@ -165,14 +175,8 @@ tokio = { version = "1", default-features = false, features = [
     "rt-multi-thread",
 ] }
 tracing = { version = "0.1", default-features = false, features = ["log"] }
-url = "2"
+url = { version = "2", default-features = false }
 uuid = { version = "1", default-features = false, features = ["serde"] }
-rcgen = "0.13"
-rust_decimal = { version = "1", default-features = false, features = ["serde"] }
-rustls = { version = "0.23", default-features = false, features = [
-    "std",
-    "tls12",
-] }
 
 [dependencies]
 sqlx-exasol-macros = { workspace = true, optional = true }
