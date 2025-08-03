@@ -1,9 +1,6 @@
-#![cfg(feature = "migrate")]
-#![cfg(feature = "chrono")]
-
-mod macros;
-
 use sqlx_exasol::types::chrono::{DateTime, Local, NaiveDate, NaiveDateTime, Utc};
+
+use crate::{test_type_array, test_type_valid};
 
 const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.9f";
 const DATE_FMT: &str = "%Y-%m-%d";

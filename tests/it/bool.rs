@@ -1,10 +1,8 @@
-#![cfg(feature = "migrate")]
-
-mod macros;
-
 use std::collections::HashSet;
 
 use sqlx_exasol::types::ExaIter;
+
+use crate::{test_type_array, test_type_valid};
 
 test_type_valid!(bool::"BOOLEAN"::(false, true));
 test_type_valid!(bool_option<Option<bool>>::"BOOLEAN"::("NULL" => None::<bool>, "true" => Some(true)));

@@ -64,7 +64,7 @@ jobs:
           RUSTFLAGS: -D warnings
           
   io_tests:
-    name: Connection tests
+    name: IO tests
     needs: clippy
     runs-on: ubuntu-latest
     steps:

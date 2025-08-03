@@ -1,8 +1,3 @@
-#![cfg(feature = "migrate")]
-#![cfg(feature = "etl")]
-
-mod macros;
-
 use std::iter;
 
 use futures_util::{
@@ -15,6 +10,8 @@ use sqlx_exasol::{
     pool::{PoolConnection, PoolOptions},
     Connection, ExaConnectOptions, Exasol, Executor,
 };
+
+use crate::{test_etl, test_etl_multi_threaded, test_etl_single_threaded};
 
 const NUM_ROWS: usize = 1_000_000;
 

@@ -1,8 +1,6 @@
-#![cfg(feature = "migrate")]
-
 use sqlx_exasol::types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth};
 
-mod macros;
+use crate::{test_type_array, test_type_valid};
 
 test_type_valid!(duration<ExaIntervalDayToSecond>::"INTERVAL DAY TO SECOND"::("'10 20:45:50.123'" => ExaIntervalDayToSecond { days: 10, hours: 20, minutes: 45, seconds: 50, milliseconds: 123 }, "'-10 20:45:50.123'" => ExaIntervalDayToSecond { days: -10, hours: 20, minutes: 45, seconds: 50, milliseconds: 123 }));
 test_type_valid!(duration_with_prec<ExaIntervalDayToSecond>::"INTERVAL DAY(4) TO SECOND"::("'10 20:45:50.123'" => ExaIntervalDayToSecond{ days: 10, hours: 20, minutes: 45, seconds: 50, milliseconds: 123 }, "'-10 20:45:50.123'" => ExaIntervalDayToSecond{ days: -10, hours: 20, minutes: 45, seconds: 50, milliseconds: 123 }));

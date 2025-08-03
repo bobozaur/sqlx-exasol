@@ -1,16 +1,12 @@
-#![cfg(feature = "migrate")]
-#![cfg(feature = "macros")]
 #![allow(deprecated)]
-
-extern crate sqlx_exasol as sqlx;
-
-mod macros;
 
 use sqlx::migrate::Migrator;
 use sqlx_exasol::{
     types::{ExaIntervalDayToSecond, ExaIntervalYearToMonth},
     Type,
 };
+
+use crate::test_compile_time_type;
 
 #[allow(dead_code)]
 static MIGRATOR: Migrator = sqlx_exasol::migrate!("tests/migrations_compile_time");

@@ -1,6 +1,4 @@
-#![cfg(feature = "migrate")]
-
-mod macros;
+use crate::test_type_invalid;
 
 // Test columns that cannot support the datatype's max value.
 test_type_invalid!(i8_into_smaller<i8>::"DECIMAL(1, 0)"::(-15i8, 15i8));
