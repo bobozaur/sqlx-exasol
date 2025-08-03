@@ -25,13 +25,20 @@ time = ["sqlx-core/time", "dep:time"]
 uuid = ["sqlx-core/uuid", "dep:uuid"]
 
 # TLS features
-tls = ["dep:rcgen"]
+tls = []
+native-tls = [
+    "dep:native-tls",
+    "sqlx-core/_tls-native-tls",
+    "tls",
+    "rcgen?/aws_lc_rs",
+]
+rustls-aws-lc-rs = ["rustls", "rcgen?/aws_lc_rs"]
+rustls-ring = ["rustls", "rcgen?/ring"]
 rustls = ["dep:rustls", "sqlx-core/_tls-rustls", "tls"]
-native-tls = ["dep:native-tls", "sqlx-core/_tls-native-tls", "tls"]
 
 # Driver specific features
 compression = ["dep:async-compression"]
-etl = ["dep:http-body-util", "dep:hyper", "dep:futures-channel"]
+etl = ["dep:http-body-util", "dep:hyper", "dep:futures-channel", "dep:rcgen"]
 
 [dependencies]
 arrayvec = { workspace = true }

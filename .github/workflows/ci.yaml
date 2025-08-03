@@ -120,14 +120,14 @@ jobs:
           
       - name: Test IO combos (Rustls, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,etl,tls-rustls -- it_works_with_io_combo --ignored --nocapture
+        run: cargo test --features runtime-tokio,etl,tls-rustls-aws-lc-rs -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
           
       - name: Test IO combos (Rustls, with compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --features runtime-tokio,etl,tls-rustls,compression -- it_works_with_io_combo --ignored --nocapture
+        run: cargo test --features runtime-tokio,etl,tls-rustls-aws-lc-rs,compression -- it_works_with_io_combo --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true

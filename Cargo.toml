@@ -53,14 +53,14 @@ runtime-tokio = ["sqlx/runtime-tokio"]
 
 # TLS features
 tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
-tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "sqlx-exasol-impl/rustls"]
+tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "sqlx-exasol-impl/rustls-aws-lc-rs"]
 tls-rustls-ring-webpki = [
     "sqlx/tls-rustls-ring-webpki",
-    "sqlx-exasol-impl/rustls",
+    "sqlx-exasol-impl/rustls-ring",
 ]
 tls-rustls-ring-native-roots = [
     "sqlx/tls-rustls-ring-native-roots",
-    "sqlx-exasol-impl/rustls",
+    "sqlx-exasol-impl/rustls-ring",
 ]
 
 # Database
@@ -137,10 +137,7 @@ rand = { version = "0.8", default-features = false, features = [
     "std",
     "std_rng",
 ] }
-rcgen = { version = "0.13", default-features = false, features = [
-    "pem",
-    "crypto",
-] }
+rcgen = { version = "0.13", default-features = false, features = ["pem"] }
 rsa = { version = "0.9", default-features = false, features = ["pem", "std"] }
 rust_decimal = { version = "1", default-features = false, features = ["serde"] }
 rustls = { version = "0.23", default-features = false, features = [

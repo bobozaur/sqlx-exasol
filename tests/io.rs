@@ -37,6 +37,7 @@ async fn it_works_with_io_combo_preferred(
     let compression_supported = cfg!(feature = "compression");
     let tls_supported = cfg!(any(
         feature = "tls-native-tls",
+        feature = "tls-rustls-aws-lc-rs",
         feature = "tls-rustls-ring-webpki",
         feature = "tls-rustls-ring-native-roots"
     ));
@@ -69,7 +70,12 @@ async fn it_works_with_io_combo_required(
     #[allow(unused_mut, reason = "conditionally compiled")]
     let mut res = io_combo(pool_opts, exa_opts, true, true).await;
 
-    #[cfg(not(any(feature = "tls-native-tls", feature = "tls-rustls")))]
+    #[cfg(not(any(
+        feature = "tls-native-tls",
+        feature = "tls-rustls-aws-lc-rs",
+        feature = "tls-rustls-ring-webpki",
+        feature = "tls-rustls-ring-native-roots"
+    )))]
     {
         assert!(res.is_err());
         return Ok(());
