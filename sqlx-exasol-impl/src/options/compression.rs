@@ -6,7 +6,7 @@ use super::{error::ExaConfigError, COMPRESSION};
 ///
 /// It is used by [`crate::options::builder::ExaConnectOptionsBuilder::compression_mode`].
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub enum CompressionMode {
+pub enum ExaCompressionMode {
     /// Establish an uncompressed connection.
     Disabled,
 
@@ -22,31 +22,31 @@ pub enum CompressionMode {
     Required,
 }
 
-impl CompressionMode {
+impl ExaCompressionMode {
     const DISABLED: &str = "disabled";
     const PREFERRED: &str = "preferred";
     const REQUIRED: &str = "required";
 }
 
-impl FromStr for CompressionMode {
+impl FromStr for ExaCompressionMode {
     type Err = ExaConfigError;
 
     fn from_str(s: &str) -> Result<Self, ExaConfigError> {
         Ok(match &*s.to_ascii_lowercase() {
-            Self::DISABLED => CompressionMode::Disabled,
-            Self::PREFERRED => CompressionMode::Preferred,
-            Self::REQUIRED => CompressionMode::Required,
+            Self::DISABLED => ExaCompressionMode::Disabled,
+            Self::PREFERRED => ExaCompressionMode::Preferred,
+            Self::REQUIRED => ExaCompressionMode::Required,
             _ => Err(ExaConfigError::InvalidParameter(COMPRESSION))?,
         })
     }
 }
 
-impl AsRef<str> for CompressionMode {
+impl AsRef<str> for ExaCompressionMode {
     fn as_ref(&self) -> &str {
         match self {
-            CompressionMode::Disabled => Self::DISABLED,
-            CompressionMode::Preferred => Self::PREFERRED,
-            CompressionMode::Required => Self::REQUIRED,
+            ExaCompressionMode::Disabled => Self::DISABLED,
+            ExaCompressionMode::Preferred => Self::PREFERRED,
+            ExaCompressionMode::Required => Self::REQUIRED,
         }
     }
 }

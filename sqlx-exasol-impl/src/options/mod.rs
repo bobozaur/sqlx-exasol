@@ -7,7 +7,7 @@ mod ssl_mode;
 use std::{borrow::Cow, net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
 pub use builder::ExaConnectOptionsBuilder;
-pub use compression::CompressionMode;
+pub use compression::ExaCompressionMode;
 use error::ExaConfigError;
 pub use protocol_version::ProtocolVersion;
 use sqlx_core::{
@@ -65,7 +65,7 @@ pub struct ExaConnectOptions {
     pub(crate) ssl_client_key: Option<CertificateInput>,
     pub(crate) statement_cache_capacity: NonZeroUsize,
     pub(crate) schema: Option<String>,
-    pub(crate) compression_mode: CompressionMode,
+    pub(crate) compression_mode: ExaCompressionMode,
     pub(crate) log_settings: LogSettings,
     hostname: String,
     login: Login,
@@ -191,7 +191,7 @@ impl ConnectOptions for ExaConnectOptions {
 
                 COMPRESSION => {
                     let compression_mode = value
-                        .parse::<CompressionMode>()
+                        .parse::<ExaCompressionMode>()
                         .map_err(|_| ExaConfigError::InvalidParameter(COMPRESSION))?;
                     builder = builder.compression_mode(compression_mode);
                 }
@@ -316,14 +316,14 @@ impl<'a> TryFrom<&'a ExaConnectOptions> for ExaLoginRequest<'a> {
         let compression_supported = cfg!(feature = "compression");
 
         let use_compression = match value.compression_mode {
-            CompressionMode::Disabled => false,
-            CompressionMode::Preferred if !compression_supported => {
+            ExaCompressionMode::Disabled => false,
+            ExaCompressionMode::Preferred if !compression_supported => {
                 tracing::debug!("not using compression: compression support not compiled in");
                 false
             }
-            CompressionMode::Preferred => true,
-            CompressionMode::Required if compression_supported => true,
-            CompressionMode::Required => return Err(ExaProtocolError::CompressionDisabled),
+            ExaCompressionMode::Preferred => true,
+            ExaCompressionMode::Required if compression_supported => true,
+            ExaCompressionMode::Required => return Err(ExaProtocolError::CompressionDisabled),
         };
 
         let output = Self {
@@ -421,7 +421,7 @@ mod tests {
             _ => panic!("Expected access token login"),
         }
 
-        assert_eq!(options.compression_mode, CompressionMode::Disabled);
+        assert_eq!(options.compression_mode, ExaCompressionMode::Disabled);
         assert_eq!(options.fetch_size, 1024);
     }
 
@@ -539,7 +539,7 @@ mod tests {
             .username("user".to_string())
             .password("pass".to_string())
             .schema("schema".to_string())
-            .compression_mode(CompressionMode::Disabled)
+            .compression_mode(ExaCompressionMode::Disabled)
             .fetch_size(2048)
             .query_timeout(60)
             .feedback_interval(5)
@@ -575,5 +575,84 @@ mod tests {
         assert_eq!(options.schema, options2.schema);
         assert_eq!(options.compression_mode, options2.compression_mode);
         assert_eq!(options.fetch_size, options2.fetch_size);
+    }
+    #[test]
+    fn test_compression_modes() {
+        // Test ExaCompressionMode::Disabled
+        let url = "exa://user:pass@localhost:8563?compression=disabled";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.compression_mode, ExaCompressionMode::Disabled);
+
+        // Test ExaCompressionMode::Preferred
+        let url = "exa://user:pass@localhost:8563?compression=preferred";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.compression_mode, ExaCompressionMode::Preferred);
+
+        // Test ExaCompressionMode::Required
+        let url = "exa://user:pass@localhost:8563?compression=required";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.compression_mode, ExaCompressionMode::Required);
+    }
+
+    #[test]
+    fn test_ssl_modes() {
+        // Test ExaSslMode::Disable
+        let url = "exa://user:pass@localhost:8563?ssl-mode=disabled";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.ssl_mode, ExaSslMode::Disabled);
+
+        // Test ExaSslMode::Preferred
+        let url = "exa://user:pass@localhost:8563?ssl-mode=preferred";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.ssl_mode, ExaSslMode::Preferred);
+
+        // Test ExaSslMode::Required
+        let url = "exa://user:pass@localhost:8563?ssl-mode=required";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.ssl_mode, ExaSslMode::Required);
+    }
+
+    #[test]
+    fn test_compression_and_ssl_modes_together() {
+        let url = "exa://user:pass@localhost:8563?compression=required&ssl-mode=required";
+        let options = ExaConnectOptions::from_str(url).unwrap();
+        assert_eq!(options.compression_mode, ExaCompressionMode::Required);
+        assert_eq!(options.ssl_mode, ExaSslMode::Required);
+    }
+
+    #[test]
+    fn test_compression_mode_to_url_lossy() {
+        // Test that compression modes are correctly serialized back to URL
+        let options = ExaConnectOptions::builder()
+            .host("localhost".to_string())
+            .username("user".to_string())
+            .password("pass".to_string())
+            .compression_mode(ExaCompressionMode::Required)
+            .build()
+            .unwrap();
+
+        let url = options.to_url_lossy();
+        let query_pairs: std::collections::HashMap<String, String> =
+            url.query_pairs().into_owned().collect();
+
+        assert_eq!(query_pairs.get(COMPRESSION), Some(&"required".to_string()));
+    }
+
+    #[test]
+    fn test_ssl_mode_to_url_lossy() {
+        // Test that SSL modes are correctly serialized back to URL
+        let options = ExaConnectOptions::builder()
+            .host("localhost".to_string())
+            .username("user".to_string())
+            .password("pass".to_string())
+            .ssl_mode(ExaSslMode::Required)
+            .build()
+            .unwrap();
+
+        let url = options.to_url_lossy();
+        let query_pairs: std::collections::HashMap<String, String> =
+            url.query_pairs().into_owned().collect();
+
+        assert_eq!(query_pairs.get(SSL_MODE), Some(&"required".to_string()));
     }
 }
