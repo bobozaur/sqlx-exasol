@@ -9,7 +9,7 @@ use sqlx_exasol::{
     error::BoxDynError,
     etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
     pool::PoolOptions,
-    ConnectOptions, ExaConnectOptions, ExaConnection, Exasol, Executor,
+    ConnectOptions, Connection, ExaConnectOptions, ExaConnection, Exasol, Executor,
 };
 
 #[ignore]
@@ -92,6 +92,8 @@ async fn io_combo(
     let mut conn1 = pool.acquire().await?;
     let mut conn2 = pool.acquire().await?;
 
+    conn1.ping().await?;
+
     #[cfg(feature = "compression")]
     {
         export_import(&mut conn1, &mut conn2, Some(false)).await?;
@@ -123,7 +125,7 @@ async fn export_import(
     etl_compression: Option<bool>,
 ) -> Result<(), BoxDynError> {
     const NUM_ROWS: usize = 1_000_000;
-    
+
     conn1
         .execute("CREATE TABLE TLS_COMP_COMBO ( col VARCHAR(200) );")
         .await?;
@@ -132,7 +134,7 @@ async fn export_import(
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn1)
         .await?;
-    
+
     #[allow(unused_mut, reason = "conditionally compiled")]
     let mut export_builder = ExportBuilder::new(ExportSource::Table("TLS_COMP_COMBO"));
     #[allow(unused_mut, reason = "conditionally compiled")]

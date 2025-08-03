@@ -25,7 +25,7 @@ pub struct CompressedWebSocket {
     /// Future for the currently decoding message.
     decoding: Option<Compression<ZlibDecoder<Vec<u8>>>>,
     /// Future for the currently encoding message.
-    encoding: Option<Compression<ZlibEncoder<Vec<u8>>>>,
+    encoding: EncodingState,
 }
 
 impl Stream for CompressedWebSocket {
@@ -75,31 +75,37 @@ impl Sink<String> for CompressedWebSocket {
 
     fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
         // Sanity check
-        if self.encoding.is_some() {
+        if !matches!(self.encoding, EncodingState::Ready) {
             return Err(ExaProtocolError::SendNotReady)?;
         }
 
         // Register the item for compression.
         let bytes = item.into_bytes().into_boxed_slice().into();
-        self.encoding = Some(Compression::new(bytes, 0));
+        self.encoding = EncodingState::Buffered(Compression::new(bytes, 0));
         Ok(())
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         loop {
-            if let Some(future) = self.encoding.as_mut() {
+            match &mut self.encoding {
                 // Compress the last registered item.
-                let bytes = ready!(future.poll_unpin(cx))?;
-                self.encoding = None;
-                self.inner
-                    .start_send_unpin(Message::Binary(bytes))
-                    .map_err(ToSqlxError::to_sqlx_err)?;
-            } else {
+                EncodingState::Buffered(future) => {
+                    let bytes = ready!(future.poll_unpin(cx))?;
+                    self.encoding = EncodingState::NeedsFlush;
+                    self.inner
+                        .start_send_unpin(Message::Binary(bytes))
+                        .map_err(ToSqlxError::to_sqlx_err)?;
+                }
                 // Flush the compressed message.
-                return self
-                    .inner
-                    .poll_flush_unpin(cx)
-                    .map_err(ToSqlxError::to_sqlx_err);
+                EncodingState::NeedsFlush => {
+                    ready!(self
+                        .inner
+                        .poll_flush_unpin(cx)
+                        .map_err(ToSqlxError::to_sqlx_err))?;
+
+                    self.encoding = EncodingState::Ready;
+                }
+                EncodingState::Ready => return Poll::Ready(Ok(())),
             }
         }
     }
@@ -116,9 +122,17 @@ impl From<PlainWebSocket> for CompressedWebSocket {
         Self {
             inner: value.0,
             decoding: None,
-            encoding: None,
+            encoding: EncodingState::Ready,
         }
     }
+}
+
+/// Enum containing the message encoding state.
+#[derive(Debug)]
+enum EncodingState {
+    Buffered(Compression<ZlibEncoder<Vec<u8>>>),
+    NeedsFlush,
+    Ready,
 }
 
 /// Future for awaiting the compression/decompression of a message.
