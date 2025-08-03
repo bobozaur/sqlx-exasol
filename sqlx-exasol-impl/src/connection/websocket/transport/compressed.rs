@@ -128,6 +128,8 @@ impl From<PlainWebSocket> for CompressedWebSocket {
 }
 
 /// Enum containing the message encoding state.
+/// Necessary because blindly flushing without sending any data does not play well
+/// with `rustls`, although `native-tls` does not have a problem with that.
 #[derive(Debug)]
 enum EncodingState {
     Buffered(Compression<ZlibEncoder<Vec<u8>>>),
