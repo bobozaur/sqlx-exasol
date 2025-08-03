@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     future::Future,
     io,
     pin::Pin,
@@ -88,7 +89,6 @@ impl Service<Request<Incoming>> for ImportService {
     }
 }
 
-#[derive(Debug)]
 pub struct ExaWriter {
     conn: ImportConnection,
     buffer: BytesMut,
@@ -149,6 +149,24 @@ impl ExaWriter {
         }
 
         Poll::Ready(Ok(avail - rem))
+    }
+}
+
+// Not derived so that the buffer field is ignored as it's mainly just a data buffer that takes a
+// lot of space.
+impl fmt::Debug for ExaWriter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ExaWriter {
+            conn,
+            max_buf_size,
+            sink,
+            ..
+        } = self;
+        f.debug_struct("ExaWriter")
+            .field("conn", &conn)
+            .field("max_buf_size", &max_buf_size)
+            .field("sink", &sink)
+            .finish()
     }
 }
 

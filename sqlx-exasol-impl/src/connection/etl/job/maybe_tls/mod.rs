@@ -7,7 +7,7 @@ use sqlx_core::net::{Socket, WithSocket};
 use crate::{
     connection::websocket::socket::WithExaSocket,
     etl::job::{SocketSetup, WithSocketMaker},
-    SqlxError, SqlxResult,
+    SqlxResult,
 };
 
 /// Implementor of [`WithSocketMaker`] that abstracts away the TLS/non-TLS socket creation.
@@ -25,9 +25,7 @@ impl WithMaybeTlsSocketMaker {
             return tls::with_worker().map(Self::Tls);
         }
 
-        with_tls
-            .then_some(Self::NonTls)
-            .ok_or_else(|| SqlxError::Tls("No ETL TLS feature set".into()))
+        Ok(Self::NonTls)
     }
 }
 

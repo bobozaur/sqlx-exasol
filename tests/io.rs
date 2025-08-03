@@ -12,8 +12,6 @@ use sqlx_exasol::{
     ConnectOptions, ExaConnectOptions, ExaConnection, Exasol, Executor,
 };
 
-const NUM_ROWS: usize = 1_000_000;
-
 #[ignore]
 #[sqlx_exasol::test]
 async fn it_works_with_io_combo_disabled(
@@ -94,19 +92,12 @@ async fn io_combo(
     let mut conn1 = pool.acquire().await?;
     let mut conn2 = pool.acquire().await?;
 
-    conn1
-        .execute(concat!("CREATE TABLE TLS_COMP_COMBO ( col VARCHAR(200) );"))
-        .await?;
-
-    sqlx_exasol::query(concat!("INSERT INTO TLS_COMP_COMBO VALUES (?)"))
-        .bind(vec!["dummy"; NUM_ROWS])
-        .execute(&mut *conn1)
-        .await?;
-
     #[cfg(feature = "compression")]
     {
         export_import(&mut conn1, &mut conn2, Some(false)).await?;
+        sqlx_exasol::__rt::sleep(std::time::Duration::from_secs(10)).await;
         export_import(&mut conn1, &mut conn2, Some(true)).await?;
+        sqlx_exasol::__rt::sleep(std::time::Duration::from_secs(10)).await;
     }
 
     export_import(&mut conn1, &mut conn2, None).await?;
@@ -131,6 +122,17 @@ async fn export_import(
     conn2: &mut ExaConnection,
     etl_compression: Option<bool>,
 ) -> Result<(), BoxDynError> {
+    const NUM_ROWS: usize = 1_000_000;
+    
+    conn1
+        .execute("CREATE TABLE TLS_COMP_COMBO ( col VARCHAR(200) );")
+        .await?;
+
+    sqlx_exasol::query("INSERT INTO TLS_COMP_COMBO VALUES (?)")
+        .bind(vec!["dummy"; NUM_ROWS])
+        .execute(&mut *conn1)
+        .await?;
+    
     #[allow(unused_mut, reason = "conditionally compiled")]
     let mut export_builder = ExportBuilder::new(ExportSource::Table("TLS_COMP_COMBO"));
     #[allow(unused_mut, reason = "conditionally compiled")]
@@ -156,11 +158,15 @@ async fn export_import(
     assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
     assert_eq!(NUM_ROWS as u64, import_res.rows_affected(), "imported rows");
 
-    let num_rows: i64 = sqlx_exasol::query_scalar(concat!("SELECT COUNT(*) FROM TLS_COMP_COMBO"))
+    let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TLS_COMP_COMBO")
         .fetch_one(&mut *conn1)
         .await?;
 
     assert_eq!(num_rows, 2 * NUM_ROWS as i64, "export + import rows");
+
+    sqlx_exasol::query("DROP TABLE TLS_COMP_COMBO;")
+        .execute(&mut *conn1)
+        .await?;
 
     Ok(())
 }

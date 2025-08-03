@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     future::Future,
     io,
     pin::Pin,
@@ -119,7 +120,6 @@ impl Stream for ReaderStream {
     }
 }
 
-#[derive(Debug)]
 pub struct ExaReader {
     reader: ExportReader,
     conn: ExportConnection,
@@ -226,6 +226,18 @@ impl ExaReader {
                 Poll::Ready(Err(e))
             }
         }
+    }
+}
+
+// Not derived so that the reader field is ignored as it's mainly just a data buffer that takes a
+// lot of space.
+impl fmt::Debug for ExaReader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ExaReader { conn, state, .. } = self;
+        f.debug_struct("ExaReader")
+            .field("conn", &conn)
+            .field("state", &state)
+            .finish()
     }
 }
 
