@@ -62,8 +62,8 @@ jobs:
         run: cargo clippy --tests ${{ matrix.features }}
         env:
           RUSTFLAGS: -D warnings
-
-  connection_tests:
+          
+  io_tests:
     name: Connection tests
     needs: clippy
     runs-on: ubuntu-latest
@@ -83,12 +83,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
-
-      - name: Unit tests
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
 
       - name: Test IO combos (no TLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
@@ -132,63 +126,8 @@ jobs:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
 
-      - name: Integration connection tests
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --all-features -- --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}?compression=disabled
-          SQLX_OFFLINE: true
-
-  etl_tests:
-    name: ETL tests
-    needs: clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Free disk space
-        uses: ./.github/actions/free-space
-
-      - name: Create Exasol cluster
-        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
-        id: exa-cluster
-        uses: ./.github/actions/exa-cluster
-        with:
-          exasol-version: ${{ env.EXASOL_VERSION }}
-          num-nodes: ${{ env.NUM_NODES }}
-
-      - uses: dtolnay/rust-toolchain@1.86.0
-      - uses: Swatinem/rust-cache@v2
-
-      - name: ETL tests (no TLS)
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
-          cargo test --features runtime-tokio,compression,etl -- test_etl --ignored --nocapture
-        env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-          SQLX_OFFLINE: true
-          
-      - name: ETL tests (NativeTLS)
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
-          cargo test --features runtime-tokio,compression,etl,tls-native-tls -- test_etl --ignored --nocapture
-        env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-          SQLX_OFFLINE: true
-          
-      - name: ETL tests (Rustls)
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
-          cargo test --features runtime-tokio,compression,etl,tls-rustls-aws-lc-rs -- test_etl --ignored --nocapture
-        env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
-          SQLX_OFFLINE: true
-
-  compile_time_tests:
-    name: Compile time tests
+  driver_tests:
+    name: Driver tests
     needs: clippy
     runs-on: ubuntu-latest
     steps:
@@ -242,8 +181,68 @@ jobs:
         run: cargo test --features runtime-tokio,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
+
+      - name: Unit tests
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
+
+      - name: Integration connection tests
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --all-features -- --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test?ssl-mode=disabled&compression=disabled
           
       - name: Drop database (existent)
         run: cargo run -p sqlx-exasol-cli -- database drop -y
         env:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
+
+  etl_tests:
+    name: ETL tests
+    needs: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: ./.github/actions/free-space
+
+      - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
+        id: exa-cluster
+        uses: ./.github/actions/exa-cluster
+        with:
+          exasol-version: ${{ env.EXASOL_VERSION }}
+          num-nodes: ${{ env.NUM_NODES }}
+
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: ETL tests (no TLS)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
+          cargo test --features runtime-tokio,compression,etl -- test_etl --ignored --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: ETL tests (NativeTLS)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
+          cargo test --features runtime-tokio,compression,etl,tls-native-tls -- test_etl --ignored --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: ETL tests (Rustls)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: |
+          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
+          cargo test --features runtime-tokio,compression,etl,tls-rustls-aws-lc-rs -- test_etl --ignored --nocapture
+        env:
+          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
