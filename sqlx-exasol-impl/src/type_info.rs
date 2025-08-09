@@ -130,19 +130,18 @@ pub enum ExaDataType {
     /// The VARCHAR data type.
     #[serde(rename_all = "camelCase")]
     Varchar { size: u32, character_set: Charset },
-    #[expect(rustdoc::invalid_rust_codeblocks, reason = "false positive")]
     /// The Exasol `HASHTYPE` data type.
     ///
     /// NOTE: Exasol returns the size of the column string representation which depends on the
-    ///       `HASHTYPE_FORMAT` database parameter. We set the parameter to `HEX` whenever we open
-    ///       a connection to allow us to reliably use the column size, particularly for UUIDs.
+    /// `HASHTYPE_FORMAT` database parameter. We set the parameter to `HEX` whenever we open
+    /// a connection to allow us to reliably use the column size, particularly for UUIDs.
     ///
-    ///       However, other values (especially the ones to be encoded) through
-    ///       [`crate::types::HashType`] cannot be strictly checked because they could be in
-    ///       different formats, like hex, base64, etc. In that case we avoid the size check by
-    ///       relying on [`None`].
+    /// However, other values (especially the ones to be encoded) through
+    /// [`crate::types::HashType`] cannot be strictly checked because they could be in different
+    /// formats, like hex, base64, etc. In that case we avoid the size check by relying on
+    /// [`None`].
     ///
-    ///       Database columns and prepared statements parameters will **always** be [`Some`].
+    /// Database columns and prepared statements parameters will **always** be [`Some`].
     HashType { size: Option<u16> },
 }
 
