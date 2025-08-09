@@ -54,6 +54,7 @@ impl_type_checking!(
         f64,
         String | &str,
 
+        sqlx_exasol::types::HashType,
         sqlx_exasol::types::ExaIntervalYearToMonth,
 
         #[cfg(feature = "uuid")]
@@ -63,6 +64,8 @@ impl_type_checking!(
     feature-types: info => info.__type_feature_gate(),
     datetime-types: {
         chrono: {
+            sqlx_exasol::types::chrono::TimeDelta,
+
             sqlx_exasol::types::chrono::NaiveDate,
 
             sqlx_exasol::types::chrono::NaiveDateTime,
@@ -70,6 +73,8 @@ impl_type_checking!(
             sqlx_exasol::types::chrono::DateTime<sqlx_exasol::types::chrono::Utc>,
         },
         time: {
+            sqlx_exasol::types::time::Duration,
+
             sqlx_exasol::types::time::Date,
 
             sqlx_exasol::types::time::PrimitiveDateTime,

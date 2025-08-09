@@ -17,7 +17,7 @@ use crate::{
 impl Type<Exasol> for Uuid {
     fn type_info() -> ExaTypeInfo {
         // 16 bytes * 2 because we set HASHTYPE_FORMAT to HEX
-        ExaDataType::HashType { size: 32 }.into()
+        ExaDataType::HashType { size: Some(32) }.into()
     }
 }
 

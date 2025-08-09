@@ -100,6 +100,14 @@ test_compile_time_type!(
     "SELECT column_interval_ytm FROM compile_time_tests;"
 );
 
+test_compile_time_type!(
+    hashtype,
+    sqlx_exasol::types::HashType,
+    sqlx_exasol::types::HashType(String::from("550e8400e29b11d4a7164466554400")),
+    "INSERT INTO compile_time_tests (column_hashtype) VALUES(?);",
+    "SELECT column_hashtype FROM compile_time_tests;"
+);
+
 #[cfg(feature = "time")]
 test_compile_time_type!(
     time_date,

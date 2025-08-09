@@ -17,5 +17,6 @@ CREATE TABLE compile_time_tests
     column_interval_dts INTERVAL DAY TO SECOND,
     column_interval_ytm INTERVAL YEAR TO MONTH,
     column_geometry GEOMETRY,
-    column_uuid HASHTYPE(16 BYTE)
+    column_uuid HASHTYPE(16 BYTE),
+    column_hashtype HASHTYPE(15 BYTE)
 );

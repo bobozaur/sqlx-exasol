@@ -17,6 +17,7 @@ mod etl;
 mod float;
 mod from_row;
 mod geometry;
+mod hashtype;
 mod int;
 mod interval_ytm;
 mod invalid;

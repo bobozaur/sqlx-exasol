@@ -4,6 +4,7 @@ mod bool;
 #[cfg(feature = "chrono")]
 pub mod chrono;
 mod float;
+mod hashtype;
 mod int;
 mod interval_ytm;
 mod iter;
@@ -19,5 +20,6 @@ pub mod time;
 #[cfg(feature = "uuid")]
 mod uuid;
 
+pub use hashtype::HashType;
 pub use interval_ytm::ExaIntervalYearToMonth;
 pub use iter::ExaIter;

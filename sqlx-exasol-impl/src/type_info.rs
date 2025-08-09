@@ -104,7 +104,11 @@ pub enum ExaDataType {
     Boolean,
     /// The CHAR data type.
     #[serde(rename_all = "camelCase")]
-    Char { size: u32, character_set: Charset },
+    Char {
+        size: u32,
+        #[serde(skip_serializing)]
+        character_set: Charset,
+    },
     /// The DATE data type.
     Date,
     /// The DECIMAL data type.
@@ -113,7 +117,10 @@ pub enum ExaDataType {
     Double,
     /// The `GEOMETRY` data type.
     #[serde(rename_all = "camelCase")]
-    Geometry { srid: u16 },
+    Geometry {
+        #[serde(skip_serializing)]
+        srid: u16,
+    },
     /// The `INTERVAL DAY TO SECOND` data type.
     #[serde(rename = "INTERVAL DAY TO SECOND")]
     #[serde(rename_all = "camelCase")]
@@ -129,13 +136,28 @@ pub enum ExaDataType {
     TimestampWithLocalTimeZone,
     /// The VARCHAR data type.
     #[serde(rename_all = "camelCase")]
-    Varchar { size: u32, character_set: Charset },
+    Varchar {
+        size: u32,
+        #[serde(skip_serializing)]
+        character_set: Charset,
+    },
+    #[expect(rustdoc::invalid_rust_codeblocks, reason = "false positive")]
     /// The Exasol `HASHTYPE` data type.
     ///
     /// NOTE: Exasol returns the size of the column string representation which depends on the
-    /// `HASHTYPE_FORMAT` database parameter. We set the parameter to `HEX` whenever we open a
-    /// connection to allow us to reliably use the column size.
-    HashType { size: u16 },
+    ///       `HASHTYPE_FORMAT` database parameter. We set the parameter to `HEX` whenever we open
+    ///       a connection to allow us to reliably use the column size, particularly for UUIDs.
+    ///
+    ///       However, other values (especially the ones to be encoded) through
+    ///       [`crate::types::HashType`] cannot be strictly checked because they could be in
+    ///       different formats, like hex, base64, etc. In that case we avoid the size check by
+    ///       relying on [`None`].
+    ///
+    ///       Database columns and prepared statements parameters will **always** be [`Some`].
+    HashType {
+        #[serde(skip_serializing)]
+        size: Option<u16>,
+    },
 }
 
 impl ExaDataType {
@@ -170,10 +192,10 @@ impl ExaDataType {
     pub(crate) const INTERVAL_DTS_MAX_PRECISION: u32 = 9;
     pub(crate) const INTERVAL_YTM_MAX_PRECISION: u32 = 9;
     pub(crate) const VARCHAR_MAX_LEN: u32 = 2_000_000;
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) const CHAR_MAX_LEN: u32 = 2_000;
     // 1024 * 2 because we set HASHTYPE_FORMAT to HEX.
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) const HASHTYPE_MAX_LEN: u16 = 2048;
 
     /// Returns `true` if this instance is compatible with the other one provided.
@@ -182,62 +204,72 @@ impl ExaDataType {
     /// instance.
     pub fn compatible(&self, other: &Self) -> bool {
         match self {
-            ExaDataType::Boolean => matches!(other, ExaDataType::Boolean),
-            ExaDataType::Char { .. } | ExaDataType::Varchar { .. } => matches!(
-                other,
-                ExaDataType::Char { .. } | ExaDataType::Varchar { .. }
-            ),
-            ExaDataType::Date => matches!(other, ExaDataType::Date),
-            ExaDataType::Decimal(d) => d.compatible(other),
-            ExaDataType::Double => matches!(other, ExaDataType::Double),
-            ExaDataType::Geometry { .. } => matches!(other, ExaDataType::Geometry { .. }),
-            ExaDataType::IntervalDayToSecond { .. } => {
-                matches!(other, ExaDataType::IntervalDayToSecond { .. })
+            Self::Boolean => matches!(other, Self::Boolean),
+            Self::Char { .. } | Self::Varchar { .. } => {
+                matches!(other, Self::Char { .. } | Self::Varchar { .. })
             }
-            ExaDataType::IntervalYearToMonth { .. } => {
-                matches!(other, ExaDataType::IntervalYearToMonth { .. })
+            Self::Date => matches!(other, Self::Date),
+            Self::Decimal(d) => d.compatible(other),
+            Self::Double => matches!(other, Self::Double),
+            Self::Geometry { .. } => matches!(other, Self::Geometry { .. }),
+            Self::IntervalDayToSecond { .. } => {
+                matches!(other, Self::IntervalDayToSecond { .. })
             }
-            ExaDataType::Timestamp => matches!(other, ExaDataType::Timestamp),
-            ExaDataType::TimestampWithLocalTimeZone => {
-                matches!(other, ExaDataType::TimestampWithLocalTimeZone)
+            Self::IntervalYearToMonth { .. } => {
+                matches!(other, Self::IntervalYearToMonth { .. })
             }
-            ExaDataType::HashType { size } => {
-                matches!(other, ExaDataType::HashType { size: other_size } if size == other_size)
+            Self::Timestamp => matches!(other, Self::Timestamp),
+            Self::TimestampWithLocalTimeZone => {
+                matches!(other, Self::TimestampWithLocalTimeZone)
+            }
+            Self::HashType { size } => {
+                // Only compatible with HASHTYPE.
+                let Self::HashType { size: other_size } = other else {
+                    return false;
+                };
+
+                // Only compatible when length is the same or the length check is skipped (such as
+                // for [`crate::types::HashType`]).
+                match (size, other_size) {
+                    (Some(s), Some(o)) => s == o,
+                    _ => true,
+                }
             }
         }
     }
 
     fn full_name(&self) -> DataTypeName {
         match self {
-            ExaDataType::Boolean => Self::BOOLEAN.into(),
-            ExaDataType::Date => Self::DATE.into(),
-            ExaDataType::Double => Self::DOUBLE.into(),
-            ExaDataType::Timestamp => Self::TIMESTAMP.into(),
-            ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE.into(),
-            ExaDataType::Char {
+            Self::Boolean => Self::BOOLEAN.into(),
+            Self::Date => Self::DATE.into(),
+            Self::Double => Self::DOUBLE.into(),
+            Self::Timestamp => Self::TIMESTAMP.into(),
+            Self::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE.into(),
+            Self::Char {
                 size,
                 character_set,
             }
-            | ExaDataType::Varchar {
+            | Self::Varchar {
                 size,
                 character_set,
             } => format_args!("{}({}) {}", self.as_ref(), size, character_set).into(),
-            ExaDataType::Decimal(d) => match d.precision {
+            Self::Decimal(d) => match d.precision {
                 Some(p) => format_args!("{}({}, {})", self.as_ref(), p, d.scale).into(),
                 None => format_args!("{}(*, {})", self.as_ref(), d.scale).into(),
             },
-            ExaDataType::Geometry { srid } => format_args!("{}({srid})", self.as_ref()).into(),
-            ExaDataType::IntervalDayToSecond {
+            Self::Geometry { srid } => format_args!("{}({srid})", self.as_ref()).into(),
+            Self::IntervalDayToSecond {
                 precision,
                 fraction,
             } => format_args!("INTERVAL DAY({precision}) TO SECOND({fraction})").into(),
-            ExaDataType::IntervalYearToMonth { precision } => {
+            Self::IntervalYearToMonth { precision } => {
                 format_args!("INTERVAL YEAR({precision}) TO MONTH").into()
             }
             // We get the HEX len, which is double the byte count.
-            ExaDataType::HashType { size } => {
-                format_args!("{}({} BYTE)", self.as_ref(), size / 2).into()
-            }
+            Self::HashType { size } => match size {
+                Some(s) => format_args!("{}({} BYTE)", self.as_ref(), s / 2).into(),
+                None => format_args!("{}", self.as_ref()).into(),
+            },
         }
     }
 }
@@ -245,18 +277,18 @@ impl ExaDataType {
 impl AsRef<str> for ExaDataType {
     fn as_ref(&self) -> &str {
         match self {
-            ExaDataType::Boolean => Self::BOOLEAN,
-            ExaDataType::Char { .. } => Self::CHAR,
-            ExaDataType::Date => Self::DATE,
-            ExaDataType::Decimal(_) => Self::DECIMAL,
-            ExaDataType::Double => Self::DOUBLE,
-            ExaDataType::Geometry { .. } => Self::GEOMETRY,
-            ExaDataType::IntervalDayToSecond { .. } => Self::INTERVAL_DAY_TO_SECOND,
-            ExaDataType::IntervalYearToMonth { .. } => Self::INTERVAL_YEAR_TO_MONTH,
-            ExaDataType::Timestamp => Self::TIMESTAMP,
-            ExaDataType::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
-            ExaDataType::Varchar { .. } => Self::VARCHAR,
-            ExaDataType::HashType { .. } => Self::HASHTYPE,
+            Self::Boolean => Self::BOOLEAN,
+            Self::Char { .. } => Self::CHAR,
+            Self::Date => Self::DATE,
+            Self::Decimal(_) => Self::DECIMAL,
+            Self::Double => Self::DOUBLE,
+            Self::Geometry { .. } => Self::GEOMETRY,
+            Self::IntervalDayToSecond { .. } => Self::INTERVAL_DAY_TO_SECOND,
+            Self::IntervalYearToMonth { .. } => Self::INTERVAL_YEAR_TO_MONTH,
+            Self::Timestamp => Self::TIMESTAMP,
+            Self::TimestampWithLocalTimeZone => Self::TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+            Self::Varchar { .. } => Self::VARCHAR,
+            Self::HashType { .. } => Self::HASHTYPE,
         }
     }
 }
@@ -502,7 +534,7 @@ mod tests {
     #[test]
     fn test_max_hashbyte_name() {
         let data_type = ExaDataType::HashType {
-            size: ExaDataType::HASHTYPE_MAX_LEN,
+            size: Some(ExaDataType::HASHTYPE_MAX_LEN),
         };
         assert_eq!(
             data_type.full_name().as_ref(),

@@ -8,8 +8,7 @@
         "name": "column_char_utf8",
         "dataType": {
           "type": "CHAR",
-          "size": 16,
-          "characterSet": "UTF8"
+          "size": 16
         }
       }
     ],

@@ -47,6 +47,14 @@ test_type_invalid!(utf8_in_ascii<String>::"VARCHAR(100) ASCII"::("first value ðŸ
 test_type_invalid!(interval_ytm_str<String>::"INTERVAL YEAR TO MONTH"::("+01-05"));
 test_type_invalid!(interval_dts_str<String>::"INTERVAL DAY TO SECOND"::("+10 20:45:50.123"));
 
-// `rust_decimal` has a limited scale and cannot all database values.
+test_type_invalid!(hashtype_into_small_hashtype<sqlx_exasol::types::HashType>::"HASHTYPE(10 BYTE)"::(sqlx_exasol::types::HashType(String::from("550e8400e29b11d4a716446655440000"))));
+test_type_invalid!(hashtype_into_large_hashtype<sqlx_exasol::types::HashType>::"HASHTYPE(20 BYTE)"::(sqlx_exasol::types::HashType(String::from("550e8400e29b11d4a716446655440000"))));
+
+// For UUID length must be exactly 16 bytes.
+#[cfg(feature = "uuid")]
+test_type_invalid!(uuid_into_small_hashtype<sqlx_exasol::types::Uuid>::"HASHTYPE(10 BYTE)"::(sqlx_exasol::types::Uuid::from_u64_pair(12_345_789, 12_345_789)));
+test_type_invalid!(uuid_into_large_hashtype<sqlx_exasol::types::Uuid>::"HASHTYPE(20 BYTE)"::(sqlx_exasol::types::Uuid::from_u64_pair(12_345_789, 12_345_789)));
+
+// `rust_decimal` has a limited scale and cannot contain all database values.
 #[cfg(feature = "rust_decimal")]
 test_type_invalid!(rust_decimal_max_scale<sqlx_exasol::types::Decimal>::"DECIMAL(36, 36)"::(sqlx_exasol::types::Decimal::new(i64::MIN, sqlx_exasol::types::Decimal::MAX_SCALE)));

@@ -8,8 +8,7 @@
         "name": "column_char_ascii",
         "dataType": {
           "type": "CHAR",
-          "size": 16,
-          "characterSet": "ASCII"
+          "size": 16
         }
       }
     ],
