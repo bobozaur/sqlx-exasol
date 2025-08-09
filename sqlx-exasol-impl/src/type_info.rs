@@ -104,11 +104,7 @@ pub enum ExaDataType {
     Boolean,
     /// The CHAR data type.
     #[serde(rename_all = "camelCase")]
-    Char {
-        size: u32,
-        #[serde(skip_serializing)]
-        character_set: Charset,
-    },
+    Char { size: u32, character_set: Charset },
     /// The DATE data type.
     Date,
     /// The DECIMAL data type.
@@ -117,10 +113,7 @@ pub enum ExaDataType {
     Double,
     /// The `GEOMETRY` data type.
     #[serde(rename_all = "camelCase")]
-    Geometry {
-        #[serde(skip_serializing)]
-        srid: u16,
-    },
+    Geometry { srid: u16 },
     /// The `INTERVAL DAY TO SECOND` data type.
     #[serde(rename = "INTERVAL DAY TO SECOND")]
     #[serde(rename_all = "camelCase")]
@@ -136,11 +129,7 @@ pub enum ExaDataType {
     TimestampWithLocalTimeZone,
     /// The VARCHAR data type.
     #[serde(rename_all = "camelCase")]
-    Varchar {
-        size: u32,
-        #[serde(skip_serializing)]
-        character_set: Charset,
-    },
+    Varchar { size: u32, character_set: Charset },
     #[expect(rustdoc::invalid_rust_codeblocks, reason = "false positive")]
     /// The Exasol `HASHTYPE` data type.
     ///
@@ -154,10 +143,7 @@ pub enum ExaDataType {
     ///       relying on [`None`].
     ///
     ///       Database columns and prepared statements parameters will **always** be [`Some`].
-    HashType {
-        #[serde(skip_serializing)]
-        size: Option<u16>,
-    },
+    HashType { size: Option<u16> },
 }
 
 impl ExaDataType {

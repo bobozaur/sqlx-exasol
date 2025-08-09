@@ -7,7 +7,8 @@
         "ordinal": 0,
         "name": "column_hashtype",
         "dataType": {
-          "type": "HASHTYPE"
+          "type": "HASHTYPE",
+          "size": 30
         }
       }
     ],

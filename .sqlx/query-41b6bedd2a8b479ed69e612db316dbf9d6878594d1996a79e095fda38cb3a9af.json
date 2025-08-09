@@ -8,7 +8,8 @@
         "name": "column_varchar_utf8",
         "dataType": {
           "type": "VARCHAR",
-          "size": 16
+          "size": 16,
+          "characterSet": "UTF8"
         }
       }
     ],

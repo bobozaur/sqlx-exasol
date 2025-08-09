@@ -6,7 +6,8 @@
     "parameters": {
       "Left": [
         {
-          "type": "HASHTYPE"
+          "type": "HASHTYPE",
+          "size": 30
         }
       ]
     },
