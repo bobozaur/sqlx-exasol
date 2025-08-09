@@ -655,7 +655,7 @@ async fn it_switches_schema_from_attr(
         .fetch_one(&mut *con)
         .await?;
 
-    let schema = "TEST_SWITCH_SCHEMA";
+    let schema = "TEST_SWITCH_SCHEMA_ATTR";
 
     con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
         .await?;
