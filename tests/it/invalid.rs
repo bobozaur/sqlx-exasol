@@ -53,6 +53,7 @@ test_type_invalid!(hashtype_into_large_hashtype<sqlx_exasol::types::HashType>::"
 // For UUID length must be exactly 16 bytes.
 #[cfg(feature = "uuid")]
 test_type_invalid!(uuid_into_small_hashtype<sqlx_exasol::types::Uuid>::"HASHTYPE(10 BYTE)"::(sqlx_exasol::types::Uuid::from_u64_pair(12_345_789, 12_345_789)));
+#[cfg(feature = "uuid")]
 test_type_invalid!(uuid_into_large_hashtype<sqlx_exasol::types::Uuid>::"HASHTYPE(20 BYTE)"::(sqlx_exasol::types::Uuid::from_u64_pair(12_345_789, 12_345_789)));
 
 // `rust_decimal` has a limited scale and cannot contain all database values.
