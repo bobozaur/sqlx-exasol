@@ -250,8 +250,8 @@ impl ExaDataType {
             Self::IntervalYearToMonth { precision } => {
                 format_args!("INTERVAL YEAR({precision}) TO MONTH").into()
             }
-            // We get the HEX len, which is double the byte count.
             Self::HashType { size } => match size {
+                // We get the HEX len, which is double the byte count.
                 Some(s) => format_args!("{}({} BYTE)", self.as_ref(), s / 2).into(),
                 None => format_args!("{}", self.as_ref()).into(),
             },

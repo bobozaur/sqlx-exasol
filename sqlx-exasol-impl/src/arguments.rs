@@ -1,3 +1,5 @@
+#[cfg(feature = "geo-types")]
+use geo_types::Geometry;
 use serde::Serialize;
 use serde_json::Error as SerdeError;
 use sqlx_core::{arguments::Arguments, encode::Encode, error::BoxDynError, types::Type};
@@ -95,6 +97,31 @@ impl ExaBuffer {
         // Close string containing JSON
         writer.push(b'"');
 
+        res
+    }
+
+    /// Serializes a [`geo_types::Geometry`] value as a WKT string.
+    #[cfg(feature = "geo-types")]
+    pub fn append_geometry<T>(&mut self, value: &Geometry<T>) -> std::io::Result<()>
+    where
+        T: geo_types::CoordNum + std::fmt::Display,
+    {
+        use wkt::ToWkt;
+
+        self.col_params_counter += 1;
+
+        // SAFETY: `serde_json` will only write valid UTF-8.
+        let writer = unsafe { self.buffer.as_mut_vec() };
+
+        // Open geometry string
+        writer.push(b'"');
+        
+        // Serialize geometry data
+        let res = value.write_wkt(&mut *writer);
+        
+        // Close geometry string
+        writer.push(b'"');
+        
         res
     }
 

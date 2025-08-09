@@ -4,6 +4,8 @@ mod bool;
 #[cfg(feature = "chrono")]
 pub mod chrono;
 mod float;
+#[cfg(feature = "geo-types")]
+pub mod geo_types;
 mod hashtype;
 mod int;
 mod interval_ytm;

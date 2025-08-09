@@ -53,7 +53,10 @@ runtime-tokio = ["sqlx/runtime-tokio"]
 
 # TLS features
 tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
-tls-rustls-aws-lc-rs = ["sqlx/tls-rustls-aws-lc-rs", "sqlx-exasol-impl/rustls-aws-lc-rs"]
+tls-rustls-aws-lc-rs = [
+    "sqlx/tls-rustls-aws-lc-rs",
+    "sqlx-exasol-impl/rustls-aws-lc-rs",
+]
 tls-rustls-ring-webpki = [
     "sqlx/tls-rustls-ring-webpki",
     "sqlx-exasol-impl/rustls-ring",
@@ -77,6 +80,7 @@ chrono = [
     "sqlx-exasol-impl/chrono",
     "sqlx-exasol-macros?/chrono",
 ]
+geo-types = ["sqlx-exasol-impl/geo-types"]
 json = ["sqlx/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
 rust_decimal = [
     "sqlx/rust_decimal",
@@ -123,6 +127,7 @@ futures-channel = { version = "0.3", default-features = false, features = [
     "sink",
 ] }
 futures-core = { version = "0.3", default-features = false }
+geo-types = { version = "0.7", default-features = false, features = ["std"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 http-body-util = { version = "0.1", default-features = false }
 hyper = { version = "1.4", default-features = false, features = [
@@ -174,6 +179,10 @@ tokio = { version = "1", default-features = false, features = [
 tracing = { version = "0.1", default-features = false, features = ["log"] }
 url = { version = "2", default-features = false }
 uuid = { version = "1", default-features = false, features = ["serde"] }
+wkt = { version = "0.14", default-features = false, features = [
+    "geo-types",
+    "serde",
+] }
 
 [dependencies]
 sqlx-exasol-macros = { workspace = true, optional = true }

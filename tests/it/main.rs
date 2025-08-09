@@ -16,6 +16,7 @@ mod error;
 mod etl;
 mod float;
 mod from_row;
+#[cfg(feature = "geo-types")]
 mod geometry;
 mod hashtype;
 mod int;

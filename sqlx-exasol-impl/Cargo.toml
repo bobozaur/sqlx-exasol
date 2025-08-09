@@ -19,6 +19,7 @@ macros = ["dep:sqlx-macros-core", "sqlx-macros-core?/macros"]
 # Type Integration features
 bigdecimal = ["sqlx-core/bigdecimal", "dep:bigdecimal"]
 chrono = ["sqlx-core/chrono", "dep:chrono"]
+geo-types = ["dep:geo-types", "dep:wkt"]
 json = ["sqlx-core/json"]
 rust_decimal = ["sqlx-core/rust_decimal", "dep:rust_decimal"]
 time = ["sqlx-core/time", "dep:time"]
@@ -63,6 +64,7 @@ bigdecimal = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 dotenvy = { workspace = true, optional = true }
 futures-channel = { workspace = true, optional = true }
+geo-types = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
@@ -73,6 +75,7 @@ rust_decimal = { workspace = true, optional = true }
 sqlx-macros-core = { workspace = true, optional = true }
 time = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
+wkt = { workspace = true, optional = true }
 
 [dev-dependencies]
 sqlx = { workspace = true, features = ["runtime-tokio", "macros", "migrate"] }
