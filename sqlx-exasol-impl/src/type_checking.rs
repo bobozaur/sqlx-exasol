@@ -59,6 +59,9 @@ impl_type_checking!(
 
         #[cfg(feature = "uuid")]
         sqlx_exasol::types::Uuid,
+
+        #[cfg(feature = "geo-types")]
+        sqlx_exasol::types::geo_types::Geometry,
     },
     ParamChecking::Weak,
     feature-types: info => info.__type_feature_gate(),

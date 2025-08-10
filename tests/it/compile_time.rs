@@ -152,3 +152,26 @@ test_compile_time_type!(
     "INSERT INTO compile_time_tests (column_uuid) VALUES(?);",
     "SELECT column_uuid FROM compile_time_tests;"
 );
+/// This has to be a separate test because Exasol incorrectly reports parameters for `GEOMETRY`
+/// columns as `VARCHAR(2000000) UTF8` which is (correctly) mapped to [`String`] by the driver.
+///
+/// `sqlx` can only map a single concrete type to a column definition, therefore we cannot make
+/// [`sqlx_exasol::types::geo_types::Geometry`] implicitly work at compile time as parameters
+/// without messing up strings.
+///
+/// Therefore we'll only test the result set column type.
+///
+/// See <https://github.com/exasol/websocket-api/issues/39>.
+#[cfg(feature = "geo-types")]
+#[ignore]
+#[sqlx_exasol::test(migrations = "tests/migrations_compile_time")]
+async fn test_compile_time_geometry(
+    mut conn: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
+) -> anyhow::Result<()> {
+    let _: Vec<Option<sqlx_exasol::types::geo_types::Geometry>> =
+        sqlx_exasol::query_scalar!("SELECT column_geometry FROM compile_time_tests;")
+            .fetch_all(&mut *conn)
+            .await?;
+
+    Ok(())
+}

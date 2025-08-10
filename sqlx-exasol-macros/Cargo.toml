@@ -22,10 +22,11 @@ migrate = ["sqlx-macros-core/migrate", "sqlx-exasol-impl/migrate"]
 # Types
 bigdecimal = ["sqlx-macros-core/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
 chrono = ["sqlx-macros-core/chrono", "sqlx-exasol-impl/chrono"]
+geo-types = ["sqlx-exasol-impl/geo-types"]
+json = ["sqlx-macros-core/json", "sqlx-exasol-impl/json"]
 rust_decimal = ["sqlx-macros-core/rust_decimal", "sqlx-exasol-impl/rust_decimal"]
 time = ["sqlx-macros-core/time", "sqlx-exasol-impl/time"]
 uuid = ["sqlx-macros-core/uuid", "sqlx-exasol-impl/uuid"]
-json = ["sqlx-macros-core/json", "sqlx-exasol-impl/json"]
 
 [dependencies]
 sqlx-macros-core = { workspace = true }

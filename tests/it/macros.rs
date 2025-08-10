@@ -2,7 +2,7 @@
 
 #[macro_export]
 macro_rules! test_type_valid {
-    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
+    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr => $expected:expr),+)) => {
         paste::item! {
             #[sqlx_exasol::test]
             async fn [< test_type_valid_ $name >] (
@@ -33,8 +33,8 @@ macro_rules! test_type_valid {
                     let second_value = values.pop().unwrap();
 
                     assert_eq!(first_value, second_value, "prepared and unprepared types");
-                    assert_eq!(first_value, $prepared, "provided and expected values");
-                    assert_eq!(second_value, $prepared, "provided and expected values");
+                    assert_eq!(first_value, $expected, "provided and expected values");
+                    assert_eq!(second_value, $expected, "provided and expected values");
 
                     con.execute("DELETE FROM sqlx_test_type;").await?;
                 )+
@@ -42,6 +42,10 @@ macro_rules! test_type_valid {
                 Ok(())
             }
         }
+    };
+    
+    ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
+        $crate::test_type_valid!($name<$ty>::$datatype::($($unprepared => $prepared => $prepared),+));
     };
 
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr),+)) => {

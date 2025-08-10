@@ -47,6 +47,9 @@ test_type_invalid!(utf8_in_ascii<String>::"VARCHAR(100) ASCII"::("first value ðŸ
 test_type_invalid!(interval_ytm_str<String>::"INTERVAL YEAR TO MONTH"::("+01-05"));
 test_type_invalid!(interval_dts_str<String>::"INTERVAL DAY TO SECOND"::("+10 20:45:50.123"));
 
+// Test using strings with geometry type.
+test_type_invalid!(geometry_str<String>::"GEOMETRY"::("POINT (1 2)"));
+
 test_type_invalid!(hashtype_into_small_hashtype<sqlx_exasol::types::HashType>::"HASHTYPE(10 BYTE)"::(sqlx_exasol::types::HashType(String::from("550e8400e29b11d4a716446655440000"))));
 test_type_invalid!(hashtype_into_large_hashtype<sqlx_exasol::types::HashType>::"HASHTYPE(20 BYTE)"::(sqlx_exasol::types::HashType(String::from("550e8400e29b11d4a716446655440000"))));
 

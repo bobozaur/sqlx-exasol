@@ -33,14 +33,15 @@ CREATE TABLE with_hashtype_and_tinyint (
     value_hashtype_1 HASHTYPE(1 BYTE),
     value_bool BOOLEAN,
     hashtype_n HASHTYPE(8 BYTE),
-    value_int TINYINT
+    value_int TINYINT,
+    geo GEOMETRY
 );
     ",
     )
     .await?;
 
     let d = conn
-        .describe("INSERT INTO with_hashtype_and_tinyint VALUES (?, ?, ?, ?, ?);")
+        .describe("INSERT INTO with_hashtype_and_tinyint VALUES (?, ?, ?, ?, ?, ?);")
         .await?;
 
     let parameters = d.parameters().unwrap().unwrap_left();
@@ -50,6 +51,9 @@ CREATE TABLE with_hashtype_and_tinyint (
     assert_eq!(parameters[2].name(), "BOOLEAN");
     assert_eq!(parameters[3].name(), "HASHTYPE(8 BYTE)");
     assert_eq!(parameters[4].name(), "DECIMAL(3, 0)");
+    // Undocumented inconsistent behavior.
+    // See <https://github.com/exasol/websocket-api/issues/39>.
+    assert_eq!(parameters[5].name(), "VARCHAR(2000000) UTF8");
 
     Ok(())
 }
@@ -63,7 +67,8 @@ CREATE TABLE with_hashtype_and_tinyint (
     value_hashtype_1 HASHTYPE(1 BYTE),
     value_bool BOOLEAN,
     hashtype_n HASHTYPE(8 BYTE),
-    value_int TINYINT
+    value_int TINYINT,
+    geo GEOMETRY
 );
     ",
     )
@@ -80,18 +85,21 @@ CREATE TABLE with_hashtype_and_tinyint (
     assert_eq!(d.columns()[2].name(), "value_bool");
     assert_eq!(d.columns()[3].name(), "hashtype_n");
     assert_eq!(d.columns()[4].name(), "value_int");
+    assert_eq!(d.columns()[5].name(), "geo");
 
     assert_eq!(d.nullable(0), None);
     assert_eq!(d.nullable(1), None);
     assert_eq!(d.nullable(2), None);
     assert_eq!(d.nullable(3), None);
     assert_eq!(d.nullable(4), None);
+    assert_eq!(d.nullable(5), None);
 
     assert_eq!(d.columns()[0].type_info().name(), "DECIMAL(18, 0)");
     assert_eq!(d.columns()[1].type_info().name(), "HASHTYPE(1 BYTE)");
     assert_eq!(d.columns()[2].type_info().name(), "BOOLEAN");
     assert_eq!(d.columns()[3].type_info().name(), "HASHTYPE(8 BYTE)");
     assert_eq!(d.columns()[4].type_info().name(), "DECIMAL(3, 0)");
+    assert_eq!(d.columns()[5].type_info().name(), "GEOMETRY(0)");
 
     let parameters = d.parameters().unwrap().unwrap_left();
 
