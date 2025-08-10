@@ -188,38 +188,23 @@ impl ExaDataType {
     /// Compatibility means that the [`self`] instance is bigger/able to accommodate the other
     /// instance.
     pub fn compatible(&self, other: &Self) -> bool {
-        match self {
-            Self::Boolean => matches!(other, Self::Boolean),
-            Self::Char { .. } | Self::Varchar { .. } => {
-                matches!(other, Self::Char { .. } | Self::Varchar { .. })
-            }
-            Self::Date => matches!(other, Self::Date),
-            Self::Decimal(d) => d.compatible(other),
-            Self::Double => matches!(other, Self::Double),
-            Self::Geometry { .. } => matches!(other, Self::Geometry { .. }),
-            Self::IntervalDayToSecond { .. } => {
-                matches!(other, Self::IntervalDayToSecond { .. })
-            }
-            Self::IntervalYearToMonth { .. } => {
-                matches!(other, Self::IntervalYearToMonth { .. })
-            }
-            Self::Timestamp => matches!(other, Self::Timestamp),
-            Self::TimestampWithLocalTimeZone => {
-                matches!(other, Self::TimestampWithLocalTimeZone)
-            }
-            Self::HashType { size } => {
-                // Only compatible with HASHTYPE.
-                let Self::HashType { size: other_size } = other else {
-                    return false;
-                };
-
-                // Only compatible when length is the same or the length check is skipped (such as
-                // for [`crate::types::HashType`]).
-                match (size, other_size) {
-                    (Some(s), Some(o)) => s == o,
-                    _ => true,
-                }
-            }
+        match (self, other) {
+            (Self::HashType { size: Some(s1) }, Self::HashType { size: Some(s2) }) => s1 == s2,
+            (Self::Boolean, Self::Boolean)
+            | (
+                Self::Char { .. } | Self::Varchar { .. },
+                Self::Char { .. } | Self::Varchar { .. },
+            )
+            | (Self::Date, Self::Date)
+            | (Self::Double, Self::Double)
+            | (Self::Geometry { .. }, Self::Geometry { .. })
+            | (Self::IntervalDayToSecond { .. }, Self::IntervalDayToSecond { .. })
+            | (Self::IntervalYearToMonth { .. }, Self::IntervalYearToMonth { .. })
+            | (Self::Timestamp, Self::Timestamp)
+            | (Self::TimestampWithLocalTimeZone, Self::TimestampWithLocalTimeZone)
+            | (Self::HashType { .. }, Self::HashType { .. }) => true,
+            (Self::Decimal(d1), Self::Decimal(d2)) => d1.compatible(*d2),
+            _ => false,
         }
     }
 
@@ -356,12 +341,11 @@ impl Decimal {
     /// However, decimal Rust types require special handling because they can hold virtually any
     /// decoded value. Therefore, an absent precision means that the comparison must be skipped.
     #[rustfmt::skip] // just to skip rules formatting
-    fn compatible(self, ty: &ExaDataType) -> bool {
-        let (precision, scale) = match ty {
+    fn compatible(self, dec: Decimal) -> bool {
+        let (precision, scale) = match dec.precision {
+            Some(precision) =>  (precision, dec.scale),
             // Short-circuit if we are encoding a Rust decimal type as they have arbitrary precision.
-            ExaDataType::Decimal(Decimal { precision: None, .. })  => return true,
-            ExaDataType::Decimal(Decimal { precision: Some(precision), scale }) => (*precision, *scale),
-            _ => return false,
+             None => return true,
         };
 
         // If we're decoding to a Rust decimal type then we can accept any DECIMAL precision.
