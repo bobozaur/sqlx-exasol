@@ -17,7 +17,7 @@ mod etl;
 mod float;
 mod from_row;
 #[cfg(feature = "geo-types")]
-mod geometry;
+mod geo_types;
 mod hashtype;
 mod int;
 mod interval_ytm;
