@@ -5,7 +5,7 @@ use sqlx_core::{
     error::BoxDynError,
     types::Type,
 };
-use time::{serde, OffsetDateTime, PrimitiveDateTime};
+use time::{serde, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
 use crate::{
     arguments::ExaBuffer,
@@ -51,8 +51,9 @@ impl Type<Exasol> for OffsetDateTime {
 
 impl Encode<'_, Exasol> for OffsetDateTime {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        buf.append(OffsetDateTimeSer(self))?;
-        Ok(IsNull::No)
+        let utc_dt = self.to_offset(UtcOffset::UTC);
+        let primitive = PrimitiveDateTime::new(utc_dt.date(), utc_dt.time());
+        primitive.encode(buf)
     }
 
     fn size_hint(&self) -> usize {
@@ -66,9 +67,7 @@ impl Encode<'_, Exasol> for OffsetDateTime {
 
 impl<'r> Decode<'r, Exasol> for OffsetDateTime {
     fn decode(value: ExaValueRef<'r>) -> Result<Self, BoxDynError> {
-        OffsetDateTimeDe::deserialize(value.value)
-            .map(|v| v.0)
-            .map_err(From::from)
+        PrimitiveDateTime::decode(value).map(PrimitiveDateTime::assume_utc)
     }
 }
 
@@ -80,21 +79,8 @@ struct PrimitiveDateTimeSer<'a>(
 #[derive(Deserialize)]
 struct PrimitiveDateTimeDe(#[serde(deserialize_with = "timestamp::deserialize")] PrimitiveDateTime);
 
-#[derive(Serialize)]
-struct OffsetDateTimeSer<'a>(
-    #[serde(serialize_with = "timestamptz::serialize")] &'a OffsetDateTime,
-);
-
-#[derive(Deserialize)]
-struct OffsetDateTimeDe(#[serde(deserialize_with = "timestamptz::deserialize")] OffsetDateTime);
-
 serde::format_description!(
     timestamp,
     PrimitiveDateTime,
-    "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:9]"
-);
-serde::format_description!(
-    timestamptz,
-    OffsetDateTime,
-    "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:9]"
+    "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]"
 );

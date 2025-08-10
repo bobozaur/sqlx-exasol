@@ -195,6 +195,7 @@ dotenvy = { workspace = true }
 futures-util = { workspace = true }
 paste = { workspace = true }
 serde = { workspace = true }
+time = { workspace = true }
 url = { workspace = true }
 
 [workspace.lints.clippy]
