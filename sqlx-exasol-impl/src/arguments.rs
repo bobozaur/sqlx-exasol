@@ -115,13 +115,13 @@ impl ExaBuffer {
 
         // Open geometry string
         writer.push(b'"');
-        
+
         // Serialize geometry data
         let res = value.write_wkt(&mut *writer);
-        
+
         // Close geometry string
         writer.push(b'"');
-        
+
         res
     }
 

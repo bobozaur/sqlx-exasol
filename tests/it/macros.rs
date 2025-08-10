@@ -43,7 +43,7 @@ macro_rules! test_type_valid {
             }
         }
     };
-    
+
     ($name:ident<$ty:ty>::$datatype:literal::($($unprepared:expr => $prepared:expr),+)) => {
         $crate::test_type_valid!($name<$ty>::$datatype::($($unprepared => $prepared => $prepared),+));
     };

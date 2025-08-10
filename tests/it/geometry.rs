@@ -59,7 +59,7 @@ Geometry::MultiPolygon(MultiPolygon::new(vec![
         LineString(vec![(5.0, 1.0).into(), (5.0, 5.0).into(), (10.0, 5.0).into()]),
         vec![LineString(vec![(6.0, 2.0).into(), (6.0, 3.0).into(), (7.0, 3.0).into(), (7.0, 2.0).into()])]
     )])),
-"'MULTIPOLYGON EMPTY'" => 
+"'MULTIPOLYGON EMPTY'" =>
 Geometry::MultiPolygon(MultiPolygon::<f64>::empty())
 ));
 test_type_valid!(geometry_geometry_collection<Geometry>::"GEOMETRY"::(
@@ -67,7 +67,7 @@ test_type_valid!(geometry_geometry_collection<Geometry>::"GEOMETRY"::(
 Geometry::GeometryCollection(GeometryCollection(vec![
     Geometry::Point(Point::new(1.0, 2.0)),
     Geometry::LineString(LineString(vec![(1.0, 2.0).into(), (3.0, 4.0).into()]))])),
-"'GEOMETRYCOLLECTION EMPTY'" => 
+"'GEOMETRYCOLLECTION EMPTY'" =>
 Geometry::GeometryCollection(GeometryCollection::<f64>::empty())
 ));
 
