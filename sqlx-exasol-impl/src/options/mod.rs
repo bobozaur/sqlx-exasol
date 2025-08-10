@@ -40,7 +40,6 @@ const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
 
 const ACCESS_TOKEN: &str = "access-token";
 const REFRESH_TOKEN: &str = "refresh-token";
-const PROTOCOL_VERSION: &str = "protocol-version";
 const SSL_MODE: &str = "ssl-mode";
 const SSL_CA: &str = "ssl-ca";
 const SSL_CERT: &str = "ssl-cert";
@@ -143,11 +142,6 @@ impl ConnectOptions for ExaConnectOptions {
 
                 REFRESH_TOKEN => builder = builder.refresh_token(value.to_string()),
 
-                PROTOCOL_VERSION => {
-                    let protocol_version = value.parse::<ProtocolVersion>()?;
-                    builder = builder.protocol_version(protocol_version);
-                }
-
                 SSL_MODE => {
                     let ssl_mode = value.parse::<ExaSslMode>()?;
                     builder = builder.ssl_mode(ssl_mode);
@@ -237,9 +231,6 @@ impl ConnectOptions for ExaConnectOptions {
                     .append_pair(REFRESH_TOKEN, refresh_token);
             }
         }
-
-        url.query_pairs_mut()
-            .append_pair(PROTOCOL_VERSION, &(self.protocol_version as u8).to_string());
 
         url.query_pairs_mut()
             .append_pair(SSL_MODE, self.ssl_mode.as_ref());

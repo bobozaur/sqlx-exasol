@@ -45,7 +45,7 @@ impl Default for ExaConnectOptionsBuilder {
             access_token: None,
             refresh_token: None,
             schema: None,
-            protocol_version: ProtocolVersion::V3,
+            protocol_version: ProtocolVersion::default(),
             fetch_size: DEFAULT_FETCH_SIZE,
             query_timeout: 0,
             compression_mode: ExaCompressionMode::default(),
@@ -172,12 +172,6 @@ impl ExaConnectOptionsBuilder {
     #[must_use = "call build() to get connection options"]
     pub fn schema(mut self, schema: String) -> Self {
         self.schema = Some(schema);
-        self
-    }
-
-    #[must_use = "call build() to get connection options"]
-    pub fn protocol_version(mut self, protocol_version: ProtocolVersion) -> Self {
-        self.protocol_version = protocol_version;
         self
     }
 

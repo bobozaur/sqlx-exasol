@@ -37,9 +37,7 @@ pub use column::ExaColumn;
 pub use connection::etl;
 pub use connection::ExaConnection;
 pub use database::Exasol;
-pub use options::{
-    ExaCompressionMode, ExaConnectOptions, ExaConnectOptionsBuilder, ExaSslMode, ProtocolVersion,
-};
+pub use options::{ExaCompressionMode, ExaConnectOptions, ExaConnectOptionsBuilder, ExaSslMode};
 pub use query_result::ExaQueryResult;
 pub use responses::{ExaAttributes, ExaDatabaseError, SessionInfo};
 pub use row::ExaRow;

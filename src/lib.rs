@@ -35,7 +35,6 @@
 //! Connection options:
 //! - `access-token`: Use an access token for login instead of credentials
 //! - `refresh-token`: Use a refresh token for login instead of credentials
-//! - `protocol-version`: Select a specific protocol version to use
 //! - `ssl-mode`: Select a specifc SSL behavior. See: [`ExaSslMode`]
 //! - `ssl-ca`: Use a certain certificate authority
 //! - `ssl-cert`: Use a certain certificate
