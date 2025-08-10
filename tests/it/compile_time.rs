@@ -159,7 +159,7 @@ test_compile_time_type!(
 /// [`sqlx_exasol::types::geo_types::Geometry`] implicitly work at compile time as parameters
 /// without messing up strings.
 ///
-/// Therefore we'll only test the result set column type.
+/// Therefore we'll test according to the reported datatype by Exasol
 ///
 /// See <https://github.com/exasol/websocket-api/issues/39>.
 #[cfg(feature = "geo-types")]
@@ -168,6 +168,13 @@ test_compile_time_type!(
 async fn test_compile_time_geometry(
     mut conn: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
 ) -> anyhow::Result<()> {
+    sqlx_exasol::query!(
+        "INSERT INTO compile_time_tests (column_geometry) VALUES(?);",
+        "POINT(1 2)"
+    )
+    .execute(&mut *conn)
+    .await?;
+
     let _: Vec<Option<sqlx_exasol::types::geo_types::Geometry>> =
         sqlx_exasol::query_scalar!("SELECT column_geometry FROM compile_time_tests;")
             .fetch_all(&mut *conn)
