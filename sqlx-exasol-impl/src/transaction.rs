@@ -1,8 +1,4 @@
-use std::borrow::Cow;
-
-use futures_core::future::BoxFuture;
-use futures_util::FutureExt;
-use sqlx_core::transaction::TransactionManager;
+use sqlx_core::{sql_str::SqlStr, transaction::TransactionManager};
 
 use crate::{
     connection::websocket::future::{Commit, Rollback, WebSocketFuture},
@@ -18,36 +14,31 @@ pub struct ExaTransactionManager;
 impl TransactionManager for ExaTransactionManager {
     type Database = Exasol;
 
-    fn begin<'conn>(
-        conn: &'conn mut ExaConnection,
-        _: Option<Cow<'static, str>>,
-    ) -> BoxFuture<'conn, SqlxResult<()>> {
-        Box::pin(async {
-            // Exasol does not have nested transactions.
-            if conn.attributes().open_transaction() {
-                // A pending rollback indicates that a transaction was dropped before an explicit
-                // rollback, which is why it's still open. If that's the case, then awaiting the
-                // rollback is sufficient to proceed.
-                match conn.ws.pending_rollback.take() {
-                    Some(rollback) => rollback.future(&mut conn.ws).await?,
-                    None => return Err(ExaProtocolError::TransactionAlreadyOpen)?,
-                }
+    async fn begin(conn: &mut ExaConnection, _: Option<SqlStr>) -> SqlxResult<()> {
+        // Exasol does not have nested transactions.
+        if conn.attributes().open_transaction() {
+            // A pending rollback indicates that a transaction was dropped before an explicit
+            // rollback, which is why it's still open. If that's the case, then awaiting the
+            // rollback is sufficient to proceed.
+            match conn.ws.pending_rollback.take() {
+                Some(rollback) => rollback.future(&mut conn.ws).await?,
+                None => return Err(ExaProtocolError::TransactionAlreadyOpen)?,
             }
+        }
 
-            // The next time a request is sent, the transaction will be started.
-            // We could eagerly start it as well, but that implies one more round-trip to the server
-            // and back with no benefit.
-            conn.attributes_mut().set_autocommit(false);
-            Ok(())
-        })
+        // The next time a request is sent, the transaction will be started.
+        // We could eagerly start it as well, but that implies one more round-trip to the server
+        // and back with no benefit.
+        conn.attributes_mut().set_autocommit(false);
+        Ok(())
     }
 
-    fn commit(conn: &mut ExaConnection) -> BoxFuture<'_, SqlxResult<()>> {
-        async move { Commit::default().future(&mut conn.ws).await }.boxed()
+    async fn commit(conn: &mut ExaConnection) -> SqlxResult<()> {
+        Commit::default().future(&mut conn.ws).await
     }
 
-    fn rollback(conn: &mut ExaConnection) -> BoxFuture<'_, SqlxResult<()>> {
-        async move { Rollback::default().future(&mut conn.ws).await }.boxed()
+    async fn rollback(conn: &mut ExaConnection) -> SqlxResult<()> {
+        Rollback::default().future(&mut conn.ws).await
     }
 
     fn start_rollback(conn: &mut ExaConnection) {

@@ -272,7 +272,6 @@ impl serde_json::ser::Formatter for ExaJsonStrFormatter {
 }
 
 #[cfg(test)]
-#[cfg(feature = "json")]
 mod tests {
     use serde::Serialize;
     use serde_json::{json, Serializer};
@@ -280,6 +279,7 @@ mod tests {
     use crate::arguments::ExaJsonStrFormatter;
 
     #[test]
+    #[cfg(feature = "json")]
     fn test_json_string() {
         let mut string = String::new();
         for i in 0..15u8 {

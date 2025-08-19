@@ -41,7 +41,7 @@ impl Database for Exasol {
 
     type ArgumentBuffer<'q> = ExaBuffer;
 
-    type Statement<'q> = ExaStatement<'q>;
+    type Statement = ExaStatement;
 }
 
 impl HasStatementCache for Exasol {}

@@ -1,91 +1,86 @@
 use std::{ops::Deref, str::FromStr, sync::OnceLock, time::Duration};
 
-use futures_core::future::BoxFuture;
 use futures_util::TryStreamExt;
 use sqlx_core::{
     connection::Connection,
     error::DatabaseError,
     executor::Executor,
     pool::{Pool, PoolOptions},
-    query, query_scalar,
+    sql_str::AssertSqlSafe,
     testing::{FixtureSnapshot, TestArgs, TestContext, TestSupport},
     Error,
 };
 
 use crate::{
     connection::ExaConnection, database::Exasol, options::ExaConnectOptions, ExaQueryResult,
+    SqlxResult,
 };
 
 static MASTER_POOL: OnceLock<Pool<Exasol>> = OnceLock::new();
 
 impl TestSupport for Exasol {
-    fn test_context(args: &TestArgs) -> BoxFuture<'_, Result<TestContext<Self>, Error>> {
-        Box::pin(test_context(args))
+    async fn test_context(args: &TestArgs) -> SqlxResult<TestContext<Self>> {
+        test_context(args).await
     }
 
-    fn cleanup_test(db_name: &str) -> BoxFuture<'_, Result<(), Error>> {
-        #[allow(clippy::large_futures, reason = "silencing clippy")]
-        Box::pin(async move {
-            let mut conn = MASTER_POOL
-                .get()
-                .expect("cleanup_test() invoked outside `#[sqlx_exasol::test]")
-                .acquire()
-                .await?;
+    async fn cleanup_test(db_name: &str) -> SqlxResult<()> {
+        let mut conn = MASTER_POOL
+            .get()
+            .expect("cleanup_test() invoked outside `#[sqlx_exasol::test]")
+            .acquire()
+            .await?;
 
-            do_cleanup(&mut conn, db_name).await
-        })
+        do_cleanup(&mut conn, db_name).await
     }
 
-    fn cleanup_test_dbs() -> BoxFuture<'static, Result<Option<usize>, Error>> {
-        Box::pin(async move {
-            let url = dotenvy::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    async fn cleanup_test_dbs() -> SqlxResult<Option<usize>> {
+        let url = dotenvy::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-            let mut conn = ExaConnection::connect(&url).await?;
+        let mut conn = ExaConnection::connect(&url).await?;
 
-            let query_str = r#"SELECT db_name FROM "_sqlx_tests"."_sqlx_test_databases";"#;
-            let db_names_to_delete: Vec<String> = query_scalar::query_scalar(query_str)
-                .fetch_all(&mut conn)
-                .await?;
+        let query = r#"SELECT db_name FROM "_sqlx_tests"."_sqlx_test_databases";"#;
+        let db_names_to_delete: Vec<String> = sqlx_core::query_scalar::query_scalar(query)
+            .fetch_all(&mut conn)
+            .await?;
 
-            if db_names_to_delete.is_empty() {
-                return Ok(None);
-            }
+        if db_names_to_delete.is_empty() {
+            return Ok(None);
+        }
 
-            let mut deleted_db_names = Vec::with_capacity(db_names_to_delete.len());
+        let mut deleted_db_names = Vec::with_capacity(db_names_to_delete.len());
 
-            for db_name in &db_names_to_delete {
-                let query_str = format!(r#"DROP SCHEMA IF EXISTS "{db_name}" CASCADE;"#);
+        for db_name in &db_names_to_delete {
+            let query = format!(r#"DROP SCHEMA IF EXISTS "{db_name}" CASCADE;"#);
 
-                match conn.execute(&*query_str).await {
-                    Ok(_deleted) => {
-                        deleted_db_names.push(db_name);
-                    }
-                    // Assume a database error just means the DB is still in use.
-                    Err(Error::Database(dbe)) => {
-                        eprintln!("could not clean test database {db_name}: {dbe}");
-                    }
-                    // Bubble up other errors
-                    Err(e) => return Err(e),
+            match conn.execute(AssertSqlSafe(query)).await {
+                Ok(_deleted) => {
+                    deleted_db_names.push(db_name);
                 }
+                // Assume a database error just means the DB is still in use.
+                Err(Error::Database(dbe)) => {
+                    eprintln!("could not clean test database {db_name}: {dbe}");
+                }
+                // Bubble up other errors
+                Err(e) => return Err(e),
             }
+        }
 
-            if deleted_db_names.is_empty() {
-                return Ok(None);
-            }
+        if deleted_db_names.is_empty() {
+            return Ok(None);
+        }
 
-            query::query(r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_name = ?;"#)
-                .bind(&deleted_db_names)
-                .execute(&mut conn)
-                .await?;
+        sqlx_core::query::query(
+            r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_name = ?;"#,
+        )
+        .bind(&deleted_db_names)
+        .execute(&mut conn)
+        .await?;
 
-            conn.close().await.ok();
-            Ok(Some(db_names_to_delete.len()))
-        })
+        conn.close().await.ok();
+        Ok(Some(db_names_to_delete.len()))
     }
 
-    fn snapshot(
-        _conn: &mut Self::Connection,
-    ) -> BoxFuture<'_, Result<FixtureSnapshot<Self>, Error>> {
+    async fn snapshot(_conn: &mut Self::Connection) -> SqlxResult<FixtureSnapshot<Self>> {
         // TODO: SQLx doesn't implement this yet either.
         todo!()
     }
@@ -166,13 +161,13 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
         INSERT INTO "_sqlx_tests"."_sqlx_test_databases" (db_name, test_path)
         VALUES (?, ?)"#;
 
-    query::query(query_str)
+    sqlx_core::query::query(query_str)
         .bind(&db_name)
         .bind(args.test_path)
         .execute(&mut *tx)
         .await?;
 
-    tx.execute(&*format!(r#"CREATE SCHEMA "{db_name}";"#))
+    tx.execute(AssertSqlSafe(format!(r#"CREATE SCHEMA "{db_name}";"#)))
         .await?;
     tx.commit().await?;
 
@@ -197,23 +192,26 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 }
 
 async fn do_cleanup(conn: &mut ExaConnection, db_name: &str) -> Result<(), Error> {
-    conn.execute(&*format!(r#"DROP SCHEMA IF EXISTS "{db_name}" CASCADE"#))
-        .await?;
+    let query = format!(r#"DROP SCHEMA IF EXISTS "{db_name}" CASCADE"#);
+    conn.execute(AssertSqlSafe(query)).await?;
 
-    query::query(r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_name = ?;"#)
-        .bind(db_name)
-        .execute(&mut *conn)
-        .await?;
+    sqlx_core::query::query(
+        r#"DELETE FROM "_sqlx_tests"."_sqlx_test_databases" WHERE db_name = ?;"#,
+    )
+    .bind(db_name)
+    .execute(&mut *conn)
+    .await?;
 
     Ok(())
 }
 
 /// Pre <0.8.4, test databases were stored by integer ID.
 async fn cleanup_old_dbs(conn: &mut ExaConnection) -> Result<(), Error> {
-    let res =
-        query_scalar::query_scalar(r#"SELECT db_id FROM "_sqlx_tests"."_sqlx_test_databases";"#)
-            .fetch_all(&mut *conn)
-            .await;
+    let res = sqlx_core::query_scalar::query_scalar(
+        r#"SELECT db_id FROM "_sqlx_tests"."_sqlx_test_databases";"#,
+    )
+    .fetch_all(&mut *conn)
+    .await;
 
     let db_ids: Vec<i64> = match res {
         Ok(db_ids) => db_ids,
@@ -237,7 +235,7 @@ async fn cleanup_old_dbs(conn: &mut ExaConnection) -> Result<(), Error> {
     // Drop old-style test databases.
     for id in db_ids {
         let query = format!(r#"DROP SCHEMA IF EXISTS "_sqlx_test_database_{id}" CASCADE"#);
-        match conn.execute(&*query).await {
+        match conn.execute(AssertSqlSafe(query)).await {
             Ok(_deleted) => (),
             // Assume a database error just means the DB is still in use.
             Err(Error::Database(dbe)) => {

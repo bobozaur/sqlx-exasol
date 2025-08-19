@@ -1,11 +1,10 @@
-use std::borrow::Cow;
-
 use futures_core::{future::BoxFuture, stream::BoxStream};
 use futures_util::{FutureExt, StreamExt, TryStreamExt};
 use sqlx_core::{
     describe::Describe,
     executor::{Execute, Executor},
     logger::QueryLogger,
+    sql_str::SqlStr,
     Either,
 };
 
@@ -134,20 +133,21 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
         })
     }
 
-    fn prepare_with<'e, 'q>(
+    fn prepare_with<'e>(
         self,
-        sql: &'q str,
+        sql: SqlStr,
         _parameters: &'e [ExaTypeInfo],
-    ) -> BoxFuture<'e, SqlxResult<ExaStatement<'q>>>
+    ) -> BoxFuture<'e, SqlxResult<ExaStatement>>
     where
-        'q: 'e,
         'c: 'e,
     {
         Box::pin(async move {
-            let prepared = GetOrPrepare::new(sql, true).future(&mut self.ws).await?;
+            let prepared = GetOrPrepare::new(sql.clone(), true)
+                .future(&mut self.ws)
+                .await?;
 
             Ok(ExaStatement {
-                sql: Cow::Borrowed(sql),
+                sql,
                 metadata: ExaStatementMetadata::new(
                     prepared.columns.clone(),
                     prepared.parameters.clone(),
@@ -157,9 +157,8 @@ impl<'c> Executor<'c> for &'c mut ExaConnection {
     }
 
     /// Exasol does not provide nullability information, unfortunately.
-    fn describe<'e, 'q>(self, sql: &'q str) -> BoxFuture<'e, SqlxResult<Describe<Exasol>>>
+    fn describe<'e>(self, sql: SqlStr) -> BoxFuture<'e, SqlxResult<Describe<Exasol>>>
     where
-        'q: 'e,
         'c: 'e,
     {
         Box::pin(async move {
@@ -187,10 +186,10 @@ impl ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        let sql = query.sql();
         let persist = query.persistent();
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
         let arguments = query.take_arguments().map_err(SqlxError::Encode)?;
+        let logger = QueryLogger::new(query.sql(), self.log_settings.clone());
+        let sql = logger.sql().clone();
 
         if let Some(arguments) = arguments {
             let future = ExecutePrepared::new(sql, persist, arguments);
@@ -207,10 +206,10 @@ impl ExaConnection {
         'c: 'e,
         E: 'q + Execute<'q, Exasol>,
     {
-        let sql = query.sql();
         let persist = query.persistent();
-        let logger = QueryLogger::new(sql, self.log_settings.clone());
         let arguments = query.take_arguments().map_err(SqlxError::Encode)?;
+        let logger = QueryLogger::new(query.sql(), self.log_settings.clone());
+        let sql = logger.sql().clone();
 
         if let Some(arguments) = arguments {
             let future = ExecutePrepared::new(sql, persist, arguments);

@@ -1,10 +1,12 @@
 #![cfg(feature = "migrate")]
 
-use sqlx_exasol::{pool::PoolConnection, Column, Exasol, Executor, Type, TypeInfo};
+use sqlx_exasol::{pool::PoolConnection, Column, Exasol, Executor, SqlStr, Type, TypeInfo};
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
-    let d = conn.describe("SELECT * FROM tweet").await?;
+    let d = conn
+        .describe(SqlStr::from_static("SELECT * FROM tweet"))
+        .await?;
 
     assert_eq!(d.columns()[0].name(), "id");
     assert_eq!(d.columns()[1].name(), "created_at");
@@ -41,7 +43,9 @@ CREATE TABLE with_hashtype_and_tinyint (
     .await?;
 
     let d = conn
-        .describe("INSERT INTO with_hashtype_and_tinyint VALUES (?, ?, ?, ?, ?, ?);")
+        .describe(SqlStr::from_static(
+            "INSERT INTO with_hashtype_and_tinyint VALUES (?, ?, ?, ?, ?, ?);",
+        ))
         .await?;
 
     let parameters = d.parameters().unwrap().unwrap_left();
@@ -75,9 +79,9 @@ CREATE TABLE with_hashtype_and_tinyint (
     .await?;
 
     let d = conn
-        .describe(
+        .describe(SqlStr::from_static(
             "SELECT * FROM with_hashtype_and_tinyint WHERE value_hashtype_1 = ? AND value_int = ?;",
-        )
+        ))
         .await?;
 
     assert_eq!(d.columns()[0].name(), "id");
@@ -125,7 +129,9 @@ CREATE TABLE with_hashtype_and_tinyint (
     .await?;
 
     let d = conn
-        .describe("SELECT * FROM with_hashtype_and_tinyint")
+        .describe(SqlStr::from_static(
+            "SELECT * FROM with_hashtype_and_tinyint",
+        ))
         .await?;
 
     assert_eq!(d.column(2).name(), "value_bool");
@@ -142,7 +148,7 @@ CREATE TABLE with_hashtype_and_tinyint (
 #[sqlx_exasol::test(migrations = "tests/setup")]
 async fn uses_alias_name(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
     let d = conn
-        .describe("SELECT text AS tweet_text FROM tweet")
+        .describe(SqlStr::from_static("SELECT text AS tweet_text FROM tweet"))
         .await?;
 
     assert_eq!(d.columns()[0].name(), "tweet_text");

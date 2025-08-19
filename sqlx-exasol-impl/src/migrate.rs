@@ -8,9 +8,7 @@ use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,
     migrate::{AppliedMigration, Migrate, MigrateDatabase, MigrateError, Migration},
-    query::query,
-    query_as::query_as,
-    query_scalar::query_scalar,
+    sql_str::AssertSqlSafe,
 };
 
 use crate::{
@@ -28,9 +26,11 @@ const LOCK_WARN: &str = "Exasol does not support database locking!";
 fn parse_for_maintenance(url: &str) -> SqlxResult<(ExaConnectOptions, String)> {
     let mut options = ExaConnectOptions::from_str(url)?;
 
-    let database = options.schema.ok_or_else(|| {
-        SqlxError::Configuration("DATABASE_URL does not specify a database".into())
-    })?;
+    let database = options
+        .schema
+        .ok_or_else(|| SqlxError::Configuration("DATABASE_URL does not specify a database".into()))
+        // Escape double quotes because we'll quote the database name in constructed queries.
+        .map(|db| db.replace('"', "\"\""))?;
 
     // switch to <no> database for create/drop commands
     options.schema = None;
@@ -39,44 +39,38 @@ fn parse_for_maintenance(url: &str) -> SqlxResult<(ExaConnectOptions, String)> {
 }
 
 impl MigrateDatabase for Exasol {
-    fn create_database(url: &str) -> BoxFuture<'_, SqlxResult<()>> {
-        Box::pin(async move {
-            let (options, database) = parse_for_maintenance(url)?;
-            let mut conn = options.connect().await?;
+    async fn create_database(url: &str) -> SqlxResult<()> {
+        let (options, database) = parse_for_maintenance(url)?;
+        let mut conn = options.connect().await?;
 
-            let query = format!("CREATE SCHEMA \"{}\"", database.replace('"', "\"\""));
-            let _ = conn.execute(&*query).await?;
+        let query = format!(r#"CREATE SCHEMA "{database}";"#);
+        conn.execute(AssertSqlSafe(query)).await?;
 
-            Ok(())
-        })
+        Ok(())
     }
 
-    fn database_exists(url: &str) -> BoxFuture<'_, SqlxResult<bool>> {
-        Box::pin(async move {
-            let (options, database) = parse_for_maintenance(url)?;
-            let mut conn = options.connect().await?;
+    async fn database_exists(url: &str) -> SqlxResult<bool> {
+        let (options, database) = parse_for_maintenance(url)?;
+        let mut conn = options.connect().await?;
 
-            let query = "SELECT true FROM exa_schemas WHERE schema_name = ?";
-            let exists: bool = query_scalar(query)
-                .bind(database)
-                .fetch_optional(&mut conn)
-                .await?
-                .unwrap_or_default();
+        let query = "SELECT true FROM exa_schemas WHERE schema_name = ?";
+        let exists: bool = sqlx_core::query_scalar::query_scalar(query)
+            .bind(database)
+            .fetch_optional(&mut conn)
+            .await?
+            .unwrap_or_default();
 
-            Ok(exists)
-        })
+        Ok(exists)
     }
 
-    fn drop_database(url: &str) -> BoxFuture<'_, SqlxResult<()>> {
-        Box::pin(async move {
-            let (options, database) = parse_for_maintenance(url)?;
-            let mut conn = options.connect().await?;
+    async fn drop_database(url: &str) -> SqlxResult<()> {
+        let (options, database) = parse_for_maintenance(url)?;
+        let mut conn = options.connect().await?;
 
-            let query = format!(r#"DROP SCHEMA IF EXISTS "{database}" CASCADE;"#);
-            let _ = conn.execute(&*query).await?;
+        let query = format!(r#"DROP SCHEMA IF EXISTS "{database}" CASCADE;"#);
+        conn.execute(AssertSqlSafe(query)).await?;
 
-            Ok(())
-        })
+        Ok(())
     }
 }
 
@@ -87,7 +81,7 @@ impl Migrate for ExaConnection {
     ) -> BoxFuture<'e, Result<(), MigrateError>> {
         Box::pin(async move {
             let query = format!(r#"CREATE SCHEMA IF NOT EXISTS "{schema_name}";"#);
-            self.execute(&*query).await?;
+            self.execute(AssertSqlSafe(query)).await?;
             Ok(())
         })
     }
@@ -99,17 +93,16 @@ impl Migrate for ExaConnection {
         Box::pin(async move {
             let query = format!(
                 r#"
-            CREATE TABLE IF NOT EXISTS "{table_name}" (
-                version DECIMAL(20, 0),
-                description CLOB NOT NULL,
-                installed_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                success BOOLEAN NOT NULL,
-                checksum CLOB NOT NULL,
-                execution_time DECIMAL(20, 0) NOT NULL
-            );"#
+                CREATE TABLE IF NOT EXISTS "{table_name}" (
+                    version DECIMAL(20, 0),
+                    description CLOB NOT NULL,
+                    installed_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    success BOOLEAN NOT NULL,
+                    checksum CLOB NOT NULL,
+                    execution_time DECIMAL(20, 0) NOT NULL
+                );"#
             );
-
-            self.execute(&*query).await?;
+            self.execute(AssertSqlSafe(query)).await?;
             Ok(())
         })
     }
@@ -128,9 +121,9 @@ impl Migrate for ExaConnection {
             LIMIT 1;
             "#
             );
-
-            let row: Option<(i64,)> = query_as(&query).fetch_optional(self).await?;
-
+            let row: Option<(i64,)> = sqlx_core::query_as::query_as(AssertSqlSafe(query))
+                .fetch_optional(self)
+                .await?;
             Ok(row.map(|r| r.0))
         })
     }
@@ -148,7 +141,9 @@ impl Migrate for ExaConnection {
                 "#
             );
 
-            let rows: Vec<(i64, String)> = query_as(&query).fetch_all(self).await?;
+            let rows: Vec<(i64, String)> = sqlx_core::query_as::query_as(AssertSqlSafe(query))
+                .fetch_all(self)
+                .await?;
             let mut migrations = Vec::with_capacity(rows.len());
 
             for (version, checksum) in rows {
@@ -188,20 +183,20 @@ impl Migrate for ExaConnection {
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            ExecuteBatch::new(migration.sql.as_ref())
+            ExecuteBatch::new(migration.sql.clone())
                 .future(&mut tx.ws)
                 .await?;
 
             let checksum = hex::encode(&*migration.checksum);
 
-            let query_str = format!(
+            let query = format!(
                 r#"
             INSERT INTO "{table_name}" ( version, description, success, checksum, execution_time )
             VALUES ( ?, ?, TRUE, ?, -1 );
             "#
             );
 
-            let _ = query(&query_str)
+            let _ = sqlx_core::query::query(AssertSqlSafe(query))
                 .bind(migration.version)
                 .bind(&*migration.description)
                 .bind(checksum)
@@ -212,7 +207,7 @@ impl Migrate for ExaConnection {
 
             let elapsed = start.elapsed();
 
-            let query_str = format!(
+            let query = format!(
                 r#"
                 UPDATE "{table_name}"
                 SET execution_time = ?
@@ -221,7 +216,7 @@ impl Migrate for ExaConnection {
             );
 
             #[allow(clippy::cast_possible_truncation)]
-            let _ = query(&query_str)
+            let _ = sqlx_core::query::query(AssertSqlSafe(query))
                 .bind(elapsed.as_nanos() as i64)
                 .bind(migration.version)
                 .execute(self)
@@ -240,12 +235,12 @@ impl Migrate for ExaConnection {
             let mut tx = self.begin().await?;
             let start = Instant::now();
 
-            ExecuteBatch::new(migration.sql.as_ref())
+            ExecuteBatch::new(migration.sql.clone())
                 .future(&mut tx.ws)
                 .await?;
 
-            let query_str = format!(r#" DELETE FROM "{table_name}" WHERE version = ? "#);
-            let _ = query(&query_str)
+            let query = format!(r#" DELETE FROM "{table_name}" WHERE version = ? "#);
+            let _ = sqlx_core::query::query(AssertSqlSafe(query))
                 .bind(migration.version)
                 .execute(&mut *tx)
                 .await?;

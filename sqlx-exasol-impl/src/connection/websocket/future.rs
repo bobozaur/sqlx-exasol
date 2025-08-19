@@ -19,6 +19,7 @@ use serde::{
     de::{DeserializeOwned, IgnoredAny},
     Serialize,
 };
+use sqlx_core::sql_str::SqlStr;
 
 use crate::{
     connection::{
@@ -80,20 +81,20 @@ pub trait WebSocketFuture: Unpin + Sized {
 
 /// Implementor of [`WebSocketFuture`] that executes a prepared statement.
 #[derive(Debug)]
-pub struct ExecutePrepared<'a> {
+pub struct ExecutePrepared {
     arguments: ExaArguments,
-    state: ExecutePreparedState<'a>,
+    state: ExecutePreparedState,
 }
 
-impl<'a> ExecutePrepared<'a> {
-    pub fn new(sql: &'a str, persist: bool, arguments: ExaArguments) -> Self {
+impl ExecutePrepared {
+    pub fn new(sql: SqlStr, persist: bool, arguments: ExaArguments) -> Self {
         let future = GetOrPrepare::new(sql, persist);
         let state = ExecutePreparedState::GetOrPrepare(future);
         Self { arguments, state }
     }
 }
 
-impl WebSocketFuture for ExecutePrepared<'_> {
+impl WebSocketFuture for ExecutePrepared {
     type Output = MultiResultStream;
 
     fn poll_unpin(
@@ -124,120 +125,23 @@ impl WebSocketFuture for ExecutePrepared<'_> {
 }
 
 #[derive(Debug)]
-enum ExecutePreparedState<'a> {
-    GetOrPrepare(GetOrPrepare<'a>),
+enum ExecutePreparedState {
+    GetOrPrepare(GetOrPrepare),
     ExecutePrepared(ExaRoundtrip<ExecutePreparedStmt, SingleResult>),
 }
 
 /// Implementor of [`WebSocketFuture`] that executes a batch of SQL statements.
 #[derive(Debug)]
-pub struct ExecuteBatch<'a>(ExaRoundtrip<request::ExecuteBatch<'a>, MultiResults>);
+pub struct ExecuteBatch(ExaRoundtrip<request::ExecuteBatch, MultiResults>);
 
-impl<'a> ExecuteBatch<'a> {
-    pub fn new(sql: &'a str) -> Self {
-        let request = request::ExecuteBatch(Self::split_query(sql));
+impl ExecuteBatch {
+    pub fn new(sql: SqlStr) -> Self {
+        let request = request::ExecuteBatch(sql);
         Self(ExaRoundtrip::new(request))
-    }
-
-    /// Splits a SQL query into individual statements.
-    ///
-    /// The splitting follows the following logic:
-    /// - trim the query to remove leading and trailing whitespace
-    /// - parse each character and store the string slice up to a ';' that is not inside a line or
-    ///   block comment and not contained within single or double quotes
-    /// - register the next statement start as the next non-whitespace character after a split,
-    ///   essentially ignoring whitespace between statements (but retaining comments)
-    /// - add the remainder string slice after the last ';' if it is not empty; this means that the
-    ///   last statement could be a comment only, but that is okay as Exasol does not complain.
-    fn split_query(query: &str) -> Vec<&str> {
-        #[derive(Clone, Copy)]
-        enum Inside {
-            Statement,
-            LineComment,
-            BlockComment,
-            DoubleQuote,
-            SingleQuote,
-            Whitespace,
-        }
-
-        let query = query.trim();
-        // NOTE: Using [`char`] as the iterator element for the sake of `char::is_whitespace` which
-        //       is more exhaustive than `u8::is_ascii_whitespace`.
-        let mut chars = query.char_indices().peekable();
-        let mut state = Inside::Statement;
-        let mut statements = Vec::new();
-        let mut start = 0;
-
-        while let Some((i, c)) = chars.next() {
-            let mut peek = || chars.peek().map(|(_, c)| *c);
-            let is_whitespace = |p: Option<char>| p.is_some_and(char::is_whitespace);
-
-            #[allow(clippy::match_same_arms, reason = "better readability if split")]
-            match (state, c) {
-                // Line comment start
-                (Inside::Statement, '-') if Some('-') == peek() => {
-                    chars.next();
-                    state = Inside::LineComment;
-                }
-                // Block comment start
-                (Inside::Statement, '/') if Some('*') == peek() => {
-                    chars.next();
-                    state = Inside::BlockComment;
-                }
-                // Double quote start
-                (Inside::Statement, '"') => state = Inside::DoubleQuote,
-                // Single quote start
-                (Inside::Statement, '\'') => state = Inside::SingleQuote,
-                // Statement end
-                (Inside::Statement, ';') => {
-                    statements.push(&query[start..=i]);
-                    start = i + 1;
-
-                    // Whitespace between statements start
-                    if is_whitespace(peek()) {
-                        state = Inside::Whitespace;
-                    }
-                }
-                // Skip escaped double quote
-                (Inside::DoubleQuote, '"') if Some('"') == peek() => {
-                    chars.next();
-                }
-                // Skip escaped single quote
-                (Inside::SingleQuote, '\'') if Some('\'') == peek() => {
-                    chars.next();
-                }
-                // Double quote end
-                (Inside::DoubleQuote, '"') => state = Inside::Statement,
-                // Single quote end
-                (Inside::SingleQuote, '\'') => state = Inside::Statement,
-                // Line comment end
-                (Inside::LineComment, '\n') => state = Inside::Statement,
-                // Block comment end
-                (Inside::BlockComment, '*') if Some('/') == peek() => {
-                    chars.next();
-                    state = Inside::Statement;
-                }
-                // Whitespace between statements end
-                (Inside::Whitespace, _) if !is_whitespace(peek()) => {
-                    start = i + 1;
-                    state = Inside::Statement;
-                }
-                _ => (),
-            }
-        }
-
-        // Add final part if anything remains after the last `;`.
-        // NOTE: Exasol does not complain about trailing comments, but only empty queries.
-        let remaining = &query[start..];
-        if !remaining.is_empty() {
-            statements.push(remaining);
-        }
-
-        statements
     }
 }
 
-impl WebSocketFuture for ExecuteBatch<'_> {
+impl WebSocketFuture for ExecuteBatch {
     type Output = MultiResultStream;
 
     fn poll_unpin(
@@ -252,15 +156,15 @@ impl WebSocketFuture for ExecuteBatch<'_> {
 
 /// Implementor of [`WebSocketFuture`] that executes a single SQL statement.
 #[derive(Debug)]
-pub struct Execute<'a>(ExaRoundtrip<request::Execute<'a>, SingleResult>);
+pub struct Execute(ExaRoundtrip<request::Execute, SingleResult>);
 
-impl<'a> Execute<'a> {
-    pub fn new(sql: &'a str) -> Self {
-        Self(ExaRoundtrip::new(request::Execute(sql.into())))
+impl Execute {
+    pub fn new(sql: SqlStr) -> Self {
+        Self(ExaRoundtrip::new(request::Execute(sql)))
     }
 }
 
-impl WebSocketFuture for Execute<'_> {
+impl WebSocketFuture for Execute {
     type Output = MultiResultStream;
 
     fn poll_unpin(
@@ -275,14 +179,14 @@ impl WebSocketFuture for Execute<'_> {
 /// Implementor of [`WebSocketFuture`] that retrieves a prepared statement from the cache, storing
 /// it first on cache miss.
 #[derive(Debug)]
-pub struct GetOrPrepare<'a> {
-    sql: &'a str,
+pub struct GetOrPrepare {
+    sql: SqlStr,
     persist: bool,
-    state: GetOrPrepareState<'a>,
+    state: GetOrPrepareState,
 }
 
-impl<'a> GetOrPrepare<'a> {
-    pub fn new(sql: &'a str, persist: bool) -> Self {
+impl GetOrPrepare {
+    pub fn new(sql: SqlStr, persist: bool) -> Self {
         Self {
             sql,
             persist,
@@ -291,7 +195,7 @@ impl<'a> GetOrPrepare<'a> {
     }
 }
 
-impl WebSocketFuture for GetOrPrepare<'_> {
+impl WebSocketFuture for GetOrPrepare {
     type Output = PreparedStatement;
 
     fn poll_unpin(
@@ -302,11 +206,13 @@ impl WebSocketFuture for GetOrPrepare<'_> {
         loop {
             match &mut self.state {
                 GetOrPrepareState::GetCached => {
-                    self.state = match ws.statement_cache.get(self.sql).cloned() {
+                    self.state = match ws.statement_cache.get(self.sql.as_str()).cloned() {
                         // Cache hit, simply return
                         Some(prepared) => return Poll::Ready(Ok(prepared)),
                         // Cache miss, switch state and prepare statement
-                        None => GetOrPrepareState::CreatePrepared(CreatePrepared::new(self.sql)),
+                        None => {
+                            GetOrPrepareState::CreatePrepared(CreatePrepared::new(self.sql.clone()))
+                        }
                     }
                 }
                 GetOrPrepareState::CreatePrepared(future) => {
@@ -323,7 +229,7 @@ impl WebSocketFuture for GetOrPrepare<'_> {
                     // Otherwise we go to simply retrieving it from the cache.
                     self.state = ws
                         .statement_cache
-                        .push(self.sql.to_owned(), prepared)
+                        .push(self.sql.as_str().to_owned(), prepared)
                         .map(|(_, p)| p.statement_handle)
                         .map(ClosePrepared::new)
                         .map_or(
@@ -341,9 +247,9 @@ impl WebSocketFuture for GetOrPrepare<'_> {
 }
 
 #[derive(Debug)]
-enum GetOrPrepareState<'a> {
+enum GetOrPrepareState {
     GetCached,
-    CreatePrepared(CreatePrepared<'a>),
+    CreatePrepared(CreatePrepared),
     ClosePrepared(ClosePrepared),
 }
 
@@ -373,19 +279,19 @@ impl WebSocketFuture for FetchChunk {
 /// database support, a statement gets prepared and closed right after to retrieve the statement
 /// information.
 #[derive(Debug)]
-pub enum Describe<'a> {
-    CreatePrepared(ExaRoundtrip<CreatePreparedStmt<'a>, DescribeStatement>),
+pub enum Describe {
+    CreatePrepared(ExaRoundtrip<CreatePreparedStmt, DescribeStatement>),
     ClosePrepared(ClosePrepared, DescribeStatement),
     Finished,
 }
 
-impl<'a> Describe<'a> {
-    pub fn new(sql: &'a str) -> Self {
+impl Describe {
+    pub fn new(sql: SqlStr) -> Self {
         Self::CreatePrepared(ExaRoundtrip::new(CreatePreparedStmt(sql)))
     }
 }
 
-impl WebSocketFuture for Describe<'_> {
+impl WebSocketFuture for Describe {
     type Output = DescribeStatement;
 
     fn poll_unpin(
@@ -414,15 +320,15 @@ impl WebSocketFuture for Describe<'_> {
 
 /// Implementor of [`WebSocketFuture`] that creates a prepared statement.
 #[derive(Debug)]
-pub struct CreatePrepared<'a>(ExaRoundtrip<CreatePreparedStmt<'a>, PreparedStatement>);
+pub struct CreatePrepared(ExaRoundtrip<CreatePreparedStmt, PreparedStatement>);
 
-impl<'a> CreatePrepared<'a> {
-    pub fn new(sql: &'a str) -> Self {
+impl CreatePrepared {
+    pub fn new(sql: SqlStr) -> Self {
         Self(ExaRoundtrip::new(CreatePreparedStmt(sql)))
     }
 }
 
-impl WebSocketFuture for CreatePrepared<'_> {
+impl WebSocketFuture for CreatePrepared {
     type Output = PreparedStatement;
 
     fn poll_unpin(
@@ -539,11 +445,12 @@ impl WebSocketFuture for GetAttributes {
 
 /// Implementor of [`WebSocketFuture`] that executes a `COMMIT;` statement.
 #[derive(Debug)]
-pub struct Commit(ExaRoundtrip<request::Execute<'static>, Option<IgnoredAny>>);
+pub struct Commit(ExaRoundtrip<request::Execute, Option<IgnoredAny>>);
 
 impl Default for Commit {
     fn default() -> Self {
-        Self(ExaRoundtrip::new(request::Execute("COMMIT;".into())))
+        let sql = SqlStr::from_static("COMMIT;");
+        Self(ExaRoundtrip::new(request::Execute(sql)))
     }
 }
 
@@ -570,11 +477,12 @@ impl WebSocketFuture for Commit {
 
 /// Implementor of [`WebSocketFuture`] that executes a `ROLLBACK;` statement.
 #[derive(Debug)]
-pub struct Rollback(ExaRoundtrip<request::Execute<'static>, Option<IgnoredAny>>);
+pub struct Rollback(ExaRoundtrip<request::Execute, Option<IgnoredAny>>);
 
 impl Default for Rollback {
     fn default() -> Self {
-        Self(ExaRoundtrip::new(request::Execute("ROLLBACK;".into())))
+        let sql = SqlStr::from_static("ROLLBACK;");
+        Self(ExaRoundtrip::new(request::Execute(sql)))
     }
 }
 
@@ -815,166 +723,5 @@ where
                 Self::Finished => return Poll::Pending,
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ExecuteBatch;
-
-    #[test]
-    fn test_simple_statements() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT * FROM users; SELECT * FROM orders;"),
-            vec!["SELECT * FROM users;", "SELECT * FROM orders;"]
-        );
-    }
-
-    #[test]
-    fn test_semicolon_in_single_quote() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT ';' AS val; SELECT 'abc;def' AS val2;"),
-            vec!["SELECT ';' AS val;", "SELECT 'abc;def' AS val2;"]
-        );
-    }
-
-    #[test]
-    fn test_semicolon_in_double_quote() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT \"col;name\" FROM table;"),
-            vec!["SELECT \"col;name\" FROM table;"]
-        );
-    }
-
-    #[test]
-    fn test_semicolon_in_line_comment() {
-        assert_eq!(
-            ExecuteBatch::split_query(
-                "SELECT 1; -- this is a comment; with a semicolon\nSELECT 2;"
-            ),
-            vec![
-                "SELECT 1;",
-                "-- this is a comment; with a semicolon\nSELECT 2;"
-            ]
-        );
-    }
-
-    #[test]
-    fn test_semicolon_in_block_comment() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT 1; /* multi-line ; comment */ SELECT 2;"),
-            vec!["SELECT 1;", "/* multi-line ; comment */ SELECT 2;"]
-        );
-    }
-
-    #[test]
-    fn test_escaped_quotes() {
-        assert_eq!(
-            ExecuteBatch::split_query(
-                "SELECT 'It''s a test; really'; SELECT \"escaped\"\"quote\" FROM dual;"
-            ),
-            vec![
-                "SELECT 'It''s a test; really';",
-                "SELECT \"escaped\"\"quote\" FROM dual;"
-            ]
-        );
-    }
-
-    #[test]
-    fn test_trailing_semicolon_and_whitespace() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT 1;; \n  \n;"),
-            vec!["SELECT 1;", ";", ";"]
-        );
-    }
-
-    #[test]
-    fn test_leading_semicolon() {
-        assert_eq!(
-            ExecuteBatch::split_query(";SELECT 1;"),
-            vec![";", "SELECT 1;"]
-        );
-    }
-
-    #[test]
-    fn test_leading_semicolon_and_whitespace() {
-        assert_eq!(
-            ExecuteBatch::split_query("  ; SELECT 1;"),
-            vec![";", "SELECT 1;"]
-        );
-    }
-
-    #[test]
-    fn test_no_semicolon() {
-        assert_eq!(ExecuteBatch::split_query("SELECT 1"), vec!["SELECT 1"]);
-    }
-
-    #[test]
-    fn test_no_whitespace_between_statements() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT 1;SELECT 2"),
-            vec!["SELECT 1;", "SELECT 2"]
-        );
-    }
-
-    #[test]
-    fn test_no_whitespace_between_stmt_and_comment() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT 1;/*testing*/SELECT 2;"),
-            vec!["SELECT 1;", "/*testing*/SELECT 2;"]
-        );
-    }
-
-    #[test]
-    fn test_trailing_comment() {
-        assert_eq!(
-            ExecuteBatch::split_query("SELECT 1;/*testing*/"),
-            vec!["SELECT 1;", "/*testing*/"]
-        );
-    }
-
-    #[test]
-    fn test_whitespace_between_statements() {
-        let query = "
-            /* Writing some comments */
-            SELECT 1;
-
-            -- Then writing some more comments
-            SELECT 2;
-            ";
-        assert_eq!(
-            ExecuteBatch::split_query(query),
-            vec![
-                "/* Writing some comments */
-            SELECT 1;",
-                "-- Then writing some more comments
-            SELECT 2;"
-            ]
-        );
-    }
-
-    #[test]
-    fn test_empty_input() {
-        assert_eq!(ExecuteBatch::split_query(""), Vec::<&str>::new());
-    }
-
-    #[test]
-    fn test_mixed_content() {
-        let query = r#"
-            SELECT 'test;--'; -- line comment with ;
-            /* block comment ;
-                over lines */
-            SELECT "str;with;semicolons";
-        "#;
-        assert_eq!(
-            ExecuteBatch::split_query(query),
-            vec![
-                "SELECT 'test;--';",
-                r#"-- line comment with ;
-            /* block comment ;
-                over lines */
-            SELECT "str;with;semicolons";"#
-            ]
-        );
     }
 }

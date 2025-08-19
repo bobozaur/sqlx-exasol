@@ -270,11 +270,11 @@ impl ConnectOptions for ExaConnectOptions {
         url
     }
 
-    fn connect(&self) -> futures_util::future::BoxFuture<'_, SqlxResult<Self::Connection>>
+    async fn connect(&self) -> SqlxResult<Self::Connection>
     where
         Self::Connection: Sized,
     {
-        Box::pin(ExaConnection::establish(self))
+        ExaConnection::establish(self).await
     }
 
     fn log_statements(mut self, level: log::LevelFilter) -> Self {

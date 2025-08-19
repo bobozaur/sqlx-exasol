@@ -7,6 +7,7 @@ use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
+use sqlx_core::sql_str::SqlStr;
 
 use crate::{
     arguments::ExaBuffer, options::ProtocolVersion, responses::ExaRwAttributes, ExaAttributes,
@@ -198,20 +199,17 @@ impl Serialize for WithAttributes<'_, Fetch> {
 }
 
 /// Request to execute a single SQL statement.
-// This is internally used in the IMPORT/EXPORT jobs as well, since they rely on query execution
-// too. However, in these scenarios the query is an owned string, hence the usage of [`Cow`] here to
-// support that.
 #[derive(Clone, Debug)]
-pub struct Execute<'a>(pub Cow<'a, str>);
+pub struct Execute(pub SqlStr);
 
-impl Serialize for WithAttributes<'_, Execute<'_>> {
+impl Serialize for WithAttributes<'_, Execute> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let command = Command::Execute {
             attributes: self.needs_send.then_some(self.attributes),
-            sql_text: self.request.0.as_ref(),
+            sql_text: self.request.0.as_str(),
         };
 
         command.serialize(serializer)
@@ -220,16 +218,115 @@ impl Serialize for WithAttributes<'_, Execute<'_>> {
 
 /// Request to execute a batch of SQL statements.
 #[derive(Clone, Debug)]
-pub struct ExecuteBatch<'a>(pub Vec<&'a str>);
+pub struct ExecuteBatch(pub SqlStr);
 
-impl Serialize for WithAttributes<'_, ExecuteBatch<'_>> {
+impl ExecuteBatch {
+    /// Splits a SQL query into individual statements.
+    ///
+    /// The splitting follows the following logic:
+    /// - trim the query to remove leading and trailing whitespace
+    /// - parse each character and store the string slice up to a ';' that is not inside a line or
+    ///   block comment and not contained within single or double quotes
+    /// - register the next statement start as the next non-whitespace character after a split,
+    ///   essentially ignoring whitespace between statements (but retaining comments)
+    /// - add the remainder string slice after the last ';' if it is not empty; this means that the
+    ///   last statement could be a comment only, but that is okay as Exasol does not complain.
+    fn split_query(&self) -> Vec<&str> {
+        #[derive(Clone, Copy)]
+        enum Inside {
+            Statement,
+            LineComment,
+            BlockComment,
+            DoubleQuote,
+            SingleQuote,
+            Whitespace,
+        }
+
+        let query = self.0.as_str().trim();
+        // NOTE: Using [`char`] as the iterator element for the sake of `char::is_whitespace` which
+        //       is more exhaustive than `u8::is_ascii_whitespace`.
+        let mut chars = query.char_indices().peekable();
+        let mut state = Inside::Statement;
+        let mut statements = Vec::new();
+        let mut start = 0;
+
+        while let Some((i, c)) = chars.next() {
+            let mut peek = || chars.peek().map(|(_, c)| *c);
+            let is_whitespace = |p: Option<char>| p.is_some_and(char::is_whitespace);
+
+            #[allow(clippy::match_same_arms, reason = "better readability if split")]
+            match (state, c) {
+                // Line comment start
+                (Inside::Statement, '-') if Some('-') == peek() => {
+                    chars.next();
+                    state = Inside::LineComment;
+                }
+                // Block comment start
+                (Inside::Statement, '/') if Some('*') == peek() => {
+                    chars.next();
+                    state = Inside::BlockComment;
+                }
+                // Double quote start
+                (Inside::Statement, '"') => state = Inside::DoubleQuote,
+                // Single quote start
+                (Inside::Statement, '\'') => state = Inside::SingleQuote,
+                // Statement end
+                (Inside::Statement, ';') => {
+                    statements.push(&query[start..=i]);
+                    start = i + 1;
+
+                    // Whitespace between statements start
+                    if is_whitespace(peek()) {
+                        state = Inside::Whitespace;
+                    }
+                }
+                // Skip escaped double quote
+                (Inside::DoubleQuote, '"') if Some('"') == peek() => {
+                    chars.next();
+                }
+                // Skip escaped single quote
+                (Inside::SingleQuote, '\'') if Some('\'') == peek() => {
+                    chars.next();
+                }
+                // Double quote end
+                (Inside::DoubleQuote, '"') => state = Inside::Statement,
+                // Single quote end
+                (Inside::SingleQuote, '\'') => state = Inside::Statement,
+                // Line comment end
+                (Inside::LineComment, '\n') => state = Inside::Statement,
+                // Block comment end
+                (Inside::BlockComment, '*') if Some('/') == peek() => {
+                    chars.next();
+                    state = Inside::Statement;
+                }
+                // Whitespace between statements end
+                (Inside::Whitespace, _) if !is_whitespace(peek()) => {
+                    start = i + 1;
+                    state = Inside::Statement;
+                }
+                _ => (),
+            }
+        }
+
+        // Add final part if anything remains after the last `;`.
+        // NOTE: Exasol does not complain about trailing comments, but only empty queries.
+        let remaining = &query[start..];
+        if !remaining.is_empty() {
+            statements.push(remaining);
+        }
+
+        statements
+    }
+}
+
+impl Serialize for WithAttributes<'_, ExecuteBatch> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let command = Command::ExecuteBatch {
             attributes: self.needs_send.then_some(self.attributes),
-            sql_texts: &self.request.0,
+            sql_texts: &self.request.split_query(),
         };
 
         command.serialize(serializer)
@@ -238,16 +335,16 @@ impl Serialize for WithAttributes<'_, ExecuteBatch<'_>> {
 
 /// Request to create a prepared statement.
 #[derive(Clone, Debug)]
-pub struct CreatePreparedStmt<'a>(pub &'a str);
+pub struct CreatePreparedStmt(pub SqlStr);
 
-impl Serialize for WithAttributes<'_, CreatePreparedStmt<'_>> {
+impl Serialize for WithAttributes<'_, CreatePreparedStmt> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let command = Command::CreatePreparedStatement {
             attributes: self.needs_send.then_some(self.attributes),
-            sql_text: self.request.0,
+            sql_text: self.request.0.as_str(),
         };
 
         command.serialize(serializer)
@@ -506,5 +603,185 @@ impl From<ExaBuffer> for PreparedStmtData {
             num_rows: value.num_param_sets(),
             buffer: value.finish(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx_core::sql_str::SqlStr;
+
+    use super::ExecuteBatch;
+
+    #[test]
+    fn test_simple_statements() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(
+                "SELECT * FROM users; SELECT * FROM orders;"
+            ))
+            .split_query(),
+            vec!["SELECT * FROM users;", "SELECT * FROM orders;"]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_single_quote() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(
+                "SELECT ';' AS val; SELECT 'abc;def' AS val2;"
+            ))
+            .split_query(),
+            vec!["SELECT ';' AS val;", "SELECT 'abc;def' AS val2;"]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_double_quote() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("SELECT \"col;name\" FROM table;")).split_query(),
+            vec!["SELECT \"col;name\" FROM table;"]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_line_comment() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(
+                "SELECT 1; -- this is a comment; with a semicolon\nSELECT 2;"
+            ))
+            .split_query(),
+            vec![
+                "SELECT 1;",
+                "-- this is a comment; with a semicolon\nSELECT 2;"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_in_block_comment() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(
+                "SELECT 1; /* multi-line ; comment */ SELECT 2;"
+            ))
+            .split_query(),
+            vec!["SELECT 1;", "/* multi-line ; comment */ SELECT 2;"]
+        );
+    }
+
+    #[test]
+    fn test_escaped_quotes() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(
+                "SELECT 'It''s a test; really'; SELECT \"escaped\"\"quote\" FROM dual;"
+            ))
+            .split_query(),
+            vec![
+                "SELECT 'It''s a test; really';",
+                "SELECT \"escaped\"\"quote\" FROM dual;"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_trailing_semicolon_and_whitespace() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("SELECT 1;; \n  \n;")).split_query(),
+            vec!["SELECT 1;", ";", ";"]
+        );
+    }
+
+    #[test]
+    fn test_leading_semicolon() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(";SELECT 1;")).split_query(),
+            vec![";", "SELECT 1;"]
+        );
+    }
+
+    #[test]
+    fn test_leading_semicolon_and_whitespace() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("  ; SELECT 1;")).split_query(),
+            vec![";", "SELECT 1;"]
+        );
+    }
+
+    #[test]
+    fn test_no_semicolon() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("SELECT 1")).split_query(),
+            vec!["SELECT 1"]
+        );
+    }
+
+    #[test]
+    fn test_no_whitespace_between_statements() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("SELECT 1;SELECT 2")).split_query(),
+            vec!["SELECT 1;", "SELECT 2"]
+        );
+    }
+
+    #[test]
+    fn test_no_whitespace_between_stmt_and_comment() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("SELECT 1;/*testing*/SELECT 2;")).split_query(),
+            vec!["SELECT 1;", "/*testing*/SELECT 2;"]
+        );
+    }
+
+    #[test]
+    fn test_trailing_comment() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("SELECT 1;/*testing*/")).split_query(),
+            vec!["SELECT 1;", "/*testing*/"]
+        );
+    }
+
+    #[test]
+    fn test_whitespace_between_statements() {
+        let query = "
+            /* Writing some comments */
+            SELECT 1;
+
+            -- Then writing some more comments
+            SELECT 2;
+            ";
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(query)).split_query(),
+            vec![
+                "/* Writing some comments */
+            SELECT 1;",
+                "-- Then writing some more comments
+            SELECT 2;"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_empty_input() {
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static("")).split_query(),
+            Vec::<&str>::new()
+        );
+    }
+
+    #[test]
+    fn test_mixed_content() {
+        let query = r#"
+            SELECT 'test;--'; -- line comment with ;
+            /* block comment ;
+                over lines */
+            SELECT "str;with;semicolons";
+        "#;
+        assert_eq!(
+            ExecuteBatch(SqlStr::from_static(query)).split_query(),
+            vec![
+                "SELECT 'test;--';",
+                r#"-- line comment with ;
+            /* block comment ;
+                over lines */
+            SELECT "str;with;semicolons";"#
+            ]
+        );
     }
 }

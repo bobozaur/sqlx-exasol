@@ -6,8 +6,7 @@ pub mod websocket;
 
 use std::net::SocketAddr;
 
-use futures_core::future::BoxFuture;
-use futures_util::{FutureExt, SinkExt};
+use futures_util::SinkExt;
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx_core::{
     connection::{Connection, LogSettings},
@@ -138,43 +137,39 @@ impl Connection for ExaConnection {
 
     type Options = ExaConnectOptions;
 
-    fn close(mut self) -> BoxFuture<'static, SqlxResult<()>> {
-        Box::pin(async move {
-            Disconnect::default().future(&mut self.ws).await?;
-            self.ws.close().await?;
-            Ok(())
-        })
+    async fn close(mut self) -> SqlxResult<()> {
+        Disconnect::default().future(&mut self.ws).await?;
+        self.ws.close().await?;
+        Ok(())
     }
 
-    fn close_hard(mut self) -> BoxFuture<'static, SqlxResult<()>> {
-        Box::pin(async move { self.ws.close().await })
+    async fn close_hard(mut self) -> SqlxResult<()> {
+        self.ws.close().await
     }
 
-    fn ping(&mut self) -> BoxFuture<'_, SqlxResult<()>> {
-        self.ws.ping().boxed()
+    async fn ping(&mut self) -> SqlxResult<()> {
+        self.ws.ping().await
     }
 
-    fn begin(&mut self) -> BoxFuture<'_, SqlxResult<Transaction<'_, Self::Database>>>
+    async fn begin(&mut self) -> SqlxResult<Transaction<'_, Self::Database>>
     where
         Self: Sized,
     {
-        Transaction::begin(self, None)
+        Transaction::begin(self, None).await
     }
 
     fn shrink_buffers(&mut self) {}
 
-    fn flush(&mut self) -> BoxFuture<'_, SqlxResult<()>> {
-        Box::pin(async {
-            if let Some(future) = self.ws.pending_close.take() {
-                future.future(&mut self.ws).await?;
-            }
+    async fn flush(&mut self) -> SqlxResult<()> {
+        if let Some(future) = self.ws.pending_close.take() {
+            future.future(&mut self.ws).await?;
+        }
 
-            if let Some(future) = self.ws.pending_rollback.take() {
-                future.future(&mut self.ws).await?;
-            }
+        if let Some(future) = self.ws.pending_rollback.take() {
+            future.future(&mut self.ws).await?;
+        }
 
-            Ok(())
-        })
+        Ok(())
     }
 
     fn should_flush(&self) -> bool {
@@ -188,19 +183,17 @@ impl Connection for ExaConnection {
         self.ws.statement_cache.len()
     }
 
-    fn clear_cached_statements(&mut self) -> BoxFuture<'_, SqlxResult<()>>
+    async fn clear_cached_statements(&mut self) -> SqlxResult<()>
     where
         Self::Database: sqlx_core::database::HasStatementCache,
     {
-        Box::pin(async {
-            while let Some((_, prep)) = self.ws.statement_cache.pop_lru() {
-                ClosePrepared::new(prep.statement_handle)
-                    .future(&mut self.ws)
-                    .await?;
-            }
+        while let Some((_, prep)) = self.ws.statement_cache.pop_lru() {
+            ClosePrepared::new(prep.statement_handle)
+                .future(&mut self.ws)
+                .await?;
+        }
 
-            Ok(())
-        })
+        Ok(())
     }
 }
 

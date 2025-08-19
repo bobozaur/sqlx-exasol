@@ -8,24 +8,24 @@ macro_rules! test_type_valid {
             async fn [< test_type_valid_ $name >] (
                 mut con: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
             ) -> Result<(), sqlx_exasol::error::BoxDynError> {
-                use sqlx_exasol::{Executor, query, query_scalar};
+                use sqlx_exasol::Executor;
 
                 let create_sql = concat!("CREATE TABLE sqlx_test_type ( col ", $datatype, " );");
                 con.execute(create_sql).await?;
 
                 $(
-                    let query_result = query("INSERT INTO sqlx_test_type VALUES (?)")
+                    let query_result = sqlx_exasol::query("INSERT INTO sqlx_test_type VALUES (?)")
                         .bind($prepared)
                         .execute(&mut *con)
                         .await?;
 
                     assert_eq!(query_result.rows_affected(), 1);
-                    let query_str = format!("INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));", $unprepared, $datatype);
+                    let query = sqlx_exasol::AssertSqlSafe(format!("INSERT INTO sqlx_test_type VALUES (CAST ({} as {}));", $unprepared, $datatype));
 
-                    let query_result = con.execute(query_str.as_str()).await?;
+                    let query_result = con.execute(query).await?;
                     assert_eq!(query_result.rows_affected(), 1);
 
-                    let mut values: Vec<$ty> = query_scalar("SELECT * FROM sqlx_test_type;")
+                    let mut values: Vec<$ty> = sqlx_exasol::query_scalar("SELECT * FROM sqlx_test_type;")
                         .fetch_all(&mut *con)
                         .await?;
 

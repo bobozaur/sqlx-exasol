@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use sqlx_core::{describe::Describe, impl_type_checking};
+use sqlx_core::{config::drivers::Config, describe::Describe, impl_type_checking};
 use sqlx_macros_core::{
     database::{CachingDescribeBlocking, DatabaseExt},
     query::QueryDriver,
@@ -14,10 +14,14 @@ impl DatabaseExt for Exasol {
 
     const ROW_PATH: &'static str = "sqlx_exasol::ExaRow";
 
-    fn describe_blocking(query: &str, database_url: &str) -> SqlxResult<Describe<Self>> {
+    fn describe_blocking(
+        query: &str,
+        database_url: &str,
+        driver_config: &Config,
+    ) -> SqlxResult<Describe<Self>> {
         static CACHE: CachingDescribeBlocking<Exasol> = CachingDescribeBlocking::new();
 
-        CACHE.describe(query, database_url)
+        CACHE.describe(query, database_url, driver_config)
     }
 }
 

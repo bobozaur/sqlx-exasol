@@ -6,8 +6,8 @@ use futures_util::TryStreamExt;
 use sqlx_exasol::{
     error::BoxDynError,
     pool::{PoolConnection, PoolOptions},
-    Column, Connection, ExaConnectOptions, ExaConnection, ExaPool, ExaPoolOptions, ExaQueryResult,
-    ExaRow, Exasol, Executor, Row, Statement, TypeInfo,
+    AssertSqlSafe, Column, Connection, ExaConnectOptions, ExaConnection, ExaPool, ExaPoolOptions,
+    ExaQueryResult, ExaRow, Exasol, Executor, Row, SqlStr, Statement, TypeInfo,
 };
 
 #[sqlx_exasol::test]
@@ -236,7 +236,9 @@ async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> anyhow
         .fetch_one(&mut *tx)
         .await?;
 
-    let statement = tx.prepare("SELECT * FROM tweet WHERE id = ?").await?;
+    let statement = tx
+        .prepare(SqlStr::from_static("SELECT * FROM tweet WHERE id = ?"))
+        .await?;
 
     assert_eq!(statement.column(0).name(), "id");
     assert_eq!(statement.column(1).name(), "created_at");
@@ -628,15 +630,19 @@ async fn it_switches_schema(
     let mut con = pool.acquire().await?;
     let schema = "TEST_SWITCH_SCHEMA";
 
-    con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
-        .await?;
+    con.execute(AssertSqlSafe(
+        format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str(),
+    ))
+    .await?;
 
     let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
         .fetch_one(&mut *con)
         .await?;
 
-    con.execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str())
-        .await?;
+    con.execute(AssertSqlSafe(
+        format!("DROP SCHEMA IF EXISTS {schema} CASCADE;").as_str(),
+    ))
+    .await?;
 
     assert_eq!(schema, new_schema);
 
@@ -657,8 +663,10 @@ async fn it_switches_schema_from_attr(
 
     let schema = "TEST_SWITCH_SCHEMA_ATTR";
 
-    con.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str())
-        .await?;
+    con.execute(AssertSqlSafe(
+        format!("CREATE SCHEMA IF NOT EXISTS {schema};").as_str(),
+    ))
+    .await?;
 
     con.attributes_mut().set_current_schema(orig_schema.clone());
     con.flush_attributes().await?;

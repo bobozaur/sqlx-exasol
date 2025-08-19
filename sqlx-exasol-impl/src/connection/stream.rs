@@ -35,18 +35,18 @@ use crate::{
 /// from the database.
 ///
 /// This is the top of the hierarchy and the actual type used to stream rows from a [`ResultSet`].
-pub struct ResultStream<'a> {
-    ws: &'a mut ExaWebSocket,
-    logger: QueryLogger<'a>,
+pub struct ResultStream<'ws> {
+    ws: &'ws mut ExaWebSocket,
+    logger: QueryLogger,
     result_set_handles: Vec<u16>,
-    state: ResultStreamState<'a>,
+    state: ResultStreamState,
     had_err: bool,
 }
 
-impl<'a> ResultStream<'a> {
-    pub fn new<F>(ws: &'a mut ExaWebSocket, logger: QueryLogger<'a>, future: F) -> Self
+impl<'ws> ResultStream<'ws> {
+    pub fn new<F>(ws: &'ws mut ExaWebSocket, logger: QueryLogger, future: F) -> Self
     where
-        ResultStreamState<'a>: From<F>,
+        ResultStreamState: From<F>,
     {
         Self {
             ws,
@@ -132,27 +132,27 @@ impl Drop for ResultStream<'_> {
 
 /// State used to distinguish between the initial query execution and the subsequent streaming of
 /// rows.
-pub enum ResultStreamState<'a> {
-    Execute(Execute<'a>),
-    ExecuteBatch(ExecuteBatch<'a>),
-    ExecutePrepared(ExecutePrepared<'a>),
+pub enum ResultStreamState {
+    Execute(Execute),
+    ExecuteBatch(ExecuteBatch),
+    ExecutePrepared(ExecutePrepared),
     Stream(MultiResultStream),
 }
 
-impl<'a> From<Execute<'a>> for ResultStreamState<'a> {
-    fn from(value: Execute<'a>) -> Self {
+impl From<Execute> for ResultStreamState {
+    fn from(value: Execute) -> Self {
         Self::Execute(value)
     }
 }
 
-impl<'a> From<ExecuteBatch<'a>> for ResultStreamState<'a> {
-    fn from(value: ExecuteBatch<'a>) -> Self {
+impl From<ExecuteBatch> for ResultStreamState {
+    fn from(value: ExecuteBatch) -> Self {
         Self::ExecuteBatch(value)
     }
 }
 
-impl<'a> From<ExecutePrepared<'a>> for ResultStreamState<'a> {
-    fn from(value: ExecutePrepared<'a>) -> Self {
+impl From<ExecutePrepared> for ResultStreamState {
+    fn from(value: ExecutePrepared) -> Self {
         Self::ExecutePrepared(value)
     }
 }

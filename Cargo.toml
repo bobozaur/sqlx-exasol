@@ -154,13 +154,13 @@ serde_json = { version = "1", default-features = false, features = [
     "std",
     "raw_value",
 ] }
-sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
-sqlx-cli = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
-sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false, features = [
+sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
+sqlx-cli = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
+sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false, features = [
     "offline",
     "migrate",
 ] }
-sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "a9fb5816264694880d57c6de7f8acb9509858d3f", default-features = false }
+sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
 syn = { version = "2", default-features = false, features = [
     "parsing",
     "proc-macro",

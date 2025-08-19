@@ -131,7 +131,7 @@ impl Future for EtlQuery<'_> {
 
 /// Implementor of [`WebSocketFuture`] that executes an owned ETL query.
 #[derive(Debug)]
-struct ExecuteEtl(ExaRoundtrip<Execute<'static>, SingleResult>);
+struct ExecuteEtl(ExaRoundtrip<Execute, SingleResult>);
 
 impl WebSocketFuture for ExecuteEtl {
     type Output = ExaQueryResult;

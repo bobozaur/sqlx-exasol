@@ -9,7 +9,10 @@ use std::{
 
 use arrayvec::ArrayString;
 use futures_core::future::BoxFuture;
-use sqlx_core::net::{Socket, WithSocket};
+use sqlx_core::{
+    net::{Socket, WithSocket},
+    sql_str::{AssertSqlSafe, SqlSafeStr},
+};
 
 use crate::{
     connection::websocket::{
@@ -118,8 +121,8 @@ pub trait EtlJob: Sized + Send + Sync {
                 .await?;
 
             // Query execution driving future to be returned and awaited alongside the worker IO
-            let query = self.query(addrs, with_tls, with_compression);
-            let future = ExecuteEtl(ExaRoundtrip::new(Execute(query.into()))).future(&mut conn.ws);
+            let query = AssertSqlSafe(self.query(addrs, with_tls, with_compression)).into_sql_str();
+            let future = ExecuteEtl(ExaRoundtrip::new(Execute(query))).future(&mut conn.ws);
 
             Ok((EtlQuery(future), workers))
         }
