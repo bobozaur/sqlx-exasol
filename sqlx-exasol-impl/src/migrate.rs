@@ -26,11 +26,9 @@ const LOCK_WARN: &str = "Exasol does not support database locking!";
 fn parse_for_maintenance(url: &str) -> SqlxResult<(ExaConnectOptions, String)> {
     let mut options = ExaConnectOptions::from_str(url)?;
 
-    let database = options
-        .schema
-        .ok_or_else(|| SqlxError::Configuration("DATABASE_URL does not specify a database".into()))
-        // Escape double quotes because we'll quote the database name in constructed queries.
-        .map(|db| db.replace('"', "\"\""))?;
+    let database = options.schema.ok_or_else(|| {
+        SqlxError::Configuration("DATABASE_URL does not specify a database".into())
+    })?;
 
     // switch to <no> database for create/drop commands
     options.schema = None;
@@ -41,6 +39,8 @@ fn parse_for_maintenance(url: &str) -> SqlxResult<(ExaConnectOptions, String)> {
 impl MigrateDatabase for Exasol {
     async fn create_database(url: &str) -> SqlxResult<()> {
         let (options, database) = parse_for_maintenance(url)?;
+        // Escape double quotes because we'll quote the database identifier.
+        let database = database.replace('"', "\"\"");
         let mut conn = options.connect().await?;
 
         let query = format!(r#"CREATE SCHEMA "{database}";"#);
@@ -65,6 +65,8 @@ impl MigrateDatabase for Exasol {
 
     async fn drop_database(url: &str) -> SqlxResult<()> {
         let (options, database) = parse_for_maintenance(url)?;
+        // Escape double quotes because we'll quote the database identifier.
+        let database = database.replace('"', "\"\"");
         let mut conn = options.connect().await?;
 
         let query = format!(r#"DROP SCHEMA IF EXISTS "{database}" CASCADE;"#);
