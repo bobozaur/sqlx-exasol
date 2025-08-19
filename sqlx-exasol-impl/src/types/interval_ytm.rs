@@ -18,7 +18,7 @@ use crate::{
 /// A duration interval as a representation of the `INTERVAL YEAR TO MONTH` datatype.
 ///
 /// The duration is expressed in months.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExaIntervalYearToMonth(pub i64);
 
 impl Type<Exasol> for ExaIntervalYearToMonth {
