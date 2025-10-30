@@ -142,7 +142,11 @@ impl EtlJob for ExportBuilder<'_> {
         query.push_str("EXPORT ");
 
         match self.source {
-            ExportSource::Table(tbl) => {
+            ExportSource::Table(schema, tbl) => {
+                if let Some(schema) = schema {
+                    Self::push_ident(&mut query, schema);
+                    Self::push('.')
+                }
                 Self::push_ident(&mut query, tbl);
             }
             ExportSource::Query(qr) => {

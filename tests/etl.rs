@@ -144,7 +144,7 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> AnyResult<(
         .execute(&mut *conn)
         .await?;
 
-    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table(";)BAD_TABLE_NAME*&"))
+    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table(None, ";)BAD_TABLE_NAME*&"))
         .build(&mut conn)
         .await?;
 
@@ -171,7 +171,7 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> AnyResult<()>
         .execute(&mut *conn)
         .await?;
 
-    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table("TEST_ETL"))
+    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table(None, "TEST_ETL"))
         .build(&mut conn)
         .await?;
 

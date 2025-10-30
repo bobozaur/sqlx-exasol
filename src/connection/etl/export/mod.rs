@@ -52,7 +52,7 @@ impl AsyncRead for ExaExport {
 #[derive(Clone, Copy, Debug)]
 pub enum ExportSource<'a> {
     Query(&'a str),
-    Table(&'a str),
+    Table(& Option<&'a str>, &'a str),
 }
 
 pub enum ExaExportState {
