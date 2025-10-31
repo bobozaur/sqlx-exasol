@@ -145,7 +145,7 @@ impl EtlJob for ExportBuilder<'_> {
             ExportSource::Table(schema, tbl) => {
                 if let Some(schema) = schema {
                     Self::push_ident(&mut query, schema);
-                    Self::push('.')
+                    query.push('.')
                 }
                 Self::push_ident(&mut query, tbl);
             }
