@@ -36,9 +36,9 @@ sqlx-toml = ["sqlx-cli/sqlx-toml"]
 clap = { workspace = true }
 console = { workspace = true }
 sqlx-exasol = { workspace = true, features = [
-    "runtime-tokio",
-    "migrate",
-    "any",
+  "runtime-tokio",
+  "migrate",
+  "any",
 ] }
 sqlx-cli = { workspace = true }
 tokio = { workspace = true }

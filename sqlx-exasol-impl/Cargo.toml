@@ -28,10 +28,10 @@ uuid = ["sqlx-core/uuid", "dep:uuid"]
 # TLS features
 tls = []
 native-tls = [
-    "dep:native-tls",
-    "sqlx-core/_tls-native-tls",
-    "tls",
-    "rcgen?/aws_lc_rs",
+  "dep:native-tls",
+  "sqlx-core/_tls-native-tls",
+  "tls",
+  "rcgen?/aws_lc_rs",
 ]
 rustls-aws-lc-rs = ["rustls", "rcgen?/aws_lc_rs"]
 rustls-ring = ["rustls", "rcgen?/ring"]

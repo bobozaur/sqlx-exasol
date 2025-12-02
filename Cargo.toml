@@ -25,15 +25,15 @@ exclude = ["tests/*"]
 
 [package.metadata.docs.rs]
 features = [
-    "etl",
-    "bigdecimal",
-    "chrono",
-    "rust_decimal",
-    "time",
-    "uuid",
-    "compression",
-    "migrate",
-    "macros",
+  "etl",
+  "bigdecimal",
+  "chrono",
+  "rust_decimal",
+  "time",
+  "uuid",
+  "compression",
+  "migrate",
+  "macros",
 ]
 
 [features]
@@ -42,9 +42,9 @@ default = ["any", "macros", "migrate", "json"]
 derive = ["sqlx/derive", "sqlx-exasol-macros?/derive"]
 macros = ["derive", "sqlx/macros", "sqlx-exasol-macros/macros"]
 migrate = [
-    "sqlx/migrate",
-    "sqlx-exasol-impl/migrate",
-    "sqlx-exasol-macros?/migrate",
+  "sqlx/migrate",
+  "sqlx-exasol-impl/migrate",
+  "sqlx-exasol-macros?/migrate",
 ]
 
 # Base runtime features without TLS
@@ -54,16 +54,16 @@ runtime-tokio = ["sqlx/runtime-tokio"]
 # TLS features
 tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
 tls-rustls-aws-lc-rs = [
-    "sqlx/tls-rustls-aws-lc-rs",
-    "sqlx-exasol-impl/rustls-aws-lc-rs",
+  "sqlx/tls-rustls-aws-lc-rs",
+  "sqlx-exasol-impl/rustls-aws-lc-rs",
 ]
 tls-rustls-ring-webpki = [
-    "sqlx/tls-rustls-ring-webpki",
-    "sqlx-exasol-impl/rustls-ring",
+  "sqlx/tls-rustls-ring-webpki",
+  "sqlx-exasol-impl/rustls-ring",
 ]
 tls-rustls-ring-native-roots = [
-    "sqlx/tls-rustls-ring-native-roots",
-    "sqlx-exasol-impl/rustls-ring",
+  "sqlx/tls-rustls-ring-native-roots",
+  "sqlx-exasol-impl/rustls-ring",
 ]
 
 # Database
@@ -71,21 +71,21 @@ any = ["sqlx/any", "sqlx-exasol-impl/any"]
 
 # Types
 bigdecimal = [
-    "sqlx/bigdecimal",
-    "sqlx-exasol-impl/bigdecimal",
-    "sqlx-exasol-macros?/bigdecimal",
+  "sqlx/bigdecimal",
+  "sqlx-exasol-impl/bigdecimal",
+  "sqlx-exasol-macros?/bigdecimal",
 ]
 chrono = [
-    "sqlx/chrono",
-    "sqlx-exasol-impl/chrono",
-    "sqlx-exasol-macros?/chrono",
+  "sqlx/chrono",
+  "sqlx-exasol-impl/chrono",
+  "sqlx-exasol-macros?/chrono",
 ]
 geo-types = ["sqlx-exasol-impl/geo-types", "sqlx-exasol-macros?/geo-types"]
 json = ["sqlx/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
 rust_decimal = [
-    "sqlx/rust_decimal",
-    "sqlx-exasol-impl/rust_decimal",
-    "sqlx-exasol-macros?/rust_decimal",
+  "sqlx/rust_decimal",
+  "sqlx-exasol-impl/rust_decimal",
+  "sqlx-exasol-macros?/rust_decimal",
 ]
 time = ["sqlx/time", "sqlx-exasol-impl/time", "sqlx-exasol-macros?/time"]
 uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid", "sqlx-exasol-macros?/uuid"]
@@ -104,18 +104,18 @@ sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
 anyhow = { version = "1", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
 async-compression = { version = "0.4", default-features = false, features = [
-    "futures-io",
-    "gzip",
-    "zlib",
+  "futures-io",
+  "gzip",
+  "zlib",
 ] }
 async-tungstenite = { version = "0.29", default-features = false, features = [
-    "handshake",
-    "futures-03-sink",
+  "handshake",
+  "futures-03-sink",
 ] }
 base64 = { version = "0.22", default-features = false }
 bigdecimal = { version = "0.4", default-features = false, features = [
-    "std",
-    "serde-json",
+  "std",
+  "serde-json",
 ] }
 chrono = { version = "0.4", default-features = false, features = ["serde"] }
 clap = { version = "4", default-features = false, features = ["derive"] }
@@ -124,64 +124,64 @@ dotenvy = { version = "0.15", default-features = false }
 futures-io = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 futures-channel = { version = "0.3", default-features = false, features = [
-    "sink",
+  "sink",
 ] }
 futures-core = { version = "0.3", default-features = false }
 geo-types = { version = "0.7", default-features = false, features = ["std"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 http-body-util = { version = "0.1", default-features = false }
 hyper = { version = "1.4", default-features = false, features = [
-    "server",
-    "http1",
+  "server",
+  "http1",
 ] }
 lru = { version = "0.12", default-features = false }
 native-tls = { version = "0.2", default-features = false }
 paste = { version = "1", default-features = false }
 quote = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = [
-    "std",
-    "std_rng",
+  "std",
+  "std_rng",
 ] }
 rcgen = { version = "0.13", default-features = false, features = ["pem"] }
 rsa = { version = "0.9", default-features = false, features = ["pem", "std"] }
 rust_decimal = { version = "1", default-features = false, features = ["serde"] }
 rustls = { version = "0.23", default-features = false, features = [
-    "std",
-    "tls12",
+  "std",
+  "tls12",
 ] }
 serde = { version = "1", default-features = false, features = ["derive", "rc"] }
 serde_json = { version = "1", default-features = false, features = [
-    "std",
-    "raw_value",
+  "std",
+  "raw_value",
 ] }
 sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
 sqlx-cli = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
 sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false, features = [
-    "offline",
-    "migrate",
+  "offline",
+  "migrate",
 ] }
 sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
 syn = { version = "2", default-features = false, features = [
-    "parsing",
-    "proc-macro",
+  "parsing",
+  "proc-macro",
 ] }
 thiserror = { version = "1", default-features = false }
 time = { version = "0.3", default-features = false, features = [
-    "std",
-    "serde",
-    "formatting",
-    "parsing",
-    "macros",
+  "std",
+  "serde",
+  "formatting",
+  "parsing",
+  "macros",
 ] }
 tokio = { version = "1", default-features = false, features = [
-    "rt-multi-thread",
+  "rt-multi-thread",
 ] }
 tracing = { version = "0.1", default-features = false, features = ["log"] }
 url = { version = "2", default-features = false }
 uuid = { version = "1", default-features = false, features = ["serde"] }
 wkt = { version = "0.14", default-features = false, features = [
-    "geo-types",
-    "serde",
+  "geo-types",
+  "serde",
 ] }
 
 [dependencies]
