@@ -13,7 +13,7 @@ pub enum ExaConfigError {
     MissingAuthMethod,
     #[error("multiple authentication methods provided")]
     MultipleAuthMethods,
-    #[error("invalid URL scheme: {0}, expected: {}", URL_SCHEME)]
+    #[error("invalid URL scheme: {0}, expected: {URL_SCHEME}")]
     InvalidUrlScheme(String),
     #[error("invalid connection parameter: {0}")]
     InvalidParameter(&'static str),

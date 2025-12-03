@@ -91,12 +91,12 @@ impl AnyConnectionBackend for ExaConnection {
         Ok(self)
     }
 
-    fn fetch_many<'q>(
-        &'q mut self,
+    fn fetch_many(
+        &mut self,
         sql: SqlStr,
         persistent: bool,
-        arguments: Option<AnyArguments<'q>>,
-    ) -> BoxStream<'q, SqlxResult<Either<AnyQueryResult, AnyRow>>> {
+        arguments: Option<AnyArguments>,
+    ) -> BoxStream<'_, SqlxResult<Either<AnyQueryResult, AnyRow>>> {
         let logger = QueryLogger::new(sql, self.log_settings.clone());
         let sql = logger.sql().clone();
 
@@ -127,12 +127,12 @@ impl AnyConnectionBackend for ExaConnection {
         }
     }
 
-    fn fetch_optional<'q>(
-        &'q mut self,
+    fn fetch_optional(
+        &mut self,
         sql: SqlStr,
         persistent: bool,
-        arguments: Option<AnyArguments<'q>>,
-    ) -> BoxFuture<'q, SqlxResult<Option<AnyRow>>> {
+        arguments: Option<AnyArguments>,
+    ) -> BoxFuture<'_, SqlxResult<Option<AnyRow>>> {
         let logger = QueryLogger::new(sql, self.log_settings.clone());
         let sql = logger.sql().clone();
 
@@ -286,10 +286,7 @@ fn map_result(result: ExaQueryResult) -> AnyQueryResult {
     }
 }
 
-fn convert_arguments_to<'q, 'a>(args: &'a AnyArguments<'q>) -> Result<ExaArguments, BoxDynError>
-where
-    'q: 'a,
-{
+fn convert_arguments_to(args: &AnyArguments) -> Result<ExaArguments, BoxDynError> {
     let mut out = ExaArguments::default();
 
     for arg in &args.values.0 {

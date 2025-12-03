@@ -16,7 +16,7 @@ pub struct ExaArguments {
     pub types: Vec<ExaTypeInfo>,
 }
 
-impl<'q> Arguments<'q> for ExaArguments {
+impl Arguments for ExaArguments {
     type Database = Exasol;
 
     fn reserve(&mut self, additional: usize, size: usize) {
@@ -24,9 +24,9 @@ impl<'q> Arguments<'q> for ExaArguments {
         self.buf.buffer.reserve(size);
     }
 
-    fn add<T>(&mut self, value: T) -> Result<(), BoxDynError>
+    fn add<'t, T>(&mut self, value: T) -> Result<(), BoxDynError>
     where
-        T: 'q + Encode<'q, Self::Database> + Type<Self::Database>,
+        T: Encode<'t, Self::Database> + Type<Self::Database>,
     {
         let ty = value.produces().unwrap_or_else(T::type_info);
 

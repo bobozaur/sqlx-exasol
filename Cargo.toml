@@ -154,18 +154,18 @@ serde_json = { version = "1", default-features = false, features = [
   "std",
   "raw_value",
 ] }
-sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
-sqlx-cli = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
-sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false, features = [
+sqlx = { version = "0.9.0-alpha.1", default-features = false }
+sqlx-cli = { version = "0.9.0-alpha.1", default-features = false }
+sqlx-core = { version = "0.9.0-alpha.1", default-features = false, features = [
   "offline",
   "migrate",
 ] }
-sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "e77f32ea5e597d8dba6ad09b7722384ab6ed2d06", default-features = false }
+sqlx-macros-core = { version = "0.9.0-alpha.1", default-features = false }
 syn = { version = "2", default-features = false, features = [
   "parsing",
   "proc-macro",
 ] }
-thiserror = { version = "1", default-features = false }
+thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false, features = [
   "std",
   "serde",

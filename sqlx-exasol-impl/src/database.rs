@@ -37,9 +37,9 @@ impl Database for Exasol {
 
     type ValueRef<'r> = ExaValueRef<'r>;
 
-    type Arguments<'q> = ExaArguments;
+    type Arguments = ExaArguments;
 
-    type ArgumentBuffer<'q> = ExaBuffer;
+    type ArgumentBuffer = ExaBuffer;
 
     type Statement = ExaStatement;
 }
