@@ -2,7 +2,7 @@ use sqlx_exasol::types::chrono::{DateTime, Local, NaiveDate, NaiveDateTime, Time
 
 use crate::{test_type_array, test_type_valid};
 
-const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.9f";
+const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.f";
 const DATE_FMT: &str = "%Y-%m-%d";
 
 test_type_valid!(naive_datetime<NaiveDateTime>::"TIMESTAMP"::("'2023-08-12 19:22:36.591000'" => NaiveDateTime::parse_from_str("2023-08-12 19:22:36.591000", TIMESTAMP_FMT).unwrap()));

@@ -14,7 +14,7 @@ use crate::{
     value::ExaValueRef,
 };
 
-const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.9f";
+const TIMESTAMP_FMT: &str = "%Y-%m-%d %H:%M:%S%.f";
 
 impl Type<Exasol> for NaiveDateTime {
     fn type_info() -> ExaTypeInfo {
