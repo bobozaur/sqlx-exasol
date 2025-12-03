@@ -1,9 +1,15 @@
 #![cfg(feature = "migrate")]
 
-use sqlx_exasol::{error::ErrorKind, pool::PoolConnection, Exasol};
+use sqlx_exasol::{
+    error::{BoxDynError, ErrorKind},
+    pool::PoolConnection,
+    Exasol,
+};
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn it_fails_with_unique_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_fails_with_unique_violation(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     sqlx_exasol::query("INSERT INTO tweet(id, text, owner_id) VALUES (1, 'Foo', 1)")
         .execute(&mut *conn)
         .await?;
@@ -25,7 +31,7 @@ async fn it_fails_with_unique_violation(mut conn: PoolConnection<Exasol>) -> any
 #[sqlx_exasol::test(migrations = "tests/setup")]
 async fn it_fails_with_foreign_key_violation(
     mut conn: PoolConnection<Exasol>,
-) -> anyhow::Result<()> {
+) -> Result<(), BoxDynError> {
     let res: Result<_, sqlx_exasol::Error> =
         sqlx_exasol::query("INSERT INTO tweet_reply (tweet_id, text) VALUES (1, 'Reply!');")
             .execute(&mut *conn)
@@ -41,7 +47,9 @@ async fn it_fails_with_foreign_key_violation(
 }
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn it_fails_with_not_null_violation(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_fails_with_not_null_violation(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     let res: Result<_, sqlx_exasol::Error> =
         sqlx_exasol::query("INSERT INTO tweet (text) VALUES (null);")
             .execute(&mut *conn)

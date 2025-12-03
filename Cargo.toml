@@ -101,7 +101,6 @@ sqlx-exasol-macros = { path = "sqlx-exasol-macros" }
 sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
 
 # External
-anyhow = { version = "1", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
 async-compression = { version = "0.4", default-features = false, features = [
   "futures-io",
@@ -190,7 +189,6 @@ sqlx-exasol-impl = { workspace = true }
 sqlx = { workspace = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
 dotenvy = { workspace = true }
 futures-util = { workspace = true }
 paste = { workspace = true }

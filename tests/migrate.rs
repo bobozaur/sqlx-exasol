@@ -2,10 +2,13 @@
 
 use std::path::Path;
 
-use sqlx_exasol::{migrate::Migrator, pool::PoolConnection, ExaConnection, Exasol, Executor, Row};
+use sqlx_exasol::{
+    error::BoxDynError, migrate::Migrator, pool::PoolConnection, ExaConnection, Exasol, Executor,
+    Row,
+};
 
 #[sqlx_exasol::test(migrations = false)]
-async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn simple(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     clean_up(&mut conn).await?;
 
     let migrator = Migrator::new(Path::new("tests/migrations_simple")).await?;
@@ -27,7 +30,7 @@ async fn simple(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 }
 
 #[sqlx_exasol::test(migrations = false)]
-async fn reversible(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn reversible(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     clean_up(&mut conn).await?;
 
     let migrator = Migrator::new(Path::new("tests/migrations_reversible")).await?;
@@ -66,7 +69,7 @@ async fn reversible(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 }
 
 /// Ensure that we have a clean initial state.
-async fn clean_up(conn: &mut ExaConnection) -> anyhow::Result<()> {
+async fn clean_up(conn: &mut ExaConnection) -> Result<(), BoxDynError> {
     conn.execute("DROP TABLE migrations_simple_test").await.ok();
     conn.execute("DROP TABLE migrations_reversible_test")
         .await

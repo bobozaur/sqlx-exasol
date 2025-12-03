@@ -11,7 +11,7 @@ use sqlx_exasol::{
 };
 
 #[sqlx_exasol::test]
-async fn it_connects(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_connects(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.ping().await?;
     conn.close().await?;
 
@@ -19,7 +19,7 @@ async fn it_connects(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 }
 
 #[sqlx_exasol::test]
-async fn it_maths(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_maths(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let value = sqlx_exasol::query("select 1 + CAST(? AS DECIMAL(5, 0))")
         .bind(5_i32.to_string())
         .try_map(|row: ExaRow| row.try_get::<i32, _>(0))
@@ -32,7 +32,7 @@ async fn it_maths(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 }
 
 #[sqlx_exasol::test]
-async fn it_can_fail_at_querying(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_can_fail_at_querying(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let _ = conn.execute(sqlx_exasol::query("SELECT 1")).await?;
 
     // we are testing that this does not cause a panic!
@@ -44,7 +44,7 @@ async fn it_can_fail_at_querying(mut conn: PoolConnection<Exasol>) -> anyhow::Re
 }
 
 #[sqlx_exasol::test]
-async fn it_executes(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_executes(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let _ = conn
         .execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
         .await?;
@@ -70,7 +70,7 @@ async fn it_executes(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
 }
 
 #[sqlx_exasol::test]
-async fn it_executes_with_pool() -> anyhow::Result<()> {
+async fn it_executes_with_pool() -> Result<(), BoxDynError> {
     let pool: ExaPool = ExaPoolOptions::new()
         .min_connections(2)
         .max_connections(2)
@@ -93,7 +93,7 @@ async fn it_executes_with_pool() -> anyhow::Result<()> {
 }
 
 #[sqlx_exasol::test]
-async fn it_works_with_cache_disabled() -> anyhow::Result<()> {
+async fn it_works_with_cache_disabled() -> Result<(), BoxDynError> {
     let mut url = url::Url::parse(&dotenvy::var("DATABASE_URL")?)?;
     url.query_pairs_mut()
         .append_pair("statement-cache-capacity", "1");
@@ -111,7 +111,9 @@ async fn it_works_with_cache_disabled() -> anyhow::Result<()> {
 }
 
 #[sqlx_exasol::test]
-async fn it_drops_results_in_affected_rows(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_drops_results_in_affected_rows(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     // ~1800 rows should be iterated and dropped
     let done = conn
         .execute("select * from EXA_TIME_ZONES limit 1800")
@@ -124,7 +126,7 @@ async fn it_drops_results_in_affected_rows(mut conn: PoolConnection<Exasol>) -> 
 }
 
 #[sqlx_exasol::test]
-async fn it_selects_null(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_selects_null(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let (val,): (Option<i32>,) = sqlx_exasol::query_as("SELECT NULL")
         .fetch_one(&mut *conn)
         .await?;
@@ -139,7 +141,7 @@ async fn it_selects_null(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()>
 }
 
 #[sqlx_exasol::test]
-async fn it_can_fetch_one_and_ping(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_can_fetch_one_and_ping(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let (_id,): (i32,) = sqlx_exasol::query_as("SELECT 1 as id")
         .fetch_one(&mut *conn)
         .await?;
@@ -154,7 +156,7 @@ async fn it_can_fetch_one_and_ping(mut conn: PoolConnection<Exasol>) -> anyhow::
 }
 
 #[sqlx_exasol::test]
-async fn it_caches_statements(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_caches_statements(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     for i in 0..2 {
         let row = sqlx_exasol::query("SELECT CAST(? as DECIMAL(5, 0)) AS val")
             .bind(i.to_string())
@@ -191,7 +193,7 @@ async fn it_caches_statements(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
 #[sqlx_exasol::test]
 async fn it_can_bind_null_and_non_null_issue_540(
     mut conn: PoolConnection<Exasol>,
-) -> anyhow::Result<()> {
+) -> Result<(), BoxDynError> {
     let row = sqlx_exasol::query("SELECT ?, ?, ?")
         .bind(50.to_string())
         .bind(None::<String>)
@@ -211,7 +213,9 @@ async fn it_can_bind_null_and_non_null_issue_540(
 }
 
 #[sqlx_exasol::test]
-async fn it_can_bind_only_null_issue_540(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_can_bind_only_null_issue_540(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     let row = sqlx_exasol::query("SELECT ?")
         .bind(None::<String>)
         .fetch_one(&mut *conn)
@@ -225,7 +229,7 @@ async fn it_can_bind_only_null_issue_540(mut conn: PoolConnection<Exasol>) -> an
 }
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let mut tx = conn.begin().await?;
 
     sqlx_exasol::query("INSERT INTO tweet ( text ) VALUES ( 'Hello, World' )")
@@ -262,7 +266,9 @@ async fn it_can_prepare_then_execute(mut conn: PoolConnection<Exasol>) -> anyhow
 }
 
 #[sqlx_exasol::test]
-async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_can_work_with_transactions(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
         .await?;
 
@@ -324,7 +330,7 @@ async fn it_can_work_with_transactions(mut conn: PoolConnection<Exasol>) -> anyh
 }
 
 #[sqlx_exasol::test]
-async fn it_can_rollback_and_continue(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_can_rollback_and_continue(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY);")
         .await?;
 
@@ -355,7 +361,7 @@ async fn it_can_rollback_and_continue(mut conn: PoolConnection<Exasol>) -> anyho
 }
 
 #[sqlx_exasol::test]
-async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let mut tx = conn.begin().await?;
     // Trying to start a nested one will fail.
     assert!(tx.begin().await.is_err());
@@ -376,7 +382,7 @@ async fn it_cannot_nest_transactions(mut conn: PoolConnection<Exasol>) -> anyhow
 // async fn it_can_drop_transaction_and_not_deadlock(
 //     pool_opts: PoolOptions<Exasol>,
 //     exa_opts: ExaConnectOptions,
-// ) -> anyhow::Result<()> {
+// ) -> Result<(), BoxDynError> {
 //     let pool_opts = pool_opts.max_connections(2);
 //     let pool = pool_opts.connect_with(exa_opts).await?;
 //     let mut conn1 = pool.acquire().await?;
@@ -579,7 +585,7 @@ async fn test_fetch_many_works(mut con: PoolConnection<Exasol>) -> Result<(), Bo
 }
 
 #[sqlx_exasol::test]
-async fn it_works_on_large_datasets(mut con: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_works_on_large_datasets(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     sqlx::query("CREATE TABLE large_dataset (col1 VARCHAR(20), col2 VARCHAR(20));")
         .execute(&mut *con)
         .await?;

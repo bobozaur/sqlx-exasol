@@ -6,7 +6,7 @@ extern crate sqlx_exasol as sqlx;
 mod macros;
 
 use sqlx::migrate::Migrator;
-use sqlx_exasol::{types::ExaIntervalYearToMonth, Type};
+use sqlx_exasol::{error::BoxDynError, types::ExaIntervalYearToMonth, Type};
 
 #[allow(dead_code)]
 static MIGRATOR: Migrator = sqlx_exasol::migrate!("tests/migrations_compile_time");
@@ -170,7 +170,7 @@ test_compile_time_type!(
 #[sqlx_exasol::test(migrations = "tests/migrations_compile_time")]
 async fn test_compile_time_geometry(
     mut conn: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
-) -> anyhow::Result<()> {
+) -> Result<(), BoxDynError> {
     sqlx_exasol::query!(
         "INSERT INTO compile_time_tests (column_geometry) VALUES(?);",
         "POINT(1 2)"

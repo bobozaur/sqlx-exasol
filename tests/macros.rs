@@ -139,7 +139,7 @@ macro_rules! test_etl {
         paste::item! {
             #[ignore]
             #[sqlx_exasol::test]
-            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> anyhow::Result<()> {
+            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> Result<(), BoxDynError> {
                 let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
 
                 let mut conn1 = pool.acquire().await?;
@@ -159,7 +159,7 @@ macro_rules! test_etl {
                 let transport_futs = iter::zip(readers, writers).map($proc);
 
                 let (export_res, import_res, _) =
-                try_join3(export_fut.map_err(From::from), import_fut.map_err(From::from), try_join_all(transport_futs)).await.map_err(|e| anyhow::anyhow! {e})?;
+                try_join3(export_fut.map_err(From::from), import_fut.map_err(From::from), try_join_all(transport_futs)).await?;
 
 
                 assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
@@ -223,7 +223,7 @@ macro_rules! test_compile_time_type {
             #[sqlx_exasol::test(migrations = "tests/migrations_compile_time")]
             async fn [< test_compile_time_ $col >](
                 mut conn: sqlx_exasol::pool::PoolConnection<sqlx_exasol::Exasol>,
-            ) -> anyhow::Result<()> {
+            ) -> Result<(), BoxDynError> {
                 use sqlx_exasol::types::ExaIter;
 
                 let value = $value;

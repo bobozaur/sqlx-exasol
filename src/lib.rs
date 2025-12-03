@@ -92,7 +92,7 @@
 //! ```rust,no_run
 //! use std::env;
 //!
-//! use sqlx_exasol::*;
+//! use sqlx_exasol::{error::*, *};
 //!
 //! # async {
 //! #
@@ -103,7 +103,7 @@
 //!     .execute(&mut *con)
 //!     .await?;
 //! #
-//! # let res: anyhow::Result<()> = Ok(());
+//! # let res: Result<(), BoxDynError> = Ok(());
 //! # res
 //! # };
 //! ```
@@ -114,7 +114,7 @@
 //! ```rust,no_run
 //! use std::{collections::HashSet, env};
 //!
-//! use sqlx_exasol::*;
+//! use sqlx_exasol::{error::*, *};
 //!
 //! # async {
 //! #
@@ -130,7 +130,7 @@
 //!     .execute(&mut *con)
 //!     .await?;
 //! #
-//! # let res: anyhow::Result<()> = Ok(());
+//! # let res: Result<(), BoxDynError> = Ok(());
 //! # res
 //! # };
 //! ```
@@ -144,9 +144,9 @@
 //!     future::{try_join, try_join3, try_join_all},
 //!     AsyncReadExt, AsyncWriteExt, TryFutureExt,
 //! };
-//! use sqlx_exasol::{etl::*, *};
+//! use sqlx_exasol::{error::*, etl::*, *};
 //!
-//! async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
+//! async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
 //!     let mut buf = vec![0; 5120].into_boxed_slice();
 //!     let mut read = 1;
 //!
@@ -189,7 +189,7 @@
 //!
 //! assert_eq!(export_res.rows_affected(), import_res.rows_affected());
 //! #
-//! # let res: anyhow::Result<()> = Ok(());
+//! # let res: Result<(), BoxDynError> = Ok(());
 //! # res
 //! # }};
 //! ```

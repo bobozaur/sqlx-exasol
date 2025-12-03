@@ -1,6 +1,6 @@
 #![cfg(feature = "migrate")]
 
-use sqlx_exasol::{pool::PoolConnection, Exasol, Executor, FromRow};
+use sqlx_exasol::{error::BoxDynError, pool::PoolConnection, Exasol, Executor, FromRow};
 
 #[derive(Debug, FromRow, PartialEq, Eq)]
 struct TestRow {
@@ -10,7 +10,7 @@ struct TestRow {
 }
 
 #[sqlx_exasol::test]
-async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn test_from_row(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute(
         r"
         CREATE TABLE TEST_FROM_ROW (

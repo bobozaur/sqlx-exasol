@@ -34,7 +34,7 @@
 //! ```rust,no_run
 //! use std::env;
 //!
-//! use sqlx_exasol::{etl::*, *};
+//! use sqlx_exasol::{error::*, etl::*, *};
 //!
 //! # async {
 //! #
@@ -48,7 +48,7 @@
 //!
 //! tx.commit().await?;
 //! #
-//! # let res: anyhow::Result<()> = Ok(());
+//! # let res: Result<(), BoxDynError> = Ok(());
 //! # res
 //! # };
 //! ```

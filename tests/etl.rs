@@ -95,7 +95,7 @@ test_etl!(
 // ##########################################
 #[ignore]
 #[sqlx_exasol::test]
-async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -120,7 +120,7 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> anyhow::Res
 
 #[ignore]
 #[sqlx_exasol::test]
-async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -149,7 +149,7 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
 #[sqlx_exasol::test]
 async fn test_etl_transaction_import_rollback(
     mut conn: PoolConnection<Exasol>,
-) -> anyhow::Result<()> {
+) -> Result<(), BoxDynError> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -164,9 +164,7 @@ async fn test_etl_transaction_import_rollback(
 
     let transport_futs = writers.into_iter().map(write_one_row);
 
-    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs)).await?;
 
     tx.rollback().await?;
 
@@ -183,7 +181,7 @@ async fn test_etl_transaction_import_rollback(
 #[sqlx_exasol::test]
 async fn test_etl_transaction_import_commit(
     mut conn: PoolConnection<Exasol>,
-) -> anyhow::Result<()> {
+) -> Result<(), BoxDynError> {
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -199,9 +197,7 @@ async fn test_etl_transaction_import_commit(
 
     let transport_futs = writers.into_iter().map(write_one_row);
 
-    try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs)).await?;
 
     tx.commit().await?;
 
@@ -220,9 +216,9 @@ async fn test_etl_transaction_import_commit(
 // // This will thus fail, because Exasol will just keep sending new requests.
 // #[ignore]
 // #[sqlx_exasol::test]
-// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
 //
-//     async fn pipe_close_writers(mut writer: ExaImport) -> anyhow::Result<()> {
+//     async fn pipe_close_writers(mut writer: ExaImport) -> Result<(), BoxDynError> {
 //         writer.close().await?;
 //         Ok(())
 //     }
@@ -255,7 +251,7 @@ async fn test_etl_transaction_import_commit(
 // ############### Utilities ################
 // ##########################################
 
-async fn read_data(mut reader: ExaExport) -> anyhow::Result<()> {
+async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
     let mut buf = String::new();
     reader.read_to_string(&mut buf).await?;
     Ok(())
@@ -278,7 +274,10 @@ async fn drop_some_readers(idx: usize, mut reader: ExaExport) -> Result<(), BoxD
     Ok(())
 }
 
-async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
+async fn pipe_flush_writers(
+    mut reader: ExaExport,
+    mut writer: ExaImport,
+) -> Result<(), BoxDynError> {
     // test if flushing is fine even before any write.
     writer.flush().await?;
 
@@ -291,7 +290,7 @@ async fn pipe_flush_writers(mut reader: ExaExport, mut writer: ExaImport) -> any
     Ok(())
 }
 
-async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> anyhow::Result<()> {
+async fn pipe(mut reader: ExaExport, mut writer: ExaImport) -> Result<(), BoxDynError> {
     let mut buf = vec![0; 5120].into_boxed_slice();
     let mut read = 1;
 

@@ -1,9 +1,11 @@
 #![cfg(feature = "migrate")]
 
-use sqlx_exasol::{pool::PoolConnection, Column, Exasol, Executor, SqlStr, Type, TypeInfo};
+use sqlx_exasol::{
+    error::BoxDynError, pool::PoolConnection, Column, Exasol, Executor, SqlStr, Type, TypeInfo,
+};
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let d = conn
         .describe(SqlStr::from_static("SELECT * FROM tweet"))
         .await?;
@@ -27,7 +29,7 @@ async fn it_describes_columns(mut conn: PoolConnection<Exasol>) -> anyhow::Resul
 }
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn it_describes_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_describes_params(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute(
         r"
 CREATE TABLE with_hashtype_and_tinyint (
@@ -63,7 +65,9 @@ CREATE TABLE with_hashtype_and_tinyint (
 }
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn it_describes_columns_and_params(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn it_describes_columns_and_params(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
     conn.execute(
         r"
 CREATE TABLE with_hashtype_and_tinyint (
@@ -114,7 +118,7 @@ CREATE TABLE with_hashtype_and_tinyint (
 }
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn test_boolean(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn test_boolean(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute(
         r"
 CREATE TABLE with_hashtype_and_tinyint (
@@ -146,7 +150,7 @@ CREATE TABLE with_hashtype_and_tinyint (
 }
 
 #[sqlx_exasol::test(migrations = "tests/setup")]
-async fn uses_alias_name(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+async fn uses_alias_name(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     let d = conn
         .describe(SqlStr::from_static("SELECT text AS tweet_text FROM tweet"))
         .await?;
