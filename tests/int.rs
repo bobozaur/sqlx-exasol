@@ -1,4 +1,6 @@
-use crate::{test_type_array, test_type_valid};
+#![cfg(feature = "migrate")]
+
+mod macros;
 
 const MIN_I64_NUMERIC: i64 = -999_999_999_999_999_999;
 const MAX_I64_NUMERIC: i64 = 1_000_000_000_000_000_000;

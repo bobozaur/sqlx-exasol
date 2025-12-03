@@ -1,9 +1,11 @@
-use sqlx::types::geo_types::{GeometryCollection, Rect, Triangle};
-use sqlx_exasol::types::geo_types::{
-    Geometry, Line, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
-};
+#![cfg(all(feature = "migrate", feature = "geo-types"))]
 
-use crate::{test_type_array, test_type_valid};
+mod macros;
+
+use sqlx_exasol::types::geo_types::{
+    Geometry, GeometryCollection, Line, LineString, MultiLineString, MultiPoint, MultiPolygon,
+    Point, Polygon, Rect, Triangle,
+};
 
 test_type_valid!(geometry_point<Geometry>::"GEOMETRY"::(
     "'POINT (1 2)'" => Geometry::Point(Point::new(1.0, 2.0)),

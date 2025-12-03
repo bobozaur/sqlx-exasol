@@ -1,6 +1,8 @@
-use sqlx_exasol::types::ExaIntervalYearToMonth;
+#![cfg(feature = "migrate")]
 
-use crate::{test_type_array, test_type_valid};
+mod macros;
+
+use sqlx_exasol::types::ExaIntervalYearToMonth;
 
 test_type_valid!(months<ExaIntervalYearToMonth>::"INTERVAL YEAR TO MONTH"::("'1-5'" => ExaIntervalYearToMonth(17), "'-1-5'" => ExaIntervalYearToMonth(-17)));
 test_type_valid!(months_with_prec<ExaIntervalYearToMonth>::"INTERVAL YEAR(4) TO MONTH"::("'1000-5'" => ExaIntervalYearToMonth(12005), "'-1000-5'" => ExaIntervalYearToMonth(-12005)));

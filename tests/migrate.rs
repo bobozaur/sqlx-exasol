@@ -1,3 +1,5 @@
+#![cfg(feature = "migrate")]
+
 use std::path::Path;
 
 use sqlx_exasol::{migrate::Migrator, pool::PoolConnection, ExaConnection, Exasol, Executor, Row};

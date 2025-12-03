@@ -1,7 +1,9 @@
+#![cfg(all(feature = "migrate", feature = "time"))]
+
+mod macros;
+
 use sqlx_exasol::types::time::{Date, Duration, OffsetDateTime, PrimitiveDateTime};
 use time::{format_description::BorrowedFormatItem, macros::format_description};
-
-use crate::{test_type_array, test_type_valid};
 
 const TIMESTAMP_FMT: &[BorrowedFormatItem<'static>] =
     format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");

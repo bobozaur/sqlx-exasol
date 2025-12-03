@@ -1,5 +1,4 @@
-#![cfg(feature = "migrate")]
-#![cfg(feature = "etl")]
+#![cfg(all(feature = "migrate", feature = "etl"))]
 
 use futures_util::{
     future::{try_join3, try_join_all},

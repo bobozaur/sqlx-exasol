@@ -1,6 +1,8 @@
-use sqlx_exasol::types::BigDecimal;
+#![cfg(all(feature = "migrate", feature = "bigdecimal"))]
 
-use crate::{test_type_array, test_type_valid};
+mod macros;
+
+use sqlx_exasol::types::BigDecimal;
 
 test_type_valid!(big_decimal_i64<BigDecimal>::"DECIMAL(36, 16)"::(BigDecimal::new(i64::MIN.into(), 16), BigDecimal::new(i64::MAX.into(), 16), BigDecimal::new(i64::MAX.into(), 10), BigDecimal::new(i64::MAX.into(), 5), BigDecimal::new(i64::MAX.into(), 0)));
 test_type_valid!(big_decimal_i16<BigDecimal>::"DECIMAL(36, 16)"::(BigDecimal::new(i16::MIN.into(), 5), BigDecimal::new(i16::MAX.into(), 5), BigDecimal::new(i16::MIN.into(), 0), BigDecimal::new(i16::MAX.into(), 0)));

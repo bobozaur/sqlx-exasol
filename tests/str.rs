@@ -1,4 +1,6 @@
-use crate::{test_type_array, test_type_valid};
+#![cfg(feature = "migrate")]
+
+mod macros;
 
 test_type_valid!(varchar_utf8<String>::"VARCHAR(100) UTF8"::("'first value 🦀'" => "first value 🦀", "'second value 🦀'" => "second value 🦀"));
 test_type_valid!(char_utf8<String>::"CHAR(10) UTF8"::("'first 🦀   '" => "first 🦀   ", "'second 🦀'" => "second 🦀  "));

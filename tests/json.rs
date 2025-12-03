@@ -1,7 +1,9 @@
+#![cfg(all(feature = "migrate", feature = "json"))]
+
+mod macros;
+
 use serde::{Deserialize, Serialize};
 use sqlx_exasol::types::Json;
-
-use crate::{test_type_array, test_type_valid};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 struct Test {
