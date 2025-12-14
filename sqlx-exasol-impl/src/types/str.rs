@@ -13,6 +13,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{Charset, ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -31,6 +32,12 @@ impl Type<Exasol> for String {
         <str as Type<Exasol>>::type_info()
     }
 }
+
+impl ExaHasArrayType for &str {}
+impl ExaHasArrayType for String {}
+impl ExaHasArrayType for Box<str> {}
+impl ExaHasArrayType for Rc<str> {}
+impl ExaHasArrayType for Arc<str> {}
 
 impl Encode<'_, Exasol> for &'_ str {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

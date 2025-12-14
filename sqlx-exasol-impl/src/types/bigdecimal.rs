@@ -11,6 +11,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{Decimal, ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -24,6 +25,8 @@ impl Type<Exasol> for BigDecimal {
         .into()
     }
 }
+
+impl ExaHasArrayType for BigDecimal {}
 
 impl Encode<'_, Exasol> for BigDecimal {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

@@ -13,6 +13,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{Decimal, ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -59,6 +60,11 @@ impl Type<Exasol> for i64 {
         .into()
     }
 }
+
+impl ExaHasArrayType for i8 {}
+impl ExaHasArrayType for i16 {}
+impl ExaHasArrayType for i32 {}
+impl ExaHasArrayType for i64 {}
 
 impl Encode<'_, Exasol> for i8 {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

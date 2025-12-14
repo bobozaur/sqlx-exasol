@@ -12,6 +12,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -29,6 +30,8 @@ impl Type<Exasol> for ExaIntervalYearToMonth {
         .into()
     }
 }
+
+impl ExaHasArrayType for ExaIntervalYearToMonth {}
 
 impl Encode<'_, Exasol> for ExaIntervalYearToMonth {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

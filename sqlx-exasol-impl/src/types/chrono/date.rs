@@ -11,6 +11,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -19,6 +20,8 @@ impl Type<Exasol> for NaiveDate {
         ExaDataType::Date.into()
     }
 }
+
+impl ExaHasArrayType for NaiveDate {}
 
 impl Encode<'_, Exasol> for NaiveDate {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

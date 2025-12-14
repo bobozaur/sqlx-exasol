@@ -10,21 +10,24 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{Decimal, ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
 impl Type<Exasol> for rust_decimal::Decimal {
-    #[allow(clippy::cast_possible_truncation)]
     fn type_info() -> ExaTypeInfo {
         // A somewhat non-sensical value used to allow decoding any DECIMAL value
         // with a supported scale.
         ExaDataType::Decimal(Decimal {
             precision: None,
+            #[allow(clippy::cast_possible_truncation)]
             scale: rust_decimal::Decimal::MAX_SCALE as u8,
         })
         .into()
     }
 }
+
+impl ExaHasArrayType for rust_decimal::Decimal {}
 
 impl Encode<'_, Exasol> for rust_decimal::Decimal {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

@@ -1,3 +1,4 @@
+mod array;
 #[cfg(feature = "bigdecimal")]
 mod bigdecimal;
 mod bool;
@@ -9,7 +10,6 @@ pub mod geo_types;
 mod hashtype;
 mod int;
 mod interval_ytm;
-mod iter;
 #[cfg(feature = "json")]
 mod json;
 mod option;
@@ -22,6 +22,6 @@ pub mod time;
 #[cfg(feature = "uuid")]
 mod uuid;
 
+pub use array::{ExaHasArrayType, ExaIter};
 pub use hashtype::HashType;
 pub use interval_ytm::ExaIntervalYearToMonth;
-pub use iter::ExaIter;

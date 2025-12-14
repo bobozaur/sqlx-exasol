@@ -7,13 +7,15 @@ use sqlx_core::{
     types::{Text, Type},
 };
 
-use crate::{arguments::ExaBuffer, ExaTypeInfo, ExaValueRef, Exasol};
+use crate::{arguments::ExaBuffer, types::ExaHasArrayType, ExaTypeInfo, ExaValueRef, Exasol};
 
 impl<T> Type<Exasol> for Text<T> {
     fn type_info() -> ExaTypeInfo {
         <String as Type<Exasol>>::type_info()
     }
 }
+
+impl<T> ExaHasArrayType for Text<T> where T: ExaHasArrayType {}
 
 impl<T> Encode<'_, Exasol> for Text<T>
 where

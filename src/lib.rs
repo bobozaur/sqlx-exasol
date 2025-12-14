@@ -240,6 +240,7 @@ pub mod any {
     pub use sqlx::any::*;
     pub use sqlx_exasol_impl::any::DRIVER;
 }
+
 #[cfg(feature = "macros")]
 pub use sqlx_exasol_macros;
 #[cfg(feature = "macros")]

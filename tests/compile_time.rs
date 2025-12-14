@@ -6,14 +6,10 @@ extern crate sqlx_exasol as sqlx;
 mod macros;
 
 use sqlx::migrate::Migrator;
-use sqlx_exasol::{error::BoxDynError, types::ExaIntervalYearToMonth, Type};
+use sqlx_exasol::{error::BoxDynError, types::ExaIntervalYearToMonth};
 
 #[allow(dead_code)]
 static MIGRATOR: Migrator = sqlx_exasol::migrate!("tests/migrations_compile_time");
-
-#[derive(Type)]
-#[sqlx(transparent)]
-struct Stuff(i8);
 
 test_compile_time_type!(
     bool,

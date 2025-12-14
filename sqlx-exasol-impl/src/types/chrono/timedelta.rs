@@ -11,6 +11,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -23,6 +24,8 @@ impl Type<Exasol> for TimeDelta {
         .into()
     }
 }
+
+impl ExaHasArrayType for TimeDelta {}
 
 impl Encode<'_, Exasol> for TimeDelta {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

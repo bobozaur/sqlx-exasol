@@ -10,6 +10,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -18,6 +19,8 @@ impl Type<Exasol> for bool {
         ExaDataType::Boolean.into()
     }
 }
+
+impl ExaHasArrayType for bool {}
 
 impl Encode<'_, Exasol> for bool {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

@@ -11,6 +11,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -20,6 +21,8 @@ impl Type<Exasol> for Uuid {
         ExaDataType::HashType { size: Some(32) }.into()
     }
 }
+
+impl ExaHasArrayType for Uuid {}
 
 impl Encode<'_, Exasol> for Uuid {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {

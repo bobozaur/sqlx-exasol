@@ -9,6 +9,7 @@ use sqlx_core::{
 use crate::{
     arguments::ExaBuffer,
     type_info::{Charset, ExaDataType},
+    types::ExaHasArrayType,
     ExaTypeInfo, ExaValueRef, Exasol,
 };
 
@@ -21,6 +22,8 @@ impl<T> Type<Exasol> for Json<T> {
         .into()
     }
 }
+
+impl<T> ExaHasArrayType for Json<T> {}
 
 impl<T> Encode<'_, Exasol> for Json<T>
 where

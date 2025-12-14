@@ -4,7 +4,9 @@ use sqlx_core::{
     types::Type,
 };
 
-use crate::{arguments::ExaBuffer, ExaTypeInfo, Exasol};
+use crate::{arguments::ExaBuffer, types::ExaHasArrayType, ExaTypeInfo, Exasol};
+
+impl<T> ExaHasArrayType for Option<T> where T: ExaHasArrayType {}
 
 impl<T> Encode<'_, Exasol> for Option<T>
 where

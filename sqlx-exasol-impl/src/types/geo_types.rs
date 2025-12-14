@@ -16,6 +16,7 @@ use crate::{
     arguments::ExaBuffer,
     database::Exasol,
     type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
     value::ExaValueRef,
 };
 
@@ -27,6 +28,8 @@ where
         ExaDataType::Geometry { srid: 0 }.into()
     }
 }
+
+impl<T> ExaHasArrayType for Geometry<T> where T: CoordNum {}
 
 impl<T> Encode<'_, Exasol> for Geometry<T>
 where
