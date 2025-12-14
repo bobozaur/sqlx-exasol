@@ -1,10 +1,11 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc, sync::Arc};
 
 use serde::Deserialize;
 use sqlx_core::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
+    forward_encode_impl,
     types::Type,
 };
 
@@ -22,6 +23,12 @@ impl Type<Exasol> for str {
             character_set: Charset::Utf8,
         }
         .into()
+    }
+}
+
+impl Type<Exasol> for String {
+    fn type_info() -> ExaTypeInfo {
+        <str as Type<Exasol>>::type_info()
     }
 }
 
@@ -49,34 +56,14 @@ impl<'r> Decode<'r, Exasol> for &'r str {
     }
 }
 
-impl Type<Exasol> for String {
-    fn type_info() -> ExaTypeInfo {
-        <str as Type<Exasol>>::type_info()
-    }
-}
-
-impl Encode<'_, Exasol> for String {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Exasol>>::encode(self.as_ref(), buf)
-    }
-
-    fn size_hint(&self) -> usize {
-        <&str as Encode<Exasol>>::size_hint(&self.as_ref())
-    }
-}
-
 impl Decode<'_, Exasol> for String {
     fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
         <&str as Decode<Exasol>>::decode(value).map(ToOwned::to_owned)
     }
 }
 
-impl Encode<'_, Exasol> for Cow<'_, str> {
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Exasol>>::encode(self.as_ref(), buf)
-    }
-
-    fn size_hint(&self) -> usize {
-        <&str as Encode<Exasol>>::size_hint(&self.as_ref())
-    }
-}
+forward_encode_impl!(String, &str, Exasol);
+forward_encode_impl!(Cow<'_, str>, &str, Exasol);
+forward_encode_impl!(Box<str>, &str, Exasol);
+forward_encode_impl!(Rc<str>, &str, Exasol);
+forward_encode_impl!(Arc<str>, &str, Exasol);

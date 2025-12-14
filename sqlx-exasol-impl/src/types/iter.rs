@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 use sqlx_core::{
     database::Database,
@@ -53,7 +53,34 @@ where
     T: Type<Exasol> + Copy,
 {
     fn type_info() -> <Exasol as Database>::TypeInfo {
-        <I as IntoIterator>::Item::type_info()
+        T::type_info()
+    }
+}
+
+impl<T> Type<Exasol> for [T]
+where
+    T: Type<Exasol>,
+{
+    fn type_info() -> <Exasol as Database>::TypeInfo {
+        T::type_info()
+    }
+}
+
+impl<T, const N: usize> Type<Exasol> for [T; N]
+where
+    T: Type<Exasol>,
+{
+    fn type_info() -> <Exasol as Database>::TypeInfo {
+        T::type_info()
+    }
+}
+
+impl<T> Type<Exasol> for Vec<T>
+where
+    T: Type<Exasol>,
+{
+    fn type_info() -> <Exasol as Database>::TypeInfo {
+        T::type_info()
     }
 }
 
@@ -77,68 +104,29 @@ where
     }
 }
 
-impl<T> Type<Exasol> for &[T]
-where
-    T: Type<Exasol>,
-{
-    fn type_info() -> <Exasol as Database>::TypeInfo {
-        T::type_info()
+macro_rules! forward_arr_encode_impl {
+    ($for_type:ty, $($generics:tt)*) => {
+        impl<T, $($generics)*> Encode<'_, Exasol> for $for_type
+        where
+            for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
+        {
+            fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+                ExaIter::new(AsRef::<[T]>::as_ref(&self)).encode_by_ref(buf)
+            }
+
+            fn size_hint(&self) -> usize {
+                ExaIter::new(AsRef::<[T]>::as_ref(&self)).size_hint()
+            }
+        }
+    };
+    ($for_type:ty) => {
+        forward_arr_encode_impl!($for_type,);
     }
 }
 
-impl<T> Encode<'_, Exasol> for &[T]
-where
-    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
-{
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        ExaIter::new(*self).encode_by_ref(buf)
-    }
-
-    fn size_hint(&self) -> usize {
-        ExaIter::new(*self).size_hint()
-    }
-}
-
-impl<T, const N: usize> Type<Exasol> for [T; N]
-where
-    T: Type<Exasol>,
-{
-    fn type_info() -> <Exasol as Database>::TypeInfo {
-        T::type_info()
-    }
-}
-
-impl<T, const N: usize> Encode<'_, Exasol> for [T; N]
-where
-    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
-{
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        ExaIter::new(self.as_slice()).encode_by_ref(buf)
-    }
-
-    fn size_hint(&self) -> usize {
-        ExaIter::new(self.as_slice()).size_hint()
-    }
-}
-
-impl<T> Type<Exasol> for Vec<T>
-where
-    T: Type<Exasol>,
-{
-    fn type_info() -> <Exasol as Database>::TypeInfo {
-        T::type_info()
-    }
-}
-
-impl<T> Encode<'_, Exasol> for Vec<T>
-where
-    for<'q> T: Encode<'q, Exasol> + Type<Exasol>,
-{
-    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
-        ExaIter::new(self.as_slice()).encode_by_ref(buf)
-    }
-
-    fn size_hint(&self) -> usize {
-        ExaIter::new(self.as_slice()).size_hint()
-    }
-}
+forward_arr_encode_impl!(&[T]);
+forward_arr_encode_impl!([T; N], const N: usize);
+forward_arr_encode_impl!(Vec<T>);
+forward_arr_encode_impl!(Box<[T]>);
+forward_arr_encode_impl!(Rc<[T]>);
+forward_arr_encode_impl!(Arc<[T]>);

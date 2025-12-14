@@ -30,6 +30,36 @@ impl Type<Exasol> for i8 {
     }
 }
 
+impl Type<Exasol> for i16 {
+    fn type_info() -> ExaTypeInfo {
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_16BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
+    }
+}
+
+impl Type<Exasol> for i32 {
+    fn type_info() -> ExaTypeInfo {
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_32BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
+    }
+}
+
+impl Type<Exasol> for i64 {
+    fn type_info() -> ExaTypeInfo {
+        ExaDataType::Decimal(Decimal {
+            precision: Some(Decimal::MAX_64BIT_PRECISION),
+            scale: 0,
+        })
+        .into()
+    }
+}
+
 impl Encode<'_, Exasol> for i8 {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(self)?;
@@ -39,22 +69,6 @@ impl Encode<'_, Exasol> for i8 {
     fn size_hint(&self) -> usize {
         // sign + max num digits
         1 + Decimal::MAX_8BIT_PRECISION as usize
-    }
-}
-
-impl Decode<'_, Exasol> for i8 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Type<Exasol> for i16 {
-    fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal {
-            precision: Some(Decimal::MAX_16BIT_PRECISION),
-            scale: 0,
-        })
-        .into()
     }
 }
 
@@ -70,22 +84,6 @@ impl Encode<'_, Exasol> for i16 {
     }
 }
 
-impl Decode<'_, Exasol> for i16 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Type<Exasol> for i32 {
-    fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal {
-            precision: Some(Decimal::MAX_32BIT_PRECISION),
-            scale: 0,
-        })
-        .into()
-    }
-}
-
 impl Encode<'_, Exasol> for i32 {
     fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
         buf.append(self)?;
@@ -95,22 +93,6 @@ impl Encode<'_, Exasol> for i32 {
     fn size_hint(&self) -> usize {
         // sign + max num digits
         1 + Decimal::MAX_32BIT_PRECISION as usize
-    }
-}
-
-impl Decode<'_, Exasol> for i32 {
-    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
-        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
-    }
-}
-
-impl Type<Exasol> for i64 {
-    fn type_info() -> ExaTypeInfo {
-        ExaDataType::Decimal(Decimal {
-            precision: Some(Decimal::MAX_64BIT_PRECISION),
-            scale: 0,
-        })
-        .into()
     }
 }
 
@@ -129,6 +111,24 @@ impl Encode<'_, Exasol> for i64 {
     fn size_hint(&self) -> usize {
         // 1 quote + 1 sign + max num digits + 1 quote
         2 + Decimal::MAX_64BIT_PRECISION as usize + 1
+    }
+}
+
+impl Decode<'_, Exasol> for i8 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+    }
+}
+
+impl Decode<'_, Exasol> for i16 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
+    }
+}
+
+impl Decode<'_, Exasol> for i32 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        <Self as Deserialize>::deserialize(value.value).map_err(From::from)
     }
 }
 
