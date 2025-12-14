@@ -133,7 +133,6 @@ hyper = { version = "1.4", default-features = false, features = [
   "server",
   "http1",
 ] }
-lru = { version = "0.12", default-features = false }
 native-tls = { version = "0.2", default-features = false }
 paste = { version = "1", default-features = false }
 quote = { version = "1", default-features = false }

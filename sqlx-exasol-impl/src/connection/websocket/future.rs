@@ -206,7 +206,7 @@ impl WebSocketFuture for GetOrPrepare {
         loop {
             match &mut self.state {
                 GetOrPrepareState::GetCached => {
-                    self.state = match ws.statement_cache.get(self.sql.as_str()).cloned() {
+                    self.state = match ws.statement_cache.get_mut(self.sql.as_str()).cloned() {
                         // Cache hit, simply return
                         Some(prepared) => return Poll::Ready(Ok(prepared)),
                         // Cache miss, switch state and prepare statement
@@ -229,8 +229,8 @@ impl WebSocketFuture for GetOrPrepare {
                     // Otherwise we go to simply retrieving it from the cache.
                     self.state = ws
                         .statement_cache
-                        .push(self.sql.as_str().to_owned(), prepared)
-                        .map(|(_, p)| p.statement_handle)
+                        .insert(self.sql.as_str(), prepared)
+                        .map(|p| p.statement_handle)
                         .map(ClosePrepared::new)
                         .map_or(
                             GetOrPrepareState::GetCached,

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, num::NonZeroUsize, ops::Not};
+use std::{borrow::Cow, ops::Not};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -22,7 +22,7 @@ impl ExaAttributes {
         compression_enabled: bool,
         fetch_size: usize,
         encryption_enabled: bool,
-        statement_cache_capacity: NonZeroUsize,
+        statement_cache_capacity: usize,
     ) -> Self {
         Self {
             read_write: ExaRwAttributes::default(),
@@ -168,7 +168,7 @@ impl ExaAttributes {
     }
 
     #[must_use]
-    pub fn statement_cache_capacity(&self) -> NonZeroUsize {
+    pub fn statement_cache_capacity(&self) -> usize {
         self.driver.statement_cache_capacity
     }
 
@@ -300,15 +300,11 @@ struct ExaDriverAttributes {
     needs_send: bool,
     fetch_size: usize,
     encryption_enabled: bool,
-    statement_cache_capacity: NonZeroUsize,
+    statement_cache_capacity: usize,
 }
 
 impl ExaDriverAttributes {
-    fn new(
-        fetch_size: usize,
-        encryption_enabled: bool,
-        statement_cache_capacity: NonZeroUsize,
-    ) -> Self {
+    fn new(fetch_size: usize, encryption_enabled: bool, statement_cache_capacity: usize) -> Self {
         Self {
             open_transaction: false,
             needs_send: false,

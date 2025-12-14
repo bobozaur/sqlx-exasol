@@ -1,7 +1,7 @@
 //! Module containing the various requests that can be sent to the Exasol server through its
 //! WebSocket API.
 
-use std::{borrow::Cow, num::NonZeroUsize, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
@@ -407,7 +407,7 @@ pub struct ExaLoginRequest<'a> {
     #[serde(skip_serializing)]
     pub fetch_size: usize,
     #[serde(skip_serializing)]
-    pub statement_cache_capacity: NonZeroUsize,
+    pub statement_cache_capacity: usize,
     #[serde(flatten)]
     pub login: LoginRef<'a>,
     pub use_compression: bool,

@@ -13,9 +13,8 @@ use std::{
 
 use futures_core::Stream;
 use futures_util::{io::BufReader, Sink, SinkExt, StreamExt};
-use lru::LruCache;
 use socket::ExaSocket;
-use sqlx_core::bytes::Bytes;
+use sqlx_core::{bytes::Bytes, common::StatementCache};
 pub use tls::WithMaybeTlsExaSocket;
 use transport::MaybeCompressedWebSocket;
 
@@ -42,7 +41,7 @@ pub struct ExaWebSocket {
     /// Future to rollback a previously started transaction.
     pub pending_rollback: Option<Rollback>,
     /// Prepared statements cache.
-    pub statement_cache: LruCache<String, PreparedStatement>,
+    pub statement_cache: StatementCache<PreparedStatement>,
     /// Whether a request has been successfully sent to the database but a response was not yet
     /// received. This is used for connection consistency, so an upcoming response can be ignored
     /// if needed, such as when a future gets dropped/cancelled before completion.
@@ -79,7 +78,7 @@ impl ExaWebSocket {
             options.statement_cache_capacity,
         );
 
-        let statement_cache = LruCache::new(options.statement_cache_capacity);
+        let statement_cache = StatementCache::new(options.statement_cache_capacity);
 
         // Regardless of the compression choice, we always start uncompressed, login, then enable
         // compression, if necessary.

@@ -4,7 +4,7 @@ mod error;
 mod protocol_version;
 mod ssl_mode;
 
-use std::{borrow::Cow, net::SocketAddr, num::NonZeroUsize, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, net::SocketAddr, path::PathBuf, str::FromStr};
 
 pub use builder::ExaConnectOptionsBuilder;
 pub use compression::ExaCompressionMode;
@@ -33,10 +33,7 @@ const URL_SCHEME: &str = "exa";
 
 const DEFAULT_FETCH_SIZE: usize = 5 * 1024 * 1024;
 const DEFAULT_PORT: u16 = 8563;
-const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(100) {
-    Some(v) => v,
-    None => unreachable!(),
-};
+const DEFAULT_CACHE_CAPACITY: usize = 100;
 
 const ACCESS_TOKEN: &str = "access-token";
 const REFRESH_TOKEN: &str = "refresh-token";
@@ -62,7 +59,7 @@ pub struct ExaConnectOptions {
     pub(crate) ssl_ca: Option<CertificateInput>,
     pub(crate) ssl_client_cert: Option<CertificateInput>,
     pub(crate) ssl_client_key: Option<CertificateInput>,
-    pub(crate) statement_cache_capacity: NonZeroUsize,
+    pub(crate) statement_cache_capacity: usize,
     pub(crate) schema: Option<String>,
     pub(crate) compression_mode: ExaCompressionMode,
     pub(crate) log_settings: LogSettings,
@@ -164,7 +161,7 @@ impl ConnectOptions for ExaConnectOptions {
 
                 STATEMENT_CACHE_CAPACITY => {
                     let capacity = value
-                        .parse::<NonZeroUsize>()
+                        .parse::<usize>()
                         .map_err(|_| ExaConfigError::InvalidParameter(STATEMENT_CACHE_CAPACITY))?;
                     builder = builder.statement_cache_capacity(capacity);
                 }
@@ -378,8 +375,6 @@ impl<'a> From<&'a ExaConnectOptions> for ExaTlsOptionsRef<'a> {
 }
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroUsize;
-
     use super::*;
 
     #[test]
@@ -444,10 +439,7 @@ mod tests {
                    query-timeout=30&feedback-interval=10";
         let options = ExaConnectOptions::from_str(url).unwrap();
 
-        assert_eq!(
-            options.statement_cache_capacity,
-            NonZeroUsize::new(50).unwrap()
-        );
+        assert_eq!(options.statement_cache_capacity, 50);
         assert_eq!(options.query_timeout, 30);
         assert_eq!(options.feedback_interval, 10);
     }
@@ -534,7 +526,7 @@ mod tests {
             .fetch_size(2048)
             .query_timeout(60)
             .feedback_interval(5)
-            .statement_cache_capacity(NonZeroUsize::new(200).unwrap())
+            .statement_cache_capacity(200)
             .build()
             .unwrap();
 

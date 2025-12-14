@@ -48,7 +48,6 @@ base64 = { workspace = true }
 futures-io = { workspace = true }
 futures-util = { workspace = true }
 futures-core = { workspace = true }
-lru = { workspace = true }
 rand = { workspace = true }
 rsa = { workspace = true }
 serde = { workspace = true }

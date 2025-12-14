@@ -1,4 +1,4 @@
-use std::{net::ToSocketAddrs, num::NonZeroUsize};
+use std::net::ToSocketAddrs;
 
 use sqlx_core::{connection::LogSettings, net::tls::CertificateInput};
 
@@ -17,7 +17,7 @@ pub struct ExaConnectOptionsBuilder {
     ssl_ca: Option<CertificateInput>,
     ssl_client_cert: Option<CertificateInput>,
     ssl_client_key: Option<CertificateInput>,
-    statement_cache_capacity: NonZeroUsize,
+    statement_cache_capacity: usize,
     username: Option<String>,
     password: Option<String>,
     access_token: Option<String>,
@@ -140,7 +140,7 @@ impl ExaConnectOptionsBuilder {
     }
 
     #[must_use = "call build() to get connection options"]
-    pub fn statement_cache_capacity(mut self, capacity: NonZeroUsize) -> Self {
+    pub fn statement_cache_capacity(mut self, capacity: usize) -> Self {
         self.statement_cache_capacity = capacity;
         self
     }

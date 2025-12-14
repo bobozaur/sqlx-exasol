@@ -187,7 +187,7 @@ impl Connection for ExaConnection {
     where
         Self::Database: sqlx_core::database::HasStatementCache,
     {
-        while let Some((_, prep)) = self.ws.statement_cache.pop_lru() {
+        while let Some(prep) = self.ws.statement_cache.remove_lru() {
             ClosePrepared::new(prep.statement_handle)
                 .future(&mut self.ws)
                 .await?;
@@ -201,8 +201,6 @@ impl Connection for ExaConnection {
 #[cfg(feature = "migrate")]
 #[allow(clippy::large_futures, reason = "silencing clippy")]
 mod tests {
-    use std::num::NonZeroUsize;
-
     use futures_util::TryStreamExt;
     use sqlx::Executor;
     use sqlx_core::{error::BoxDynError, pool::PoolOptions};
@@ -215,7 +213,7 @@ mod tests {
         mut exa_opts: ExaConnectOptions,
     ) -> Result<(), BoxDynError> {
         // Set a low cache size
-        exa_opts.statement_cache_capacity = NonZeroUsize::new(1).unwrap();
+        exa_opts.statement_cache_capacity = 1;
 
         let pool = pool_opts.connect_with(exa_opts).await?;
         let mut con = pool.acquire().await?;
@@ -223,16 +221,16 @@ mod tests {
         let sql1 = "SELECT 1 FROM dual";
         let sql2 = "SELECT 2 FROM dual";
 
-        assert!(!con.as_ref().ws.statement_cache.contains(sql1));
-        assert!(!con.as_ref().ws.statement_cache.contains(sql2));
+        assert!(!con.as_mut().ws.statement_cache.contains_key(sql1));
+        assert!(!con.as_mut().ws.statement_cache.contains_key(sql2));
 
         sqlx::query(sql1).execute(&mut *con).await?;
-        assert!(con.as_ref().ws.statement_cache.contains(sql1));
-        assert!(!con.as_ref().ws.statement_cache.contains(sql2));
+        assert!(con.as_mut().ws.statement_cache.contains_key(sql1));
+        assert!(!con.as_mut().ws.statement_cache.contains_key(sql2));
 
         sqlx::query(sql2).execute(&mut *con).await?;
-        assert!(!con.as_ref().ws.statement_cache.contains(sql1));
-        assert!(con.as_ref().ws.statement_cache.contains(sql2));
+        assert!(!con.as_mut().ws.statement_cache.contains_key(sql1));
+        assert!(con.as_mut().ws.statement_cache.contains_key(sql2));
 
         Ok(())
     }
