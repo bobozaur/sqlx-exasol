@@ -1,0 +1,16 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_date) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "DATE"
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3d7b290979aed5237a60b63986548fb3c56f294eca83b2352028492f1bbca75b"
+}

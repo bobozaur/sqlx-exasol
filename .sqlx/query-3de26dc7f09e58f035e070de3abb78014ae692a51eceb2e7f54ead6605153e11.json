@@ -1,0 +1,18 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_geometry) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "VARCHAR",
+          "size": 2000000,
+          "characterSet": "UTF8"
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3de26dc7f09e58f035e070de3abb78014ae692a51eceb2e7f54ead6605153e11"
+}

@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- [#35](https://github.com/bobozaur/sqlx-exasol/pull/35): Compile-time query support
+  - Compile-time query validation support.
+  - `ExaHasArrayType` marker trait to allow array-like parameter binding for custom types.
+  - `INTERVAL YEAR TO MONTH` support via `ExaIntervalYearToMonth`.
+  - `INTERVAL DAY TO SECOND` support via `chrono::TimeDelta` and `time::Duration`.
+  - `Encode`/`Decode` for `serde_json::Value` and `&serde_json::value::RawValue` behind the `json` feature flag.
+  - `HashType` newtype for `HASHTYPE` columns.
+  - `geo-types` feature for `GEOMETRY` support.
+  - `ProtocolVersion::V5`.
+  - `ExaCompressionMode` enum to control compression settings.
+
 ### Changed
 
+- [#35](https://github.com/bobozaur/sqlx-exasol/pull/35): Compile-time query support
+  - The `Debug` implementation for `ExaWriter` and `ExaReader` no longer displays the internal buffers to avoid excessive output.
+  - `statement_cache_size` can now be set to `0` to disable the statement cache.
+  - `ExaDataType::compatible` was removed in favor of `TypeInfo::type_compatible`.
+  - Due to `sqlx` limitations, compile-time query validation requires either `extern crate sqlx_exasol as sqlx;` or `package = "sqlx-exasol"` in `Cargo.toml`.
+  - `Uuid`s now have a `HASHTYPE_FORMAT` caveat when used with prepared statements.
 - [#33](https://github.com/bobozaur/sqlx-exasol/pull/33): Avoid nested boxing in Executor impl
 - [#31](https://github.com/bobozaur/sqlx-exasol/pull/31): BREAKING CHANGES
   - Renamed `ExaConnection::socket_addr` to `ExaConnection::server`
@@ -16,7 +35,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Removed the boxing of `EtlQuery` future
   - Made `ExaAttributes::set_autocommit` private
   - Created wrapper structs `ExaImport` and `ExaExport` to avoid exposing enum variants
-  
+
+### Removed
+
+- [#35](https://github.com/bobozaur/sqlx-exasol/pull/35): Compile-time query support
+  - `Encode` implementation for `&mut [T]`.
+  - `ExaDataType::Null`.
+  - Support for `u*` integer types, 128-bit integers, and `f32`.
+  - The `protocol-version` parameter from the connection string and `ExaConnectOptionsBuilder`. `ProtocolVersion` is no longer part of the public API.
+
 ## [0.8.6-hotfix1] - 2025-07-22
 
 ### Fixed

@@ -1,0 +1,47 @@
+[package]
+name = "sqlx-exasol-cli"
+description = "Command-line utility for sqlx-exasol."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+default-run = "sqlx-exasol"
+
+[[bin]]
+name = "sqlx-exasol"
+path = "src/sqlx-exasol.rs"
+
+# enables invocation as `cargo sqlx-exasol`; required for `prepare` subcommand
+[[bin]]
+name = "cargo-sqlx-exasol"
+path = "src/cargo-sqlx-exasol.rs"
+
+[features]
+default = ["native-tls", "completions", "sqlx-toml"]
+
+rustls = ["sqlx-cli/rustls"]
+native-tls = ["sqlx-cli/native-tls"]
+
+openssl-vendored = ["sqlx-cli/openssl-vendored"]
+
+completions = ["sqlx-cli/completions"]
+
+sqlx-toml = ["sqlx-cli/sqlx-toml"]
+
+[dependencies]
+clap = { workspace = true }
+console = { workspace = true }
+sqlx-exasol = { workspace = true, features = [
+  "runtime-tokio",
+  "migrate",
+  "any",
+] }
+sqlx-cli = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

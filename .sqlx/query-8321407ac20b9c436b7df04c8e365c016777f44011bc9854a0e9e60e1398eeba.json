@@ -1,0 +1,23 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_hashtype FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_hashtype",
+        "dataType": {
+          "type": "HASHTYPE",
+          "size": 30
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8321407ac20b9c436b7df04c8e365c016777f44011bc9854a0e9e60e1398eeba"
+}

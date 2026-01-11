@@ -1,0 +1,55 @@
+use serde::Deserialize;
+use serde_json::Value;
+use sqlx_core::{
+    decode::Decode,
+    encode::{Encode, IsNull},
+    error::BoxDynError,
+    types::Type,
+};
+
+use crate::{
+    arguments::ExaBuffer,
+    database::Exasol,
+    type_info::{ExaDataType, ExaTypeInfo},
+    types::ExaHasArrayType,
+    value::ExaValueRef,
+};
+
+impl Type<Exasol> for f64 {
+    fn type_info() -> ExaTypeInfo {
+        ExaDataType::Double.into()
+    }
+}
+
+impl ExaHasArrayType for f64 {}
+
+impl Encode<'_, Exasol> for f64 {
+    fn encode_by_ref(&self, buf: &mut ExaBuffer) -> Result<IsNull, BoxDynError> {
+        // NaN is treated as NULL by Exasol.
+        // Infinity is not supported by Exasol but serde_json
+        // serializes it as NULL as well.
+        if self.is_finite() {
+            buf.append(self)?;
+            Ok(IsNull::No)
+        } else {
+            buf.append(())?;
+            Ok(IsNull::Yes)
+        }
+    }
+
+    fn size_hint(&self) -> usize {
+        // 1 sign + 15 digits + 1 dot
+        // See <https://docs.exasol.com/db/latest/sql_references/data_types/datatypedetails.htm#top>
+        17
+    }
+}
+
+impl Decode<'_, Exasol> for f64 {
+    fn decode(value: ExaValueRef<'_>) -> Result<Self, BoxDynError> {
+        match value.value {
+            Value::Number(n) => <Self as Deserialize>::deserialize(n).map_err(From::from),
+            Value::String(s) => serde_json::from_str(s).map_err(From::from),
+            v => Err(format!("invalid f64 value: {v}").into()),
+        }
+    }
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_interval_ytm FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_interval_ytm",
+        "dataType": {
+          "type": "INTERVAL YEAR TO MONTH",
+          "precision": 2
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "261a60d57dcba09d6eb87d34075af62881f6ffa7bd84f59cf36a924e1491bf86"
+}

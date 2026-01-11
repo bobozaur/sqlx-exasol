@@ -1,0 +1,17 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_hashtype) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "HASHTYPE",
+          "size": 30
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9c1c57fd0b7de481c4290d26f7e5b67cfcb55a1a66161cee89f670dd113f3c71"
+}

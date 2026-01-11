@@ -1,92 +1,211 @@
-[package]
-name = "sqlx-exasol"
-version = "0.8.6-hotifx1"
-edition = "2024"
-authors = ["bobozaur"]
-rust-version = "1.85.0"
-description = "Exasol driver for the SQLx framework."
+[workspace]
+members = [".", "sqlx-exasol-cli", "sqlx-exasol-impl", "sqlx-exasol-macros"]
+
+[workspace.package]
+version = "0.9.0"
 license = "MIT OR Apache-2.0"
+edition = "2024"
+rust-version = "1.86.0"
 repository = "https://github.com/bobozaur/sqlx-exasol"
 keywords = ["database", "sql", "exasol", "sqlx", "driver"]
+categories = ["database", "asynchronous"]
+authors = ["Bogdan Mircea <mirceapetrebogdan@gmail.com>"]
+
+[package]
+name = "sqlx-exasol"
+documentation = "https://docs.rs/sqlx-exasol"
+description = "Exasol driver for the SQLx framework."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
 exclude = ["tests/*"]
-categories = ["database"]
 
 [package.metadata.docs.rs]
-features = ["etl", "chrono", "rust_decimal", "uuid", "compression", "migrate"]
+features = [
+  "etl",
+  "compression",
+  "any",
+  "migrate",
+  "macros",
+  "bigdecimal",
+  "chrono",
+  "rust_decimal",
+  "time",
+  "uuid",
+  "json",
+  "geo-types",
+]
 
 [features]
-# ############################################
-# ########### User-facing features ###########
-# ############################################
+default = ["any", "macros", "migrate", "json"]
 
-compression = ["dep:async-compression"]
-uuid = ["dep:uuid"]
-chrono = ["dep:chrono"]
-rust_decimal = ["dep:rust_decimal"]
-migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
-etl = ["dep:http-body-util", "dep:hyper", "dep:futures-channel"]
-etl_rustls = ["dep:rustls", "dep:rcgen", "etl"]
-etl_native_tls = ["dep:native-tls", "dep:rcgen", "etl"]
+derive = ["sqlx/derive", "sqlx-exasol-macros?/derive"]
+macros = ["derive", "sqlx/macros", "sqlx-exasol-macros/macros"]
+migrate = [
+  "sqlx/migrate",
+  "sqlx-exasol-impl/migrate",
+  "sqlx-exasol-macros?/migrate",
+]
 
-# ############################################
-# ############################################
-# ############################################
+sqlx-toml = ["sqlx-exasol-impl/sqlx-toml", "sqlx-exasol-macros?/sqlx-toml"]
+
+# Base runtime features without TLS
+runtime-async-std = ["sqlx/runtime-async-std"]
+runtime-tokio = ["sqlx/runtime-tokio"]
+
+# TLS features
+tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
+tls-rustls-aws-lc-rs = [
+  "sqlx/tls-rustls-aws-lc-rs",
+  "sqlx-exasol-impl/rustls-aws-lc-rs",
+]
+tls-rustls-ring-webpki = [
+  "sqlx/tls-rustls-ring-webpki",
+  "sqlx-exasol-impl/rustls-ring",
+]
+tls-rustls-ring-native-roots = [
+  "sqlx/tls-rustls-ring-native-roots",
+  "sqlx-exasol-impl/rustls-ring",
+]
+
+# Database
+any = ["sqlx/any", "sqlx-exasol-impl/any"]
+
+# Types
+bigdecimal = [
+  "sqlx/bigdecimal",
+  "sqlx-exasol-impl/bigdecimal",
+  "sqlx-exasol-macros?/bigdecimal",
+]
+chrono = [
+  "sqlx/chrono",
+  "sqlx-exasol-impl/chrono",
+  "sqlx-exasol-macros?/chrono",
+]
+geo-types = ["sqlx-exasol-impl/geo-types", "sqlx-exasol-macros?/geo-types"]
+json = ["sqlx/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
+rust_decimal = [
+  "sqlx/rust_decimal",
+  "sqlx-exasol-impl/rust_decimal",
+  "sqlx-exasol-macros?/rust_decimal",
+]
+time = ["sqlx/time", "sqlx-exasol-impl/time", "sqlx-exasol-macros?/time"]
+uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid", "sqlx-exasol-macros?/uuid"]
+
+# Driver specific features
+compression = ["sqlx-exasol-impl/compression"]
+etl = ["sqlx-exasol-impl/etl"]
+
+[workspace.dependencies]
+# Internal
+sqlx-exasol = { path = "." }
+sqlx-exasol-macros = { path = "sqlx-exasol-macros" }
+sqlx-exasol-impl = { path = "sqlx-exasol-impl" }
+
+# External
+arrayvec = { version = "0.7", default-features = false }
+async-compression = { version = "0.4", default-features = false, features = [
+  "futures-io",
+  "gzip",
+  "zlib",
+] }
+async-tungstenite = { version = "0.29", default-features = false, features = [
+  "handshake",
+  "futures-03-sink",
+] }
+base64 = { version = "0.22", default-features = false }
+bigdecimal = { version = "0.4", default-features = false, features = [
+  "std",
+  "serde-json",
+] }
+chrono = { version = "0.4", default-features = false, features = ["serde"] }
+clap = { version = "4", default-features = false, features = ["derive"] }
+console = { version = "0.15", default-features = false }
+dotenvy = { version = "0.15", default-features = false }
+futures-io = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
+futures-channel = { version = "0.3", default-features = false, features = [
+  "sink",
+] }
+futures-core = { version = "0.3", default-features = false }
+geo-types = { version = "0.7", default-features = false, features = ["std"] }
+hex = { version = "0.4", default-features = false, features = ["std"] }
+http-body-util = { version = "0.1", default-features = false }
+hyper = { version = "1.4", default-features = false, features = [
+  "server",
+  "http1",
+] }
+native-tls = { version = "0.2", default-features = false }
+paste = { version = "1", default-features = false }
+quote = { version = "1", default-features = false }
+rand = { version = "0.8", default-features = false, features = [
+  "std",
+  "std_rng",
+] }
+rcgen = { version = "0.13", default-features = false, features = ["pem"] }
+rsa = { version = "0.9", default-features = false, features = ["pem", "std"] }
+rust_decimal = { version = "1", default-features = false, features = ["serde"] }
+rustls = { version = "0.23", default-features = false, features = [
+  "std",
+  "tls12",
+] }
+serde = { version = "1", default-features = false, features = ["derive", "rc"] }
+serde_json = { version = "1", default-features = false, features = [
+  "std",
+  "raw_value",
+] }
+sqlx = { version = "0.9.0-alpha.1", default-features = false }
+sqlx-cli = { version = "0.9.0-alpha.1", default-features = false }
+sqlx-core = { version = "0.9.0-alpha.1", default-features = false, features = [
+  "offline",
+  "migrate",
+] }
+sqlx-macros-core = { version = "0.9.0-alpha.1", default-features = false }
+syn = { version = "2", default-features = false, features = [
+  "parsing",
+  "proc-macro",
+] }
+thiserror = { version = "2", default-features = false }
+time = { version = "0.3", default-features = false, features = [
+  "std",
+  "serde",
+  "formatting",
+  "parsing",
+  "macros",
+] }
+tokio = { version = "1", default-features = false, features = [
+  "rt-multi-thread",
+] }
+tracing = { version = "0.1", default-features = false, features = ["log"] }
+url = { version = "2", default-features = false }
+uuid = { version = "1", default-features = false, features = ["serde"] }
+wkt = { version = "0.14", default-features = false, features = [
+  "geo-types",
+  "serde",
+] }
 
 [dependencies]
-arrayvec = "0.7"
-async-tungstenite = "0.29"
-base64 = "0.22"
-futures-io = "0.3"
-futures-util = "0.3"
-futures-core = "0.3"
-lru = "0.12"
-rand = "0.8"
-rsa = "0.9"
-serde = { version = "1", features = ["derive", "rc"] }
-serde_json = { version = "1", features = ["raw_value"] }
-sqlx-core = "=0.8.6"
-thiserror = "1"
-tracing = { version = "0.1", features = ["log"] }
-url = "2"
-
-# Feature flagged optional dependencies
-async-compression = { version = "0.4", features = [
-    "futures-io",
-    "gzip",
-    "zlib",
-], optional = true }
-chrono = { version = "0.4", features = ["serde"], optional = true }
-dotenvy = { version = "0.15", optional = true }
-futures-channel = { version = "0.3", features = ["sink"], optional = true }
-hex = { version = "0.4", optional = true }
-http-body-util = { version = "0.1", optional = true }
-hyper = { version = "1.4", features = ["server", "http1"], optional = true }
-native-tls = { version = "0.2", optional = true }
-uuid = { version = "1", features = ["serde"], optional = true }
-rcgen = { version = "0.13", optional = true }
-rust_decimal = { version = "1", optional = true }
-rustls = { version = "0.23", default-features = false, features = [
-    "std",
-    "tls12",
-], optional = true }
+sqlx-exasol-macros = { workspace = true, optional = true }
+sqlx-exasol-impl = { workspace = true }
+sqlx = { workspace = true }
 
 [dev-dependencies]
-anyhow = "1"
-paste = "1"
-rustls = "0.23"
-sqlx = { version = "=0.8.6", features = [
-    "runtime-tokio",
-    "tls-native-tls",
-    "migrate",
-] }
-tokio = { version = "1", features = ["full"] }
+dotenvy = { workspace = true }
+futures-util = { workspace = true }
+paste = { workspace = true }
+serde = { workspace = true }
+time = { workspace = true }
+url = { workspace = true }
 
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
 
-[lints.rust]
+[workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }
 rust_2021_compatibility = { level = "warn", priority = -1 }
 meta_variable_misuse = "warn"
@@ -100,3 +219,4 @@ unused_extern_crates = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
+# Enable parsing of `sqlx.toml` for configuring macros and migrations.

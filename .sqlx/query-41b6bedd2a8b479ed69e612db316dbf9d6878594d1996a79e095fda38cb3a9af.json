@@ -1,0 +1,24 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_varchar_utf8 FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_varchar_utf8",
+        "dataType": {
+          "type": "VARCHAR",
+          "size": 16,
+          "characterSet": "UTF8"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "41b6bedd2a8b479ed69e612db316dbf9d6878594d1996a79e095fda38cb3a9af"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_i16 FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_i16",
+        "dataType": {
+          "type": "DECIMAL",
+          "precision": 5,
+          "scale": 0
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d8a7b48efe1f22930a701ec953a2acbc5b014d5e7020fe7188a4b647b8f589e7"
+}

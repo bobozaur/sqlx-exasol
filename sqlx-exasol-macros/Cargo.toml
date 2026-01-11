@@ -1,0 +1,42 @@
+[package]
+name = "sqlx-exasol-macros"
+description = "Macros support for sqlx-exasol. Not meant to be used directly."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+
+[lib]
+proc-macro = true
+
+[features]
+# SQLx features
+derive = ["sqlx-macros-core/derive"]
+macros = ["sqlx-macros-core/macros", "sqlx-exasol-impl/macros"]
+migrate = ["sqlx-macros-core/migrate", "sqlx-exasol-impl/migrate"]
+sqlx-toml = ["sqlx-macros-core/sqlx-toml"]
+
+# Types
+bigdecimal = ["sqlx-macros-core/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
+chrono = ["sqlx-macros-core/chrono", "sqlx-exasol-impl/chrono"]
+geo-types = ["sqlx-exasol-impl/geo-types"]
+json = ["sqlx-macros-core/json", "sqlx-exasol-impl/json"]
+rust_decimal = [
+  "sqlx-macros-core/rust_decimal",
+  "sqlx-exasol-impl/rust_decimal",
+]
+time = ["sqlx-macros-core/time", "sqlx-exasol-impl/time"]
+uuid = ["sqlx-macros-core/uuid", "sqlx-exasol-impl/uuid"]
+
+[dependencies]
+sqlx-macros-core = { workspace = true }
+sqlx-exasol-impl = { workspace = true }
+syn = { workspace = true }
+quote = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_geometry FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_geometry",
+        "dataType": {
+          "type": "GEOMETRY",
+          "srid": 0
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "13b0544bc6ffe194e012de3ab2b3f7fbf1bea457355063c72f38cef3d4f15a75"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_date FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_date",
+        "dataType": {
+          "type": "DATE"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "450079655abddaeec26a10d192cffc83489d22f870c0c6291269525b7fe3dcb0"
+}

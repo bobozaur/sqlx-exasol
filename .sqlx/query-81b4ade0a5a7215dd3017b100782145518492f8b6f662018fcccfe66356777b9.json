@@ -1,0 +1,16 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_bool) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "BOOLEAN"
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81b4ade0a5a7215dd3017b100782145518492f8b6f662018fcccfe66356777b9"
+}

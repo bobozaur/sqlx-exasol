@@ -1,0 +1,24 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_char_ascii FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_char_ascii",
+        "dataType": {
+          "type": "CHAR",
+          "size": 16,
+          "characterSet": "ASCII"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3a440d2f78336da17378656559d1111aeecb59f6d05c212c0e782e7b7934f6c8"
+}

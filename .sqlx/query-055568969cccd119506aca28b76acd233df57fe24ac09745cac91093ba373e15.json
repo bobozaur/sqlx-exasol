@@ -1,0 +1,24 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_i8 FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_i8",
+        "dataType": {
+          "type": "DECIMAL",
+          "precision": 3,
+          "scale": 0
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "055568969cccd119506aca28b76acd233df57fe24ac09745cac91093ba373e15"
+}

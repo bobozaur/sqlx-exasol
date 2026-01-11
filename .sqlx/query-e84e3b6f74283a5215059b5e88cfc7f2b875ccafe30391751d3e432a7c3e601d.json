@@ -1,0 +1,22 @@
+{
+  "db_name": "Exasol",
+  "query": "SELECT column_bool FROM compile_time_tests;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "column_bool",
+        "dataType": {
+          "type": "BOOLEAN"
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e84e3b6f74283a5215059b5e88cfc7f2b875ccafe30391751d3e432a7c3e601d"
+}

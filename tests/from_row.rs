@@ -1,24 +1,22 @@
 #![cfg(feature = "migrate")]
 
-use sqlx::{Executor, FromRow};
-use sqlx_core::pool::PoolConnection;
-use sqlx_exasol::Exasol;
+use sqlx_exasol::{error::BoxDynError, pool::PoolConnection, Exasol, Executor, FromRow};
 
 #[derive(Debug, FromRow, PartialEq, Eq)]
 struct TestRow {
     name: String,
-    age: u8,
-    amount: u64,
+    age: i8,
+    amount: i64,
 }
 
-#[sqlx::test]
-async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
+#[sqlx_exasol::test]
+async fn test_from_row(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
     conn.execute(
         r"
         CREATE TABLE TEST_FROM_ROW (
-            name VARCHAR(200), 
-            age DECIMAL(3, 0), 
-            amount DECIMAL(15, 0)
+            name VARCHAR(200),
+            age DECIMAL(3, 0),
+            amount DECIMAL(20, 0)
          );",
     )
     .await?;
@@ -35,14 +33,14 @@ async fn test_from_row(mut conn: PoolConnection<Exasol>) -> anyhow::Result<()> {
         amount: 43_759_384_749,
     };
 
-    sqlx::query("INSERT INTO TEST_FROM_ROW VALUES (?, ?, ?)")
+    sqlx_exasol::query("INSERT INTO TEST_FROM_ROW VALUES (?, ?, ?)")
         .bind([&test_row1.name, &test_row2.name])
         .bind([&test_row1.age, &test_row2.age])
         .bind([&test_row1.amount, &test_row2.amount])
         .execute(&mut *conn)
         .await?;
 
-    let rows: Vec<TestRow> = sqlx::query_as("SELECT * FROM TEST_FROM_ROW ORDER BY age")
+    let rows: Vec<TestRow> = sqlx_exasol::query_as("SELECT * FROM TEST_FROM_ROW ORDER BY age")
         .fetch_all(&mut *conn)
         .await?;
 

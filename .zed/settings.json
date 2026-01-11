@@ -7,14 +7,7 @@
     "rust-analyzer": {
       "initialization_options": {
         "cargo": {
-          "features": [
-            "etl_native_tls",
-            "compression",
-            "uuid",
-            "chrono",
-            "rust_decimal",
-            "migrate"
-          ]
+          "features": "all"
         }
       }
     }

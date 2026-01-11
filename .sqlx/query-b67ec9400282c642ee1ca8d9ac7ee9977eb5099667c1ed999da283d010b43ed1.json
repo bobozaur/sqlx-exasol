@@ -1,0 +1,16 @@
+{
+  "db_name": "Exasol",
+  "query": "INSERT INTO compile_time_tests (column_f64) VALUES(?);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "type": "DOUBLE"
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b67ec9400282c642ee1ca8d9ac7ee9977eb5099667c1ed999da283d010b43ed1"
+}
