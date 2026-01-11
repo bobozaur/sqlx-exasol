@@ -81,9 +81,11 @@ runs:
       run: |
         set +e
         RC=1
+        
+        FINGERPRINT=`sudo openssl x509 -in $HOME/sqlx1/etc/ssl/ssl.crt -outform DER | sudo openssl dgst -sha256 | awk '{print $2}'`
 
         while [[ $RC -ne 0 ]]; do
-          docker exec sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"' &>/dev/null
+          docker exec -e FINGERPRINT="$FINGERPRINT" sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost/$FINGERPRINT:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"' &>/dev/null
           RC=$?
           sleep 5
         done

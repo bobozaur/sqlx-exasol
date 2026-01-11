@@ -6,7 +6,7 @@ on:
       - "*"
 
 env:
-  EXASOL_VERSION: 7.0.22
+  EXASOL_VERSION: latest-7.1
   NUM_NODES: 4
   TESTS_TIMEOUT: 15
   EXA_CLUSTER_SETUP_TIMEOUT: 15
