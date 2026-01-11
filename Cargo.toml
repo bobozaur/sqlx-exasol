@@ -47,6 +47,8 @@ migrate = [
   "sqlx-exasol-macros?/migrate",
 ]
 
+sqlx-toml = ["sqlx-exasol-impl/sqlx-toml", "sqlx-exasol-macros?/sqlx-toml"]
+
 # Base runtime features without TLS
 runtime-async-std = ["sqlx/runtime-async-std"]
 runtime-tokio = ["sqlx/runtime-tokio"]
@@ -214,3 +216,4 @@ unused_extern_crates = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
+# Enable parsing of `sqlx.toml` for configuring macros and migrations.

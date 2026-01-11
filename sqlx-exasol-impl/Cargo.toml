@@ -15,6 +15,7 @@ authors.workspace = true
 any = ["sqlx-core/any"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
 macros = ["dep:sqlx-macros-core", "sqlx-macros-core?/macros"]
+sqlx-toml = ["sqlx-core/sqlx-toml"]
 
 # Type Integration features
 bigdecimal = ["sqlx-core/bigdecimal", "dep:bigdecimal"]

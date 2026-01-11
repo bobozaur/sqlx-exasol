@@ -18,6 +18,7 @@ proc-macro = true
 derive = ["sqlx-macros-core/derive"]
 macros = ["sqlx-macros-core/macros", "sqlx-exasol-impl/macros"]
 migrate = ["sqlx-macros-core/migrate", "sqlx-exasol-impl/migrate"]
+sqlx-toml = ["sqlx-macros-core/sqlx-toml"]
 
 # Types
 bigdecimal = ["sqlx-macros-core/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
