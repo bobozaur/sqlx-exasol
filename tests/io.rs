@@ -6,7 +6,7 @@ use futures_util::{
 };
 use sqlx_exasol::{
     error::BoxDynError,
-    etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
+    etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder},
     pool::PoolOptions,
     ConnectOptions, Connection, ExaConnectOptions, ExaConnection, Exasol, Executor,
 };
@@ -145,7 +145,7 @@ async fn export_import(
         .await?;
 
     #[allow(unused_mut, reason = "conditionally compiled")]
-    let mut export_builder = ExportBuilder::new(ExportSource::Table("TLS_COMP_COMBO"));
+    let mut export_builder = ExportBuilder::new_from_table("TLS_COMP_COMBO", None);
     #[allow(unused_mut, reason = "conditionally compiled")]
     let mut import_builder = ImportBuilder::new("TLS_COMP_COMBO");
 

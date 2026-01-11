@@ -10,7 +10,7 @@ Based on `sqlx` version `0.9.0-alpha.1`.
 
 ## Comparison to native sqlx drivers
 
-The driver re-exports all `sqlx` public API and implements the exposed traits. As a result, 
+The driver re-exports all `sqlx` public API and implements the exposed traits. As a result,
 it can do all the drivers shipped with `sqlx` do, with some caveats:
 
 - Limitations
@@ -25,10 +25,10 @@ it can do all the drivers shipped with `sqlx` do, with some caveats:
 
 ## Compile-time query checks
 
-The driver now supports compile-time query validation. 
+The driver now supports compile-time query validation.
 
-However, full functionality is implemented through path overrides and due to `sqlx` macros 
-implementation details you will currently need to either add `extern crate sqlx_exasol as sqlx;` 
+However, full functionality is implemented through path overrides and due to `sqlx` macros
+implementation details you will currently need to either add `extern crate sqlx_exasol as sqlx;`
 to the root of your crate or rename the crate import to `sqlx` in `Cargo.toml`:
 
 ```toml
@@ -43,6 +43,7 @@ See <https://github.com/launchbadge/sqlx/pull/3944> for more details.
 ## CLI utility
 
 The driver uses its own CLI utility (built on the same `sqlx-cli` library):
+
 ```sh
 cargo install sqlx-exasol-cli
 
@@ -58,6 +59,8 @@ cargo sqlx-exasol prepare
 
 The connection string is expected to be an URL with the `exa://` scheme, e.g:
 `exa://sys:exasol@localhost:8563`.
+
+See the crate level documentation for a list of supported connection string parameters.
 
 ## Example
 
