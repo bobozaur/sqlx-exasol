@@ -51,6 +51,19 @@ const FEEDBACK_INTERVAL: &str = "feedback-interval";
 ///
 /// While generally automatically created through a connection string,
 /// [`ExaConnectOptions::builder()`] can be used to get a [`ExaConnectOptionsBuilder`].
+///
+/// Connection options:
+/// - `access-token`: Use an access token for login instead of credentials
+/// - `refresh-token`: Use a refresh token for login instead of credentials
+/// - `ssl-mode`: Select a specifc SSL behavior.
+/// - `ssl-ca`: Use a certain certificate authority
+/// - `ssl-cert`: Use a certain certificate
+/// - `ssl-key`: Use a specific SSL key
+/// - `statement-cache-capacity`: Set the capacity of the LRU prepared statements cache
+/// - `fetch-size`: Sets the size of data chunks when retrieving result sets
+/// - `query-timeout`: The query timeout amount, in seconds. 0 means no timeout
+/// - `compression`: Set the desired compression mode.
+/// - `feedback-interval`: Interval at which Exasol sends keep-alive Pong frames
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
     pub(crate) hosts_details: Vec<(String, Vec<SocketAddr>)>,

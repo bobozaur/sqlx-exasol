@@ -139,6 +139,9 @@ impl ExaConnectOptionsBuilder {
         self
     }
 
+    /// Sets the capacity of the statement cache.
+    ///
+    /// The cache is enabled by default. Setting the capacity to `0` disables the cache.
     #[must_use = "call build() to get connection options"]
     pub fn statement_cache_capacity(mut self, capacity: usize) -> Self {
         self.statement_cache_capacity = capacity;

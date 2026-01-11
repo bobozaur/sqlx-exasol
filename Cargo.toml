@@ -2,7 +2,7 @@
 members = [".", "sqlx-exasol-cli", "sqlx-exasol-impl", "sqlx-exasol-macros"]
 
 [workspace.package]
-version = "0.9.0-alpha.1"
+version = "0.9.0"
 license = "MIT OR Apache-2.0"
 edition = "2024"
 rust-version = "1.86.0"
@@ -26,14 +26,17 @@ exclude = ["tests/*"]
 [package.metadata.docs.rs]
 features = [
   "etl",
+  "compression",
+  "any",
+  "migrate",
+  "macros",
   "bigdecimal",
   "chrono",
   "rust_decimal",
   "time",
   "uuid",
-  "compression",
-  "migrate",
-  "macros",
+  "json",
+  "geo-types",
 ]
 
 [features]
