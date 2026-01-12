@@ -10,7 +10,7 @@ use futures_util::{
 };
 use sqlx_exasol::{
     error::BoxDynError,
-    etl::{ExaExport, ExaImport, ExportBuilder, ExportSource, ImportBuilder},
+    etl::{ExaExport, ExaImport, ExportBuilder, ImportBuilder},
     pool::{PoolConnection, PoolOptions},
     Connection, ExaConnectOptions, Exasol, Executor,
 };
@@ -20,21 +20,21 @@ const NUM_ROWS: usize = 1_000_000;
 test_etl_single_threaded!(
     "simple",
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
+    ExportBuilder::new_from_table("TEST_ETL", None),
     ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_multi_threaded!(
     "simple",
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
+    ExportBuilder::new_from_table("TEST_ETL", None),
     ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_single_threaded!(
     "query_export",
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Query("SELECT * FROM TEST_ETL")),
+    ExportBuilder::new_from_query("SELECT * FROM TEST_ETL"),
     ImportBuilder::new("TEST_ETL")
 );
 
@@ -42,7 +42,7 @@ test_etl_single_threaded!(
     "multiple_workers",
     0,
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
+    ExportBuilder::new_from_table("TEST_ETL", None),
     ImportBuilder::new("TEST_ETL")
 );
 
@@ -50,14 +50,14 @@ test_etl_multi_threaded!(
     "multiple_workers",
     0,
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
+    ExportBuilder::new_from_table("TEST_ETL", None),
     ImportBuilder::new("TEST_ETL")
 );
 
 test_etl_single_threaded!(
     "all_arguments",
     "TEST_ETL",
-    ExportBuilder::new(ExportSource::Table("TEST_ETL"))
+    ExportBuilder::new_from_table("TEST_ETL", None)
         .num_readers(1)
         .comment("test")
         .encoding("ASCII")
@@ -86,7 +86,7 @@ test_etl!(
     1,
     "TEST_ETL",
     |(r, w)| pipe_flush_writers(r, w),
-    ExportBuilder::new(ExportSource::Table("TEST_ETL")),
+    ExportBuilder::new_from_table("TEST_ETL", None),
     ImportBuilder::new("TEST_ETL")
 );
 
@@ -104,7 +104,7 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> Result<(), 
         .execute(&mut *conn)
         .await?;
 
-    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table(";)BAD_TABLE_NAME*&"))
+    let (export_fut, readers) = ExportBuilder::new_from_table(";)BAD_TABLE_NAME*&", None)
         .build(&mut conn)
         .await?;
 
@@ -129,7 +129,7 @@ async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> Result<(), Bo
         .execute(&mut *conn)
         .await?;
 
-    let (export_fut, readers) = ExportBuilder::new(ExportSource::Table("TEST_ETL"))
+    let (export_fut, readers) = ExportBuilder::new_from_table("TEST_ETL", None)
         .build(&mut conn)
         .await?;
 

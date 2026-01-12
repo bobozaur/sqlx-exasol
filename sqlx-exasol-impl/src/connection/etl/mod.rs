@@ -81,7 +81,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-pub use export::{ExaExport, ExportBuilder, ExportSource};
+pub use export::{ExaExport, ExportBuilder};
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::FutureExt;
 use hyper::rt;

@@ -183,7 +183,7 @@
 //! let mut con2 = pool.acquire().await?;
 //!
 //! // Build EXPORT job
-//! let (export_fut, readers) = ExportBuilder::new(ExportSource::Table("TEST_ETL"))
+//! let (export_fut, readers) = ExportBuilder::new_from_table("TEST_ETL", None)
 //!     .build(&mut con1)
 //!     .await?;
 //!

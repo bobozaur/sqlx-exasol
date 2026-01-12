@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+- [#42](https://github.com/bobozaur/sqlx-exasol/pull/42): Added support for specifying schema in ETL export
+  - Bump Exasol version to 7.1 in CI
 - [#35](https://github.com/bobozaur/sqlx-exasol/pull/35): Compile-time query support
   - Compile-time query validation support.
   - `ExaHasArrayType` marker trait to allow array-like parameter binding for custom types.
@@ -38,6 +40,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Removed
 
+- [#42](https://github.com/bobozaur/sqlx-exasol/pull/42): made ExportSource private
 - [#35](https://github.com/bobozaur/sqlx-exasol/pull/35): Compile-time query support
   - `Encode` implementation for `&mut [T]`.
   - `ExaDataType::Null`.

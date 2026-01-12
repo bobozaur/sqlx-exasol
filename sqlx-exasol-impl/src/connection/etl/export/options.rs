@@ -1,10 +1,9 @@
 use std::{fmt::Debug, net::SocketAddrV4};
 
-use super::{ExaExport, ExportSource};
 use crate::{
     connection::etl::RowSeparator,
     etl::{
-        export::ExaExportState,
+        export::{ExaExport, ExaExportState},
         job::{EtlJob, SocketSetup},
         EtlQuery,
     },
@@ -31,11 +30,20 @@ pub struct ExportBuilder<'a> {
 
 impl<'a> ExportBuilder<'a> {
     #[must_use]
-    pub fn new(source: ExportSource<'a>) -> Self {
+    pub fn new_from_query(query: &'a str) -> Self {
+        Self::new(ExportSource::Query(query))
+    }
+
+    #[must_use]
+    pub fn new_from_table(name: &'a str, schema: Option<&'a str>) -> Self {
+        Self::new(ExportSource::Table { name, schema })
+    }
+
+    fn new(source: ExportSource<'a>) -> Self {
         Self {
+            source,
             num_readers: 0,
             compression: None,
-            source,
             comment: None,
             encoding: None,
             null: "",
@@ -142,8 +150,12 @@ impl EtlJob for ExportBuilder<'_> {
         query.push_str("EXPORT ");
 
         match self.source {
-            ExportSource::Table(tbl) => {
-                Self::push_ident(&mut query, tbl);
+            ExportSource::Table { name, schema } => {
+                if let Some(schema) = schema {
+                    Self::push_ident(&mut query, schema);
+                    query.push('.');
+                }
+                Self::push_ident(&mut query, name);
             }
             ExportSource::Query(qr) => {
                 query.push_str("(\n");
@@ -172,4 +184,14 @@ impl EtlJob for ExportBuilder<'_> {
 
         query
     }
+}
+
+/// The EXPORT source type, which can either directly be a table or an entire query.
+#[derive(Clone, Copy, Debug)]
+enum ExportSource<'a> {
+    Query(&'a str),
+    Table {
+        name: &'a str,
+        schema: Option<&'a str>,
+    },
 }
