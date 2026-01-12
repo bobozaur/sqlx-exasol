@@ -73,7 +73,10 @@ impl ExaConnectOptionsBuilder {
             _ => return Err(ExaConfigError::MultipleAuthMethods.into()),
         };
 
-        let hosts = Self::parse_hostname(&hostname);
+        let hosts = hostname
+            .split(",")
+            .flat_map(|h| Self::parse_hostname(h))
+            .collect::<Vec<_>>();
         let mut hosts_details = Vec::with_capacity(hosts.len());
 
         for host in hosts {
