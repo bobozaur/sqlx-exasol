@@ -103,8 +103,8 @@ async fn test_context(args: &TestArgs) -> Result<TestContext<Exasol>, Error> {
 
     // Sanity checks:
     assert_eq!(
-        master_pool.connect_options().hosts_details,
-        master_opts.hosts_details,
+        master_pool.connect_options().hosts,
+        master_opts.hosts,
         "DATABASE_URL changed at runtime, host differs"
     );
 

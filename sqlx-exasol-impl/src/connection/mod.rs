@@ -4,7 +4,10 @@ mod executor;
 pub mod stream;
 pub mod websocket;
 
-use std::net::SocketAddr;
+use std::{
+    fmt::Write,
+    net::{SocketAddr, ToSocketAddrs},
+};
 
 use futures_util::SinkExt;
 use rand::{seq::SliceRandom, thread_rng};
@@ -68,50 +71,62 @@ impl ExaConnection {
     }
 
     pub(crate) async fn establish(opts: &ExaConnectOptions) -> SqlxResult<Self> {
-        let mut error = SqlxError::Configuration("No hosts found".into());
+        let mut error = SqlxError::Configuration("Could not connect to Exasol".into());
+        let mut resolved = Vec::with_capacity(opts.hosts.len());
 
-        // We want to try and randomly connect to nodes, if multiple were provided.
-        // But since the RNG is not Send and cloning the hosts would be more expensive,
-        // we create a vector of the indices and shuffle these instead.
-        let mut indices = (0..opts.hosts_details.len()).collect::<Vec<_>>();
-        indices.shuffle(&mut thread_rng());
+        for (host, port) in &opts.hosts {
+            let h = host.clone();
+            let port = *port;
 
-        // For each host parsed from the connection string
-        for idx in indices {
-            // We know the index is valid since it's between 0..hosts.len()
-            let (host, addrs) = opts
-                .hosts_details
-                .get(idx)
-                .expect("hosts list index must be valid");
+            let sock_addrs =
+                sqlx_core::rt::spawn_blocking(move || (h.as_ref(), port).to_socket_addrs()).await?;
 
-            // For each socket address resolved from the host
-            for socket_addr in addrs {
-                let wrapper = WithExaSocket(*socket_addr);
-                let with_socket = WithMaybeTlsExaSocket::new(wrapper, host, opts.into());
-                let socket_res = sqlx_core::net::connect_tcp(host, opts.port, with_socket).await;
+            for sock_addr in sock_addrs {
+                resolved.push((host, sock_addr));
+            }
+        }
 
-                // Continue if the future to connect a socket failed
-                let (socket, with_tls) = match socket_res {
-                    Ok(Ok((socket, with_tls))) => (socket, with_tls),
-                    Ok(Err(err)) | Err(err) => {
-                        error = err;
-                        continue;
-                    }
-                };
+        // Shuffle the resolved addresses to randomly connect to nodes.
+        resolved.shuffle(&mut thread_rng());
 
-                match ExaWebSocket::new(host, opts.port, socket, opts.try_into()?, with_tls).await {
-                    Err(err) => error = err,
-                    // Return if we successfully connect a websocket.
-                    Ok((ws, session_info)) => {
-                        let mut con = Self {
-                            ws,
-                            log_settings: LogSettings::default(),
-                            session_info,
-                        };
+        // Reusable buffer for writing IP address as strings.
+        let mut ip_buf = String::new();
 
-                        con.configure_session().await?;
-                        return Ok(con);
-                    }
+        // Attempt connecting to each resolved socket address until one succeeds.
+        for (host, sock_addr) in resolved {
+            let (ip, port) = (sock_addr.ip(), sock_addr.port());
+            write!(&mut ip_buf, "{ip}")
+                .map_err(From::from)
+                .map_err(SqlxError::Configuration)?;
+
+            let wrapper = WithExaSocket(sock_addr);
+            let with_socket = WithMaybeTlsExaSocket::new(wrapper, host.as_ref(), opts.into());
+            let socket_res = sqlx_core::net::connect_tcp(&ip_buf, port, with_socket).await;
+
+            // Clear the buffer in case we continue iteration.
+            ip_buf.clear();
+
+            // Continue if the future to connect a socket failed.
+            let (socket, with_tls) = match socket_res {
+                Ok(Ok((socket, with_tls))) => (socket, with_tls),
+                Ok(Err(err)) | Err(err) => {
+                    error = err;
+                    continue;
+                }
+            };
+
+            match ExaWebSocket::new(host.as_ref(), port, socket, opts.try_into()?, with_tls).await {
+                Err(err) => error = err,
+                // Return if we successfully connect a websocket.
+                Ok((ws, session_info)) => {
+                    let mut con = Self {
+                        ws,
+                        log_settings: LogSettings::default(),
+                        session_info,
+                    };
+
+                    con.configure_session().await?;
+                    return Ok(con);
                 }
             }
         }

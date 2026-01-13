@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Do not attempt connecting to other hosts after successfully setting up a Websocket
 
 ### Added
-
+- [#47](https://github.com/bobozaur/sqlx-exasol/pull/47): Ability to specify additional connection hosts
+  - `ExaConnectOptionsBuilder::extra_host`
+  - `ExaConnectOptions::builder_from_url`
+  - `ExaConnectOptions::builder_from_str`
 - [#42](https://github.com/bobozaur/sqlx-exasol/pull/42): Support for specifying schema in ETL export
   - Bump Exasol version to 7.1 in CI
   - `ExportBuilder::new_from_table` and `ExportBuilder::new_from_query`

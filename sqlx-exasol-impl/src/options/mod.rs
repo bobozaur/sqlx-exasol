@@ -4,7 +4,7 @@ mod error;
 mod protocol_version;
 mod ssl_mode;
 
-use std::{borrow::Cow, net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, path::PathBuf, str::FromStr, sync::Arc};
 
 pub use builder::ExaConnectOptionsBuilder;
 pub use compression::ExaCompressionMode;
@@ -66,8 +66,7 @@ const FEEDBACK_INTERVAL: &str = "feedback-interval";
 /// - `feedback-interval`: Interval at which Exasol sends keep-alive Pong frames
 #[derive(Debug, Clone)]
 pub struct ExaConnectOptions {
-    pub(crate) hosts_details: Vec<(String, Vec<SocketAddr>)>,
-    pub(crate) port: u16,
+    pub(crate) hosts: Vec<(Arc<str>, u16)>,
     pub(crate) ssl_mode: ExaSslMode,
     pub(crate) ssl_ca: Option<CertificateInput>,
     pub(crate) ssl_client_cert: Option<CertificateInput>,
@@ -76,7 +75,8 @@ pub struct ExaConnectOptions {
     pub(crate) schema: Option<String>,
     pub(crate) compression_mode: ExaCompressionMode,
     pub(crate) log_settings: LogSettings,
-    hostname: String,
+    url_host: String,
+    url_port: u16,
     login: Login,
     protocol_version: ProtocolVersion,
     fetch_size: usize,
@@ -85,27 +85,18 @@ pub struct ExaConnectOptions {
 }
 
 impl ExaConnectOptions {
-    #[must_use]
+    #[must_use = "call build() to get connection options"]
     pub fn builder() -> ExaConnectOptionsBuilder {
         ExaConnectOptionsBuilder::default()
     }
-}
 
-impl FromStr for ExaConnectOptions {
-    type Err = SqlxError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = Url::parse(s)
-            .map_err(From::from)
-            .map_err(SqlxError::Configuration)?;
-        Self::from_url(&url)
-    }
-}
-
-impl ConnectOptions for ExaConnectOptions {
-    type Connection = ExaConnection;
-
-    fn from_url(url: &Url) -> SqlxResult<Self> {
+    /// Create an [`ExaConnectOptionsBuilder`] by starting from an [`Url`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if parsing the [`Url`] fails.
+    #[must_use = "call build() to get connection options"]
+    pub fn builder_from_url(url: &Url) -> SqlxResult<ExaConnectOptionsBuilder> {
         let scheme = url.scheme();
 
         if URL_SCHEME != scheme {
@@ -215,12 +206,44 @@ impl ConnectOptions for ExaConnectOptions {
             }
         }
 
-        builder.build()
+        Ok(builder)
+    }
+
+    /// Create an [`ExaConnectOptionsBuilder`] by starting from a connection string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if parsing the connection string fails.
+    #[must_use = "call build() to get connection options"]
+    pub fn builder_from_str(s: &str) -> SqlxResult<ExaConnectOptionsBuilder> {
+        let url = Url::parse(s)
+            .map_err(From::from)
+            .map_err(SqlxError::Configuration)?;
+        Self::builder_from_url(&url)
+    }
+}
+
+impl FromStr for ExaConnectOptions {
+    type Err = SqlxError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::builder_from_str(s)?.build()
+    }
+}
+
+impl ConnectOptions for ExaConnectOptions {
+    type Connection = ExaConnection;
+
+    fn from_url(url: &Url) -> SqlxResult<Self> {
+        Self::builder_from_url(url)?.build()
     }
 
     fn to_url_lossy(&self) -> Url {
-        let mut url = Url::parse(&format!("{URL_SCHEME}://{}:{}", self.hostname, self.port))
-            .expect("generated URL must be correct");
+        let mut url = Url::parse(&format!(
+            "{URL_SCHEME}://{}:{}",
+            self.url_host, self.url_port
+        ))
+        .expect("generated URL must be correct");
 
         if let Some(schema) = &self.schema {
             url.set_path(schema);
@@ -395,8 +418,8 @@ mod tests {
         let url = "exa://user:pass@localhost:8563/schema";
         let options = ExaConnectOptions::from_str(url).unwrap();
 
-        assert_eq!(options.hostname, "localhost");
-        assert_eq!(options.port, 8563);
+        assert_eq!(options.url_host, "localhost");
+        assert_eq!(options.url_port, 8563);
         assert_eq!(options.schema.as_deref(), Some("schema"));
 
         match &options.login {
@@ -566,8 +589,8 @@ mod tests {
         let reconstructed_url = options.to_url_lossy();
         let options2 = ExaConnectOptions::from_url(&reconstructed_url).unwrap();
 
-        assert_eq!(options.hostname, options2.hostname);
-        assert_eq!(options.port, options2.port);
+        assert_eq!(options.url_host, options2.url_host);
+        assert_eq!(options.url_port, options2.url_port);
         assert_eq!(options.schema, options2.schema);
         assert_eq!(options.compression_mode, options2.compression_mode);
         assert_eq!(options.fetch_size, options2.fetch_size);
