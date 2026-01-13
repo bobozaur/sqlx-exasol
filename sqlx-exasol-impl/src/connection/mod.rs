@@ -68,7 +68,7 @@ impl ExaConnection {
     }
 
     pub(crate) async fn establish(opts: &ExaConnectOptions) -> SqlxResult<Self> {
-        let mut ws_result = Err(SqlxError::Configuration("No hosts found".into()));
+        let mut error = SqlxError::Configuration("No hosts found".into());
 
         // We want to try and randomly connect to nodes, if multiple were provided.
         // But since the RNG is not Send and cloning the hosts would be more expensive,
@@ -94,32 +94,30 @@ impl ExaConnection {
                 let (socket, with_tls) = match socket_res {
                     Ok(Ok((socket, with_tls))) => (socket, with_tls),
                     Ok(Err(err)) | Err(err) => {
-                        ws_result = Err(err);
+                        error = err;
                         continue;
                     }
                 };
 
-                // Break if we successfully connect a websocket.
                 match ExaWebSocket::new(host, opts.port, socket, opts.try_into()?, with_tls).await {
-                    Ok(ws) => {
-                        ws_result = Ok(ws);
-                        break;
+                    Err(err) => error = err,
+                    // Return if we successfully connect a websocket.
+                    Ok((ws, session_info)) => {
+                        let mut con = Self {
+                            ws,
+                            log_settings: LogSettings::default(),
+                            session_info,
+                        };
+
+                        con.configure_session().await?;
+                        return Ok(con);
                     }
-                    Err(err) => ws_result = Err(err),
                 }
             }
         }
 
-        let (ws, session_info) = ws_result?;
-        let mut con = Self {
-            ws,
-            log_settings: LogSettings::default(),
-            session_info,
-        };
-
-        con.configure_session().await?;
-
-        Ok(con)
+        // All attempts failed, return the last error
+        Err(error)
     }
 
     /// Sets session parameters for the open connection.
