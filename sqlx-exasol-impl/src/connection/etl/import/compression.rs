@@ -9,21 +9,21 @@ use std::{
 use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
 
-use super::writer::ExaWriter;
-use crate::connection::websocket::socket::ExaSocket;
+use super::writer::ExaWriterInner;
+use crate::etl::import::ImportChannelReceiver;
 
 /// Wrapper enum that handles the compression support for [`ExaWriter`].
 #[derive(Debug)]
-pub enum ExaImportWriter {
-    Plain(ExaWriter),
+pub enum ExaWriter {
+    Plain(ExaWriterInner),
     #[cfg(feature = "compression")]
-    Compressed(GzipEncoder<ExaWriter>),
+    Compressed(GzipEncoder<ExaWriterInner>),
 }
 
-impl ExaImportWriter {
+impl ExaWriter {
     #[allow(unused_variables, reason = "conditionally compiled")]
-    pub fn new(socket: ExaSocket, buffer_size: usize, with_compression: bool) -> Self {
-        let writer = ExaWriter::new(socket, buffer_size);
+    pub fn new(rx: ImportChannelReceiver, buffer_size: usize, with_compression: bool) -> Self {
+        let writer = ExaWriterInner::new(rx, buffer_size);
 
         #[cfg(feature = "compression")]
         if with_compression {
@@ -34,7 +34,7 @@ impl ExaImportWriter {
     }
 }
 
-impl AsyncWrite for ExaImportWriter {
+impl AsyncWrite for ExaWriter {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -44,6 +44,18 @@ impl AsyncWrite for ExaImportWriter {
             #[cfg(feature = "compression")]
             Self::Compressed(s) => Pin::new(s).poll_write(cx, buf),
             Self::Plain(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            #[cfg(feature = "compression")]
+            Self::Compressed(s) => Pin::new(s).poll_write_vectored(cx, bufs),
+            Self::Plain(s) => Pin::new(s).poll_write_vectored(cx, bufs),
         }
     }
 

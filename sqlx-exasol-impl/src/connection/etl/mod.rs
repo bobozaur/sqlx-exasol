@@ -73,31 +73,15 @@ mod error;
 mod export;
 mod import;
 mod job;
+mod query;
+mod server;
+mod socket_io;
 
-use std::{
-    future::Future,
-    io,
-    pin::Pin,
-    task::{ready, Context, Poll},
-};
+use std::fmt::Debug;
 
 pub use export::{ExaExport, ExportBuilder};
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::FutureExt;
-use hyper::rt;
 pub use import::{ExaImport, ImportBuilder, Trim};
-
-use self::error::ExaEtlError;
-use crate::{
-    connection::websocket::{
-        future::{ExaFuture, ExaRoundtrip, WebSocketFuture},
-        request::Execute,
-        socket::ExaSocket,
-        ExaWebSocket,
-    },
-    responses::{QueryResult, SingleResult},
-    ExaQueryResult, SqlxResult,
-};
+pub use query::EtlQuery;
 
 // CSV row separator.
 #[derive(Debug, Clone, Copy)]
@@ -114,74 +98,5 @@ impl AsRef<str> for RowSeparator {
             RowSeparator::CR => "CR",
             RowSeparator::CRLF => "CRLF",
         }
-    }
-}
-
-/// Future for awaiting an ETL query alongside the worker I/O.
-#[derive(Debug)]
-pub struct EtlQuery<'c>(ExaFuture<'c, ExecuteEtl>);
-
-impl Future for EtlQuery<'_> {
-    type Output = SqlxResult<ExaQueryResult>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.get_mut().0.poll_unpin(cx)
-    }
-}
-
-/// Implementor of [`WebSocketFuture`] that executes an owned ETL query.
-#[derive(Debug)]
-struct ExecuteEtl(ExaRoundtrip<Execute, SingleResult>);
-
-impl WebSocketFuture for ExecuteEtl {
-    type Output = ExaQueryResult;
-
-    fn poll_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-        ws: &mut ExaWebSocket,
-    ) -> Poll<SqlxResult<Self::Output>> {
-        match QueryResult::from(ready!(self.0.poll_unpin(cx, ws))?) {
-            QueryResult::ResultSet { .. } => Err(io::Error::from(ExaEtlError::ResultSetFromEtl))?,
-            QueryResult::RowCount { row_count } => Poll::Ready(Ok(ExaQueryResult::new(row_count))),
-        }
-    }
-}
-
-impl rt::Read for ExaSocket {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        mut buf: rt::ReadBufCursor<'_>,
-    ) -> Poll<io::Result<()>> {
-        // SAFETY: The AsyncRead::poll_read call initializes and
-        // fills the provided buffer. We do however need to cast it
-        // to a mutable byte array first so the argument datatype matches.
-        unsafe {
-            let buffer: *mut [std::mem::MaybeUninit<u8>] = buf.as_mut();
-            let buffer = &mut *(buffer as *mut [u8]);
-            let n = ready!(AsyncRead::poll_read(self, cx, buffer))?;
-            buf.advance(n);
-        }
-
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl rt::Write for ExaSocket {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(self, cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(self, cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_close(self, cx)
     }
 }

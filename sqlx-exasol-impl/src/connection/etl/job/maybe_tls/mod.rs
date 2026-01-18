@@ -6,7 +6,7 @@ use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
     connection::websocket::socket::WithExaSocket,
-    etl::job::{SocketSetup, WithSocketMaker},
+    etl::job::{SocketHandshake, WithSocketMaker},
     SqlxResult,
 };
 
@@ -22,7 +22,7 @@ impl WithMaybeTlsSocketMaker {
     pub fn new(with_tls: bool) -> SqlxResult<Self> {
         #[cfg(feature = "tls")]
         if with_tls {
-            return tls::with_worker().map(Self::Tls);
+            return tls::WithTlsSocketMaker::new().map(Self::Tls);
         }
 
         Ok(Self::NonTls)
@@ -49,7 +49,7 @@ pub enum WithMaybeTlsSocket {
 }
 
 impl WithSocket for WithMaybeTlsSocket {
-    type Output = SocketSetup;
+    type Output = SocketHandshake;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         match self {

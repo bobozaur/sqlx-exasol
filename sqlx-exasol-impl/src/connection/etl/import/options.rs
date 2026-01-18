@@ -1,13 +1,21 @@
-use std::{fmt::Write, net::SocketAddrV4};
+use std::{
+    fmt::Write,
+    io,
+    net::SocketAddrV4,
+    sync::{atomic::AtomicBool, Arc},
+};
 
-use arrayvec::ArrayString;
+use flume::{Receiver, Sender};
+use futures_util::task::AtomicWaker;
+use sqlx_core::rt::JoinHandle;
 
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
     etl::{
-        import::ExaImportState,
-        job::{EtlJob, SocketSetup},
+        import::{service::ImportService, ImportDataSender},
+        job::{EtlJob, SocketHandshake},
+        server::OneShotHttpServer,
         EtlQuery,
     },
     ExaConnection, SqlxResult,
@@ -142,6 +150,7 @@ impl EtlJob for ImportBuilder<'_> {
     const JOB_TYPE: &'static str = "import";
 
     type Worker = ExaImport;
+    type DataSender = ImportDataSender;
 
     fn use_compression(&self) -> Option<bool> {
         self.compression
@@ -151,11 +160,26 @@ impl EtlJob for ImportBuilder<'_> {
         self.num_writers
     }
 
-    fn create_worker(&self, setup_future: SocketSetup, with_compression: bool) -> Self::Worker {
-        ExaImport(ExaImportState::Setup(
-            setup_future,
-            self.buffer_size,
-            with_compression,
+    fn create_worker(
+        &self,
+        rx: Receiver<Self::DataSender>,
+        with_compression: bool,
+    ) -> Self::Worker {
+        ExaImport::new(rx, self.buffer_size, with_compression)
+    }
+
+    fn create_server_task(
+        &self,
+        tx: Sender<Self::DataSender>,
+        socket_future: SocketHandshake,
+        waker: Arc<AtomicWaker>,
+        stop: Arc<AtomicBool>,
+    ) -> JoinHandle<io::Result<()>> {
+        sqlx_core::rt::spawn(OneShotHttpServer::new(
+            socket_future,
+            ImportService::new(tx),
+            waker,
+            stop,
         ))
     }
 
@@ -196,13 +220,8 @@ impl EtlJob for ImportBuilder<'_> {
         Self::push_key_value(&mut query, "COLUMN SEPARATOR", self.column_separator);
         Self::push_key_value(&mut query, "COLUMN DELIMITER", self.column_delimiter);
 
-        let mut skip_str = ArrayString::<20>::new_const();
-        write!(&mut skip_str, "{}", self.skip).expect("u64 can't have more than 20 digits");
-
         // This is numeric, so no quoting
-        query.push_str("SKIP = ");
-        query.push_str(&skip_str);
-        query.push(' ');
+        write!(query, "SKIP = {} ", self.skip).expect("test");
 
         if let Some(trim) = self.trim {
             query.push_str(trim.as_ref());
