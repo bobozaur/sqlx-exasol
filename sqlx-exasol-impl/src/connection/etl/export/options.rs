@@ -1,10 +1,20 @@
-use std::{fmt::Debug, net::SocketAddrV4};
+use std::{
+    fmt::Debug,
+    io,
+    net::SocketAddrV4,
+    sync::{atomic::AtomicBool, Arc},
+};
+
+use flume::{Receiver, Sender};
+use futures_util::task::AtomicWaker;
+use sqlx_core::rt::JoinHandle;
 
 use crate::{
     connection::etl::RowSeparator,
     etl::{
-        export::{ExaExport, ExaExportState},
-        job::{EtlJob, SocketSetup},
+        export::{compression::ExaReader, service::ExportService, ExaExport, ExportDataReceiver},
+        job::{EtlJob, SocketHandshake},
+        server::OneShotHttpServer,
         EtlQuery,
     },
     ExaConnection, SqlxResult,
@@ -127,6 +137,7 @@ impl EtlJob for ExportBuilder<'_> {
     const JOB_TYPE: &'static str = "export";
 
     type Worker = ExaExport;
+    type DataSender = ExportDataReceiver;
 
     fn use_compression(&self) -> Option<bool> {
         self.compression
@@ -136,8 +147,27 @@ impl EtlJob for ExportBuilder<'_> {
         self.num_readers
     }
 
-    fn create_worker(&self, setup_future: SocketSetup, with_compression: bool) -> Self::Worker {
-        ExaExport(ExaExportState::Setup(setup_future, with_compression))
+    fn create_worker(
+        &self,
+        rx: Receiver<Self::DataSender>,
+        with_compression: bool,
+    ) -> Self::Worker {
+        ExaExport(ExaReader::new(rx, with_compression))
+    }
+
+    fn create_server_task(
+        &self,
+        tx: Sender<Self::DataSender>,
+        socket_future: SocketHandshake,
+        waker: Arc<AtomicWaker>,
+        stop: Arc<AtomicBool>,
+    ) -> JoinHandle<io::Result<()>> {
+        sqlx_core::rt::spawn(OneShotHttpServer::new(
+            socket_future,
+            ExportService::new(tx),
+            waker,
+            stop,
+        ))
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

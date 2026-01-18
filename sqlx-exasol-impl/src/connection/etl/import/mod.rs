@@ -1,20 +1,25 @@
 mod compression;
 mod options;
+mod service;
 mod writer;
 
 use std::{
     fmt::Debug,
     io,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 
-use compression::ExaImportWriter;
+use compression::ExaWriter;
+use flume::{Receiver, Sender};
 use futures_io::AsyncWrite;
-use futures_util::FutureExt;
 pub use options::ImportBuilder;
+use sqlx_core::bytes::BytesMut;
 
-use crate::etl::job::SocketSetup;
+type ImportDataSender = Sender<BytesMut>;
+type ImportDataReceiver = Receiver<BytesMut>;
+type ImportChannelSender = Sender<ImportDataSender>;
+type ImportChannelReceiver = Receiver<ImportDataSender>;
 
 /// An ETL IMPORT worker.
 ///
@@ -70,7 +75,13 @@ use crate::etl::job::SocketSetup;
 ///
 /// See <https://github.com/exasol/websocket-api/issues/33> for more details.
 #[derive(Debug)]
-pub struct ExaImport(ExaImportState);
+pub struct ExaImport(ExaWriter);
+
+impl ExaImport {
+    fn new(rx: ImportChannelReceiver, buffer_size: usize, with_compression: bool) -> Self {
+        Self(ExaWriter::new(rx, buffer_size, with_compression))
+    }
+}
 
 impl AsyncWrite for ExaImport {
     fn poll_write(
@@ -78,42 +89,23 @@ impl AsyncWrite for ExaImport {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        loop {
-            match &mut self.0 {
-                ExaImportState::Poll(s) => return Pin::new(s).poll_write(cx, buf),
-                ExaImportState::Setup(f, buffer_size, with_compression) => {
-                    let socket = ready!(f.poll_unpin(cx))?;
-                    let writer = ExaImportWriter::new(socket, *buffer_size, *with_compression);
-                    self.set(Self(ExaImportState::Poll(writer)));
-                }
-            }
-        }
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        loop {
-            match &mut self.0 {
-                ExaImportState::Poll(s) => return Pin::new(s).poll_flush(cx),
-                ExaImportState::Setup(f, buffer_size, with_compression) => {
-                    let socket = ready!(f.poll_unpin(cx))?;
-                    let writer = ExaImportWriter::new(socket, *buffer_size, *with_compression);
-                    self.set(Self(ExaImportState::Poll(writer)));
-                }
-            }
-        }
+        Pin::new(&mut self.0).poll_flush(cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        loop {
-            match &mut self.0 {
-                ExaImportState::Poll(s) => return Pin::new(s).poll_close(cx),
-                ExaImportState::Setup(f, buffer_size, with_compression) => {
-                    let socket = ready!(f.poll_unpin(cx))?;
-                    let writer = ExaImportWriter::new(socket, *buffer_size, *with_compression);
-                    self.set(Self(ExaImportState::Poll(writer)));
-                }
-            }
-        }
+        Pin::new(&mut self.0).poll_close(cx)
     }
 }
 
@@ -131,29 +123,6 @@ impl AsRef<str> for Trim {
             Self::Left => "LTRIM",
             Self::Right => "RTRIM",
             Self::Both => "TRIM",
-        }
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-pub enum ExaImportState {
-    /// The worker is fully connected and ready for I/O.
-    Poll(ExaImportWriter),
-    /// Worker is being set up. Typically means that a TLS handshake is being performed.
-    ///
-    /// This approach is needed because Exasol will issue connections sequentially and thus perform
-    /// TLS handshakes the same way.
-    ///
-    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
-    /// through the workers, which happens within consumer code.
-    Setup(SocketSetup, usize, bool),
-}
-
-impl Debug for ExaImportState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Poll(arg0) => f.debug_tuple("Poll").field(arg0).finish(),
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
         }
     }
 }

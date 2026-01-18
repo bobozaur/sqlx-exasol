@@ -1,4 +1,4 @@
-use std::{io, net::AddrParseError};
+use std::{io, net::AddrParseError, str::Utf8Error};
 
 use thiserror::Error as ThisError;
 
@@ -17,6 +17,8 @@ pub enum ExaEtlError {
     ResultSetFromEtl,
     #[error("Failed to parse ETL internal IP address: {0}")]
     InvalidInternalAddr(#[from] AddrParseError),
+    #[error("ETL IP address buffer is not UTF-8: {0}")]
+    InternalAddrNotUtf8(#[from] Utf8Error),
 }
 
 impl From<ExaEtlError> for io::Error {
@@ -26,10 +28,41 @@ impl From<ExaEtlError> for io::Error {
             | ExaEtlError::InvalidChunkSizeByte(_)
             | ExaEtlError::InvalidByte(_, _)
             | ExaEtlError::ResultSetFromEtl
-            | ExaEtlError::InvalidInternalAddr(_) => io::ErrorKind::InvalidData,
+            | ExaEtlError::InvalidInternalAddr(_)
+            | ExaEtlError::InternalAddrNotUtf8(_) => io::ErrorKind::InvalidData,
             ExaEtlError::WriteZero => io::ErrorKind::WriteZero,
         };
 
         io::Error::new(kind, value)
     }
+}
+
+pub fn map_hyper_err(err: hyper::Error) -> io::Error {
+    let kind = if err.is_timeout() {
+        io::ErrorKind::TimedOut
+    } else if err.is_parse_too_large() {
+        io::ErrorKind::InvalidData
+    } else {
+        io::ErrorKind::BrokenPipe
+    };
+
+    io::Error::new(kind, err)
+}
+
+pub fn map_http_error(err: hyper::http::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::BrokenPipe, err)
+}
+
+pub fn data_pipe_error<T>(_: T) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::BrokenPipe,
+        "error transferring data between worker and HTTP connection",
+    )
+}
+
+pub fn channel_pipe_error<T>(_: T) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::BrokenPipe,
+        "error transferring channel between worker and HTTP connection",
+    )
 }
