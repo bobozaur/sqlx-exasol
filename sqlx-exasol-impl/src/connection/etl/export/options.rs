@@ -1,19 +1,37 @@
-use std::{fmt::Debug, net::SocketAddrV4};
+use std::{
+    fmt::Debug,
+    io,
+    net::SocketAddrV4,
+    sync::{atomic::AtomicBool, Arc},
+};
+
+use flume::{Receiver, Sender};
+use futures_util::task::AtomicWaker;
+use sqlx_core::rt::JoinHandle;
 
 use crate::{
     connection::etl::RowSeparator,
     etl::{
-        export::{ExaExport, ExaExportState},
-        job::{EtlJob, SocketSetup},
+        export::{
+            compression::MaybeCompressedReader, service::ExportService, ExaExport,
+            ExportDataReceiver,
+        },
+        job::{EtlJob, SocketHandshake},
+        server::OneShotHttpServer,
         EtlQuery,
     },
     ExaConnection, SqlxResult,
 };
 
-/// A builder for an ETL EXPORT job.
+/// A builder for an ETL `EXPORT` job.
 ///
-/// Calling [`build().await`] will ouput a future that drives the EXPORT query execution and a
-/// [`Vec<ExaReader>`] which must be concurrently used to read data from Exasol.
+/// This builder allows configuring various options for the `EXPORT` job, such as the source,
+/// number of readers, and CSV formatting options.
+///
+/// Once configured, the [`ExportBuilder::build`] method will create the `EXPORT` query and return
+/// a tuple containing the [`EtlQuery`] future and a [`Vec<ExaReader>`] of workers. The future
+/// must be awaited to drive the job to completion, while the workers are used to read the exported
+/// data.
 #[derive(Debug)]
 pub struct ExportBuilder<'a> {
     num_readers: usize,
@@ -56,12 +74,13 @@ impl<'a> ExportBuilder<'a> {
 
     /// Builds the EXPORT job.
     ///
-    /// This implies submitting the EXPORT query. The output will be a future to await the result of
-    /// the job and the workers that can be used for ETL IO.
+    /// The output will be a future to await the result of the `EXPORT` query and the workers that
+    /// can be used for ETL IO.
     ///
     /// # Errors
     ///
-    /// Returns an error if the job could not be built and submitted.
+    /// Returns an error if getting the nodes IPs from Exasol fails or if the worker sockets could
+    /// not be connected.
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
@@ -127,6 +146,7 @@ impl EtlJob for ExportBuilder<'_> {
     const JOB_TYPE: &'static str = "export";
 
     type Worker = ExaExport;
+    type DataPipe = ExportDataReceiver;
 
     fn use_compression(&self) -> Option<bool> {
         self.compression
@@ -136,8 +156,23 @@ impl EtlJob for ExportBuilder<'_> {
         self.num_readers
     }
 
-    fn create_worker(&self, setup_future: SocketSetup, with_compression: bool) -> Self::Worker {
-        ExaExport(ExaExportState::Setup(setup_future, with_compression))
+    fn create_worker(&self, rx: Receiver<Self::DataPipe>, with_compression: bool) -> Self::Worker {
+        ExaExport(MaybeCompressedReader::new(rx, with_compression))
+    }
+
+    fn create_server_task(
+        &self,
+        tx: Sender<Self::DataPipe>,
+        socket_future: SocketHandshake,
+        waker: Arc<AtomicWaker>,
+        stop: Arc<AtomicBool>,
+    ) -> JoinHandle<io::Result<()>> {
+        sqlx_core::rt::spawn(OneShotHttpServer::new(
+            socket_future,
+            ExportService::new(tx),
+            waker,
+            stop,
+        ))
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
