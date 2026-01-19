@@ -16,7 +16,7 @@ use sqlx_core::{
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::job::{maybe_tls::tls::sync_socket::SyncSocket, SocketSetup, WithSocketMaker},
+    etl::job::{maybe_tls::tls::sync_socket::SyncSocket, SocketHandshake, WithSocketMaker},
     SqlxError, SqlxResult,
 };
 
@@ -78,7 +78,7 @@ impl WithNativeTlsSocket {
 }
 
 impl WithSocket for WithNativeTlsSocket {
-    type Output = SocketSetup;
+    type Output = SocketHandshake;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         self.wrap_socket(socket).boxed()

@@ -122,7 +122,7 @@ jobs:
       - name: Run tests (chrono)
         run: cargo test --features runtime-tokio,chrono -- test_compile_time_chrono --ignored --nocapture
         env:
-          DATABASE_URL: ${{ steps.xa-cluster.outputs.url }}/test
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
 
       - name: Run tests (rust_decimal)
         run: cargo test --features runtime-tokio,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture

@@ -146,11 +146,13 @@ macro_rules! test_etl {
                 let mut conn2 = pool.acquire().await?;
 
                 conn1
-                    .execute(concat!("CREATE TABLE ", $table, " ( col VARCHAR(200) );"))
+                    .execute(concat!("CREATE TABLE ", $table, " ( col VARCHAR(200), num DECIMAL(10, 0), empty BOOLEAN );"))
                     .await?;
 
-                sqlx_exasol::query(concat!("INSERT INTO ", $table, " VALUES (?)"))
-                    .bind(vec!["dummy"; NUM_ROWS])
+                sqlx_exasol::query(concat!("INSERT INTO ", $table, " VALUES (?, ?, ?)"))
+                    .bind(vec![" dummy"; NUM_ROWS])
+                    .bind(vec![10; NUM_ROWS])
+                    .bind(vec![None::<bool>; NUM_ROWS])
                     .execute(&mut *conn1)
                     .await?;
 

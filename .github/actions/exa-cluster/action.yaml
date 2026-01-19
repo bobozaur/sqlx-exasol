@@ -18,16 +18,19 @@ runs:
       id: cache-docker-exasol
       uses: actions/cache@v3
       with:
-        path: ~/ci/cache/docker
+        path: $HOME/ci/cache/docker
         key: cache-docker-exasol-${{ inputs.exasol-version }}
 
     - name: Store Exasol image if cache miss
       if: steps.cache-docker-exasol.outputs.cache-hit != 'true'
-      run: docker pull exasol/docker-db:${{ inputs.exasol-version }} && mkdir -p ~/ci/cache/docker && docker image save exasol/docker-db:${{ inputs.exasol-version }} --output ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
+      run: |
+        docker pull exasol/docker-db:${{ inputs.exasol-version }} && \
+        mkdir -p $HOME/ci/cache/docker && \
+        docker image save exasol/docker-db:${{ inputs.exasol-version }} --output $HOME/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
       shell: bash
 
     - name: Load Exasol image
-      run: docker image load --input ~/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
+      run: docker image load --input $HOME/ci/cache/docker/exasol-${{ inputs.exasol-version }}.tar
       shell: bash
 
     - name: Set up Docker network
@@ -43,7 +46,7 @@ runs:
         docker run -v $HOME/sqlx1:/exa --rm --privileged -i exasol/docker-db:${{ inputs.exasol-version }} init-sc --template --num-nodes ${{ inputs.num-nodes }}
         docker run --rm -v $HOME/sqlx1:/exa exasol/docker-db:${{ inputs.exasol-version }} exaconf modify-volume -n DataVolume1 -s 4GiB
         sudo truncate -s 6G $HOME/sqlx1/data/storage/dev.1
-        
+
         ####################
         #### Clone node ####
         ####################
@@ -51,19 +54,19 @@ runs:
         for (( i=2; i<=${{ inputs.num-nodes }}; i++ )); do
           sudo cp -R $HOME/sqlx1 $HOME/sqlx$i
         done
-        
+
         ################################
         #### Generate TLS 1.3 certs ####
         ################################
-        
-        sudo openssl genpkey -algorithm RSA -out ~/sqlx1/etc/ssl/ssl.ca.key -pkeyopt rsa_keygen_bits:2048
-        sudo openssl genpkey -algorithm RSA -out ~/sqlx1/etc/ssl/ssl.key -pkeyopt rsa_keygen_bits:2048
-        
+
+        sudo openssl genpkey -algorithm RSA -out $HOME/sqlx1/etc/ssl/ssl.ca.key -pkeyopt rsa_keygen_bits:2048
+        sudo openssl genpkey -algorithm RSA -out $HOME/sqlx1/etc/ssl/ssl.key -pkeyopt rsa_keygen_bits:2048
+
         echo "basicConstraints=CA:FALSE" > $HOME/v3.ext
         echo "keyUsage=digitalSignature,keyEncipherment" >> $HOME/v3.ext
         echo "extendedKeyUsage=clientAuth,serverAuth" >> $HOME/v3.ext
         echo "subjectAltName=DNS:exacluster.local" >> $HOME/v3.ext
-        
+
         sudo openssl req -x509 -new -nodes -key $HOME/sqlx1/etc/ssl/ssl.ca.key -sha256 -days 3650 -out $HOME/sqlx1/etc/ssl/ssl.ca -subj "/CN=exacluster.local"
         sudo openssl req -new -key $HOME/sqlx1/etc/ssl/ssl.key -out $HOME/ssl.csr -subj "/CN=exacluster.local"
         sudo openssl x509 -req -in $HOME/ssl.csr -CA $HOME/sqlx1/etc/ssl/ssl.ca -CAkey $HOME/sqlx1/etc/ssl/ssl.ca.key -CAcreateserial -out $HOME/sqlx1/etc/ssl/ssl.crt -days 365 -sha256 -extfile $HOME/v3.ext
@@ -81,7 +84,7 @@ runs:
       run: |
         set +e
         RC=1
-        
+
         FINGERPRINT=`sudo openssl x509 -in $HOME/sqlx1/etc/ssl/ssl.crt -outform DER | sudo openssl dgst -sha256 | awk '{print $2}'`
 
         while [[ $RC -ne 0 ]]; do
