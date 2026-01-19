@@ -1,22 +1,35 @@
-use std::{fmt::Write, net::SocketAddrV4};
+use std::{
+    fmt::Write,
+    io,
+    net::SocketAddrV4,
+    sync::{atomic::AtomicBool, Arc},
+};
 
-use arrayvec::ArrayString;
+use flume::{Receiver, Sender};
+use futures_util::task::AtomicWaker;
+use sqlx_core::rt::JoinHandle;
 
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
     etl::{
-        import::ExaImportState,
-        job::{EtlJob, SocketSetup},
+        import::{service::ImportService, ImportDataSender},
+        job::{EtlJob, SocketHandshake},
+        server::OneShotHttpServer,
         EtlQuery,
     },
     ExaConnection, SqlxResult,
 };
 
-/// A builder for an ETL IMPORT job.
+/// A builder for an ETL `IMPORT` job.
 ///
-/// Calling [`build().await`] will ouput a future that drives the IMPORT query execution and a
-/// [`Vec<ExaWriter>`] which must be concurrently used to ingest data into Exasol.
+/// This builder allows configuring various options for the `IMPORT` job, such as the
+/// destination table, number of writers, and CSV formatting options.
+///
+/// Once configured, the [`ImportBuilder::build`] method will create the `IMPORT` query and return
+/// a tuple containing the [`EtlQuery`] future and a [`Vec<ExaWriter>`] of workers. The future
+/// must be awaited to drive the job to completion, while the workers are used to write the
+/// data to be imported.
 #[derive(Clone, Debug)]
 pub struct ImportBuilder<'a> {
     num_writers: usize,
@@ -56,12 +69,13 @@ impl<'a> ImportBuilder<'a> {
 
     /// Builds the IMPORT job.
     ///
-    /// This implies submitting the IMPORT query. The output will be a future to await the result of
-    /// the job and the workers that can be used for ETL IO.
+    /// The output will be a future to await the result of the `IMPORT` query and the workers that
+    /// can be used for ETL IO.
     ///
     /// # Errors
     ///
-    /// Returns an error if the job could not be built and submitted.
+    /// Returns an error if getting the nodes IPs from Exasol fails or if the worker sockets could
+    /// not be connected.
     pub async fn build<'c>(
         &'a self,
         con: &'c mut ExaConnection,
@@ -142,6 +156,7 @@ impl EtlJob for ImportBuilder<'_> {
     const JOB_TYPE: &'static str = "import";
 
     type Worker = ExaImport;
+    type DataPipe = ImportDataSender;
 
     fn use_compression(&self) -> Option<bool> {
         self.compression
@@ -151,11 +166,22 @@ impl EtlJob for ImportBuilder<'_> {
         self.num_writers
     }
 
-    fn create_worker(&self, setup_future: SocketSetup, with_compression: bool) -> Self::Worker {
-        ExaImport(ExaImportState::Setup(
-            setup_future,
-            self.buffer_size,
-            with_compression,
+    fn create_worker(&self, rx: Receiver<Self::DataPipe>, with_compression: bool) -> Self::Worker {
+        ExaImport::new(rx, self.buffer_size, with_compression)
+    }
+
+    fn create_server_task(
+        &self,
+        tx: Sender<Self::DataPipe>,
+        socket_future: SocketHandshake,
+        waker: Arc<AtomicWaker>,
+        stop: Arc<AtomicBool>,
+    ) -> JoinHandle<io::Result<()>> {
+        sqlx_core::rt::spawn(OneShotHttpServer::new(
+            socket_future,
+            ImportService::new(tx),
+            waker,
+            stop,
         ))
     }
 
@@ -196,13 +222,8 @@ impl EtlJob for ImportBuilder<'_> {
         Self::push_key_value(&mut query, "COLUMN SEPARATOR", self.column_separator);
         Self::push_key_value(&mut query, "COLUMN DELIMITER", self.column_delimiter);
 
-        let mut skip_str = ArrayString::<20>::new_const();
-        write!(&mut skip_str, "{}", self.skip).expect("u64 can't have more than 20 digits");
-
         // This is numeric, so no quoting
-        query.push_str("SKIP = ");
-        query.push_str(&skip_str);
-        query.push(' ');
+        write!(query, "SKIP = {} ", self.skip).expect("test");
 
         if let Some(trim) = self.trim {
             query.push_str(trim.as_ref());

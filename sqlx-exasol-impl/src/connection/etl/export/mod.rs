@@ -1,20 +1,25 @@
 mod compression;
 mod options;
 mod reader;
+mod service;
 
 use std::{
     fmt::Debug,
     io,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 
-use compression::ExaExportReader;
+use compression::MaybeCompressedReader;
+use flume::{Receiver, Sender};
 use futures_io::AsyncRead;
-use futures_util::FutureExt;
+use hyper::body::Bytes;
 pub use options::ExportBuilder;
 
-use crate::etl::job::SocketSetup;
+type ExportDataSender = Sender<Bytes>;
+type ExportDataReceiver = Receiver<Bytes>;
+type ExportChannelSender = Sender<ExportDataReceiver>;
+type ExportChannelReceiver = Receiver<ExportDataReceiver>;
 
 /// An ETL EXPORT worker.
 ///
@@ -23,11 +28,12 @@ use crate::etl::job::SocketSetup;
 ///
 /// # IMPORTANT
 ///
-/// Dropping a reader before it returned EOF will result in the `EXPORT` query returning an error.
-/// While not necessarily a problem if you're not interested in the whole export, there's no way to
-/// circumvent that other than handling the error in code.
+/// During `EXPORT` jobs Exasol will make a series of HTTP requests to the driver, one for each
+/// worker. Unless it has already buffered the remaining request data, dropping a reader before it
+/// returned *EOF* will result in the `EXPORT` query returning an error because the request was not
+/// entirely read and responded to.
 #[derive(Debug)]
-pub struct ExaExport(ExaExportState);
+pub struct ExaExport(MaybeCompressedReader);
 
 impl AsyncRead for ExaExport {
     fn poll_read(
@@ -35,37 +41,13 @@ impl AsyncRead for ExaExport {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        loop {
-            match &mut self.0 {
-                ExaExportState::Poll(r) => return Pin::new(r).poll_read(cx, buf),
-                ExaExportState::Setup(f, with_compression) => {
-                    let socket = ready!(f.poll_unpin(cx))?;
-                    let reader = ExaExportReader::new(socket, *with_compression);
-                    self.set(Self(ExaExportState::Poll(reader)));
-                }
-            }
-        }
+        Pin::new(&mut self.0).poll_read(cx, buf)
     }
-}
-
-pub enum ExaExportState {
-    /// The worker is fully connected and ready for I/O.
-    Poll(ExaExportReader),
-    /// Worker is being set up. Typically means that a TLS handshake is being performed.
-    ///
-    /// This approach is needed because Exasol will issue connections sequentially and thus perform
-    /// TLS handshakes the same way.
-    ///
-    /// Therefore we accommodate the worker state until the query gets executed and data gets sent
-    /// through the workers, which happens within consumer code.
-    Setup(SocketSetup, bool),
-}
-
-impl Debug for ExaExportState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Poll(arg0) => f.debug_tuple("Poll").field(arg0).finish(),
-            Self::Setup(..) => f.debug_tuple("Setup").finish(),
-        }
+    fn poll_read_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &mut [io::IoSliceMut<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_read_vectored(cx, bufs)
     }
 }

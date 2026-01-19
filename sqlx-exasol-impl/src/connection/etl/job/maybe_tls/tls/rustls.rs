@@ -17,7 +17,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::job::{SocketSetup, WithSocketMaker},
+    etl::job::{SocketHandshake, WithSocketMaker},
     SqlxError, SqlxResult,
 };
 
@@ -84,7 +84,7 @@ impl WithRustlsSocket {
 }
 
 impl WithSocket for WithRustlsSocket {
-    type Output = SocketSetup;
+    type Output = SocketHandshake;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         self.wrap_socket(socket).boxed()

@@ -2,7 +2,7 @@
 
 mod macros;
 
-use std::iter;
+use std::{iter, time::Duration};
 
 use futures_util::{
     future::{try_join, try_join3, try_join_all},
@@ -96,6 +96,12 @@ test_etl!(
 #[ignore]
 #[sqlx_exasol::test]
 async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
+    async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
+        let mut buf = String::new();
+        reader.read_to_string(&mut buf).await?;
+        Ok(())
+    }
+
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
@@ -121,10 +127,33 @@ async fn test_etl_invalid_query(mut conn: PoolConnection<Exasol>) -> Result<(), 
 #[ignore]
 #[sqlx_exasol::test]
 async fn test_etl_reader_drop(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
-        .await?;
+    async fn drop_some_readers(idx: usize, mut reader: ExaExport) -> Result<(), BoxDynError> {
+        if idx % 2 == 0 {
+            let _ = reader.read(&mut [0; 100]).await?;
+            return Ok(());
+        }
 
-    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
+        let mut buf = String::new();
+        reader.read_to_string(&mut buf).await?;
+        Ok(())
+    }
+
+    // Using three columns because if there's too little data the reader might just buffer it all
+    // before being dropped and that will cause the background server to properly respond
+    // to Exasol's HTTP request.
+    conn.execute(
+        r#"
+        CREATE TABLE TEST_ETL(
+            col VARCHAR(200),
+            col2 VARCHAR(200),
+            col3 VARCHAR(200)
+        );"#,
+    )
+    .await?;
+
+    sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?, ?, ?)")
+        .bind(vec!["dummy"; NUM_ROWS])
+        .bind(vec!["dummy"; NUM_ROWS])
         .bind(vec!["dummy"; NUM_ROWS])
         .execute(&mut *conn)
         .await?;
@@ -210,67 +239,55 @@ async fn test_etl_transaction_import_commit(
     Ok(())
 }
 
-// // Not much to do about this... This is commented out as the IMPORT
-// // is limited by Exasol in the sense that spawned writer MUST be used.
-// //
-// // This will thus fail, because Exasol will just keep sending new requests.
-// #[ignore]
-// #[sqlx_exasol::test]
-// async fn test_etl_close_writer(mut conn: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-//
-//     async fn pipe_close_writers(mut writer: ExaImport) -> Result<(), BoxDynError> {
-//         writer.close().await?;
-//         Ok(())
-//     }
-//
-//     rustls::crypto::CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider())
-//        .ok();
-//
-//     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
-//         .await?;
+#[ignore]
+#[sqlx_exasol::test]
+async fn test_etl_close_all_but_one_writers(
+    mut conn: PoolConnection<Exasol>,
+) -> Result<(), BoxDynError> {
+    async fn pipe_close_writers(
+        idx: usize,
+        winner: usize,
+        mut writer: ExaImport,
+    ) -> Result<(), BoxDynError> {
+        if idx == winner {
+            writer.write_all(b"blabla\r\n").await?;
+            writer.close().await?;
+        } else {
+            sqlx_exasol::__rt::sleep(Duration::from_millis(1000)).await;
+            writer.close().await?;
+        }
+        Ok(())
+    }
 
-//     let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut *conn).await?;
-//     let num_writers = writers.len();
+    conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+        .await?;
 
-//     let transport_futs = writers.into_iter().map(pipe_close_writers);
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut conn).await?;
+    let winner = rand::random::<usize>() % writers.len();
 
-//     try_join(import_fut.map_err(From::from), try_join_all(transport_futs))
-//         .await
-//         .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let transport_futs = writers
+        .into_iter()
+        .enumerate()
+        .map(|(idx, writer)| pipe_close_writers(idx, winner, writer));
 
-//     let num_rows: u64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
-//         .fetch_one(&mut *conn)
-//         .await?;
+    try_join(import_fut.map_err(From::from), try_join_all(transport_futs)).await?;
 
-//     assert_eq!(num_rows, (NUM_ROWS + num_writers) as u64);
+    let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+        .fetch_one(&mut *conn)
+        .await?;
 
-//     Ok(())
-// }
+    assert_eq!(num_rows, 1);
+
+    Ok(())
+}
 
 // ##########################################
 // ############### Utilities ################
 // ##########################################
 
-async fn read_data(mut reader: ExaExport) -> Result<(), BoxDynError> {
-    let mut buf = String::new();
-    reader.read_to_string(&mut buf).await?;
-    Ok(())
-}
-
 async fn write_one_row(mut writer: ExaImport) -> Result<(), BoxDynError> {
     writer.write_all(b"blabla\r\n").await?;
     writer.close().await?;
-    Ok(())
-}
-
-async fn drop_some_readers(idx: usize, mut reader: ExaExport) -> Result<(), BoxDynError> {
-    if idx % 2 == 0 {
-        let _ = reader.read(&mut [0; 1000]).await?;
-        return Ok(());
-    }
-
-    let mut buf = String::new();
-    reader.read_to_string(&mut buf).await?;
     Ok(())
 }
 

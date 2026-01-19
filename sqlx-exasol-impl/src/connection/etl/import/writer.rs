@@ -1,142 +1,79 @@
 use std::{
-    fmt,
-    future::Future,
-    io,
+    fmt, io,
     pin::Pin,
-    sync::Mutex,
     task::{ready, Context, Poll},
 };
 
-use futures_channel::mpsc::{Receiver, SendError, Sender};
+use flume::r#async::{RecvFut, SendSink};
 use futures_io::{AsyncWrite, IoSlice};
-use futures_util::{future::Fuse, FutureExt, SinkExt, Stream, StreamExt};
-use http_body_util::{combinators::Collect, BodyExt, StreamBody};
-use hyper::{
-    body::{Bytes, Frame, Incoming},
-    server::conn::http1::{Builder, Connection},
-    service::Service,
-    Request, Response, StatusCode,
-};
+use futures_util::{FutureExt, Sink, SinkExt};
 use sqlx_core::bytes::BytesMut;
 
-use crate::connection::websocket::socket::ExaSocket;
+use crate::etl::{
+    error::{channel_pipe_error, data_pipe_error},
+    import::{ImportChannelReceiver, ImportDataSender},
+};
 
-pub type ImportConnection = Connection<ExaSocket, ImportService>;
-type ImportResponse = Response<StreamBody<ImportStream>>;
-
-pub struct ImportStream(Receiver<BytesMut>);
-
-impl Stream for ImportStream {
-    type Item = Result<Frame<Bytes>, hyper::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let out = ready!(self.0.poll_next_unpin(cx))
-            .map(From::from)
-            .map(Frame::data)
-            .map(Ok);
-
-        Poll::Ready(out)
-    }
-}
-
-pub struct ImportFuture {
-    inner: Collect<Incoming>,
-    stream: Option<ImportStream>,
-}
-
-impl ImportFuture {
-    pub fn new(req: Request<Incoming>, rx: ImportStream) -> Self {
-        Self {
-            inner: req.into_body().collect(),
-            stream: Some(rx),
-        }
-    }
-}
-
-impl Future for ImportFuture {
-    type Output = io::Result<ImportResponse>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        ready!(self.inner.poll_unpin(cx)).map_err(map_hyper_err)?;
-
-        let response = Response::builder()
-            .status(StatusCode::OK)
-            .body(StreamBody::new(self.stream.take().unwrap()))
-            .map_err(map_http_error);
-
-        Poll::Ready(response)
-    }
-}
-
-pub struct ImportService(Mutex<Option<Receiver<BytesMut>>>);
-
-impl ImportService {
-    pub fn new(rx: Receiver<BytesMut>) -> Self {
-        Self(Mutex::new(Some(rx)))
-    }
-}
-
-impl Service<Request<Incoming>> for ImportService {
-    type Response = ImportResponse;
-
-    type Error = io::Error;
-
-    type Future = Fuse<ImportFuture>;
-
-    fn call(&self, req: Request<Incoming>) -> Self::Future {
-        let rx = self.0.lock().unwrap().take().unwrap();
-        ImportFuture::new(req, ImportStream(rx)).fuse()
-    }
-}
-
+/// The inner [`AsyncWrite`] implementation for an `IMPORT` worker.
+///
+/// This struct buffers data and sends it to the [`super::service::ImportService`] through a
+/// channel. It is then used by [`crate::connection::etl::ExaImport`].
 pub struct ExaWriter {
-    conn: ImportConnection,
     buffer: BytesMut,
-    max_buf_size: usize,
-    sink: Sender<BytesMut>,
+    buffer_size: usize,
+    sink: WriterSink,
 }
 
 impl ExaWriter {
-    pub fn new(socket: ExaSocket, max_buf_size: usize) -> Self {
-        let (data_tx, data_rx) = futures_channel::mpsc::channel(0);
-        let service = ImportService::new(data_rx);
-        let conn = Builder::new().serve_connection(socket, service);
-
+    pub fn new(rx: ImportChannelReceiver, buffer_size: usize) -> Self {
         Self {
-            conn,
-            buffer: BytesMut::with_capacity(max_buf_size),
-            max_buf_size,
-            sink: data_tx,
+            buffer: BytesMut::with_capacity(buffer_size),
+            buffer_size,
+            sink: WriterSink::RecvSink(rx.into_recv_async()),
         }
     }
 }
 
-impl ExaWriter {
-    fn poll_write_internal(
+impl fmt::Debug for ExaWriter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ExaWriter {
+            buffer_size,
+            sink,
+            buffer: _buffer,
+        } = self;
+        f.debug_struct("ExaWriter")
+            .field("buffer_size", &buffer_size)
+            .field("sink", &sink)
+            .finish()
+    }
+}
+
+impl AsyncWrite for ExaWriter {
+    fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        if self.max_buf_size == self.buffer.len() {
+        if self.buffer_size == self.buffer.len() {
             ready!(self.as_mut().poll_flush(cx))?;
         }
 
-        let avail = self.max_buf_size - self.buffer.len();
+        let avail = self.buffer_size - self.buffer.len();
         let len = buf.len().min(avail);
         self.buffer.extend_from_slice(&buf[..len]);
         Poll::Ready(Ok(len))
     }
 
-    fn poll_write_vectored_internal(
+    fn poll_write_vectored(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        if self.max_buf_size == self.buffer.len() {
+        if self.buffer_size == self.buffer.len() {
             ready!(self.as_mut().poll_flush(cx))?;
         }
 
-        let avail = self.max_buf_size - self.buffer.len();
+        let avail = self.buffer_size - self.buffer.len();
         let mut rem = avail;
         for buf in bufs {
             if rem == 0 {
@@ -150,51 +87,13 @@ impl ExaWriter {
 
         Poll::Ready(Ok(avail - rem))
     }
-}
-
-// Not derived so that the buffer field is ignored as it's mainly just a data buffer that takes a
-// lot of space.
-impl fmt::Debug for ExaWriter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ExaWriter {
-            conn,
-            max_buf_size,
-            sink,
-            ..
-        } = self;
-        f.debug_struct("ExaWriter")
-            .field("conn", &conn)
-            .field("max_buf_size", &max_buf_size)
-            .field("sink", &sink)
-            .finish()
-    }
-}
-
-impl AsyncWrite for ExaWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        self.poll_write_internal(cx, buf)
-    }
-
-    fn poll_write_vectored(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        self.poll_write_vectored_internal(cx, bufs)
-    }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let _ = self.as_mut().conn.poll_unpin(cx).map_err(map_hyper_err)?;
-
         if !self.buffer.is_empty() {
-            ready!(self.sink.poll_ready_unpin(cx)).map_err(map_send_error)?;
-            let new_buffer = BytesMut::with_capacity(self.max_buf_size);
+            ready!(self.sink.poll_ready_unpin(cx))?;
+            let new_buffer = BytesMut::with_capacity(self.buffer_size);
             let buffer = std::mem::replace(&mut self.buffer, new_buffer);
-            self.sink.start_send_unpin(buffer).map_err(map_send_error)?;
+            self.sink.start_send_unpin(buffer)?;
         }
 
         Poll::Ready(Ok(()))
@@ -202,31 +101,98 @@ impl AsyncWrite for ExaWriter {
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if !self.sink.is_closed() {
-            ready!(self.as_mut().poll_flush(cx))?;
-            ready!(self.sink.poll_close_unpin(cx)).map_err(map_send_error)?;
+            if !self.buffer.is_empty() {
+                ready!(self.sink.poll_ready_unpin(cx))?;
+                let buffer = std::mem::take(&mut self.buffer);
+                self.sink.start_send_unpin(buffer)?;
+            }
+            ready!(self.sink.poll_close_unpin(cx))?;
         }
 
-        ready!(self.conn.poll_unpin(cx)).map_err(map_hyper_err)?;
         Poll::Ready(Ok(()))
     }
 }
 
-fn map_hyper_err(err: hyper::Error) -> io::Error {
-    let kind = if err.is_timeout() {
-        io::ErrorKind::TimedOut
-    } else if err.is_parse_too_large() {
-        io::ErrorKind::InvalidData
-    } else {
-        io::ErrorKind::BrokenPipe
-    };
-
-    io::Error::new(kind, err)
+/// A sink that sends data for an `IMPORT` worker.
+///
+/// This enum represents the two states of the sink:
+/// 1. [`WriterSink::RecvSink`]: The sink is waiting to receive the data channel from the
+///    [`super::service::ImportService`].
+/// 2. [`WriterSink::SinkData`]: The data channel has been received, and the sink is now sending
+///    data chunks.
+#[derive(Debug)]
+enum WriterSink {
+    RecvSink(RecvFut<'static, ImportDataSender>),
+    SinkData(SendSink<'static, BytesMut>),
 }
 
-fn map_send_error(err: SendError) -> io::Error {
-    io::Error::new(io::ErrorKind::BrokenPipe, err)
+impl WriterSink {
+    fn is_closed(&self) -> bool {
+        match &self {
+            WriterSink::RecvSink(_) => false,
+            WriterSink::SinkData(sink) => sink.is_disconnected(),
+        }
+    }
 }
 
-fn map_http_error(err: hyper::http::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::BrokenPipe, err)
+impl Sink<BytesMut> for WriterSink {
+    type Error = io::Error;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        loop {
+            match self.as_mut().get_mut() {
+                WriterSink::RecvSink(recv_fut) => {
+                    let sink = ready!(recv_fut.poll_unpin(cx))
+                        .map_err(channel_pipe_error)?
+                        .into_sink();
+
+                    self.set(WriterSink::SinkData(sink));
+                }
+                WriterSink::SinkData(sink) => {
+                    break sink.poll_ready_unpin(cx).map_err(data_pipe_error)
+                }
+            }
+        }
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: BytesMut) -> Result<(), Self::Error> {
+        match self.get_mut() {
+            WriterSink::RecvSink(_) => unreachable!("start_send is always preceded by poll_ready"),
+            WriterSink::SinkData(sink) => sink.start_send_unpin(item).map_err(data_pipe_error),
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        loop {
+            match self.as_mut().get_mut() {
+                WriterSink::RecvSink(recv_fut) => {
+                    let sink = ready!(recv_fut.poll_unpin(cx))
+                        .map_err(channel_pipe_error)?
+                        .into_sink();
+
+                    self.set(WriterSink::SinkData(sink));
+                }
+                WriterSink::SinkData(sink) => {
+                    break sink.poll_flush_unpin(cx).map_err(data_pipe_error)
+                }
+            }
+        }
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        loop {
+            match self.as_mut().get_mut() {
+                WriterSink::RecvSink(recv_fut) => {
+                    let sink = ready!(recv_fut.poll_unpin(cx))
+                        .map_err(channel_pipe_error)?
+                        .into_sink();
+
+                    self.set(WriterSink::SinkData(sink));
+                }
+                WriterSink::SinkData(sink) => {
+                    break sink.poll_close_unpin(cx).map_err(data_pipe_error)
+                }
+            }
+        }
+    }
 }

@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+- [#48](https://github.com/bobozaur/sqlx-exasol/pull/48): split ETL one-shot HTTP server and IO worker
+  - At least one `ExaWriter` must write data to prevent errors as opposed to all.
 - [#35](https://github.com/bobozaur/sqlx-exasol/pull/35): Compile-time query support
   - The `Debug` implementation for `ExaWriter` and `ExaReader` no longer displays the internal buffers to avoid excessive output.
   - `statement_cache_size` can now be set to `0` to disable the statement cache.
