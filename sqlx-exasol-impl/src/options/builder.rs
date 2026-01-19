@@ -32,7 +32,6 @@ pub struct ExaConnectOptionsBuilder {
 }
 
 impl Default for ExaConnectOptionsBuilder {
-    #[must_use = "call build() to get connection options"]
     fn default() -> Self {
         Self {
             url_host: None,

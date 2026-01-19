@@ -200,7 +200,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
 
       - name: Cargo publish
-        run: cargo publish --workspace --token ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo +nightly publish --workspace --token ${{ secrets.CRATES_IO_TOKEN }}
