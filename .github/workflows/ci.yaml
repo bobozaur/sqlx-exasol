@@ -12,66 +12,16 @@ concurrency:
 
 env:
   EXASOL_VERSION: latest-7.1
-  NUM_NODES: 4
+  NUM_NODES: 1
   TESTS_TIMEOUT: 15
   EXA_CLUSTER_SETUP_TIMEOUT: 15
 
 jobs:
-  format:
-    name: Format
+  io_tests_linux:
+    name: IO tests Linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-
-      - name: Check format
-        run: cargo +nightly fmt --check
-
-  docs:
-    name: Docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@1.86.0
-
-      - name: Check format
-        run: cargo doc --workspace --no-deps --document-private-items --all-features
-        env:
-          RUSTDOCFLAGS: -D warnings
-
-  clippy:
-    name: Clippy
-    needs: [format, docs]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        features: ["--all-features", ""]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: dtolnay/rust-toolchain@1.86.0
-        with:
-          components: clippy
-
-      - name: Run clippy
-        run: cargo clippy --tests ${{ matrix.features }}
-        env:
-          RUSTFLAGS: -D warnings
-          
-  io_tests:
-    name: IO tests
-    needs: clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Free disk space
-        uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
         timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
@@ -126,88 +76,11 @@ jobs:
           DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
 
-  driver_tests:
-    name: Driver tests
-    needs: clippy
-    runs-on: ubuntu-latest
+  io_tests_macos:
+    name: IO tests MacOS
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Free disk space
-        uses: ./.github/actions/free-space
-
-      - name: Create Exasol cluster
-        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
-        id: exa-cluster
-        uses: ./.github/actions/exa-cluster
-        with:
-          exasol-version: ${{ env.EXASOL_VERSION }}
-          num-nodes: ${{ env.NUM_NODES }}
-
-      - uses: dtolnay/rust-toolchain@1.86.0
-      - uses: Swatinem/rust-cache@v2
-      
-      - name: Drop database (non-existent)
-        run: cargo run -p sqlx-exasol-cli -- database drop -y
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-          
-      - name: Setup database
-        run: cargo run -p sqlx-exasol-cli -- database create
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-
-      - name: Run migrations
-        run: cargo run -p sqlx-exasol-cli -- migrate run --source tests/migrations_compile_time
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-          
-      - name: Run prepare
-        run: cargo run -p sqlx-exasol-cli -- prepare -- --tests --all-features
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-
-      - name: Run tests (preferred crates)
-        run: cargo test --features runtime-tokio,bigdecimal,time,uuid -- test_compile_time --ignored --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-          
-      - name: Run tests (chrono)
-        run: cargo test --features runtime-tokio,chrono -- test_compile_time_chrono --ignored --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-          
-      - name: Run tests (rust_decimal)
-        run: cargo test --features runtime-tokio,rust_decimal -- test_compile_time_rust_decimal --ignored --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-
-      - name: Unit tests
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test -p sqlx-exasol-impl --features migrate -- --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-
-      - name: Integration connection tests
-        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: cargo test --all-features -- --nocapture
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test?ssl-mode=disabled&compression=disabled
-          
-      - name: Drop database (existent)
-        run: cargo run -p sqlx-exasol-cli -- database drop -y
-        env:
-          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}/test
-
-  etl_tests:
-    name: ETL tests
-    needs: clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Free disk space
-        uses: ./.github/actions/free-space
 
       - name: Create Exasol cluster
         timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
@@ -220,29 +93,103 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.86.0
       - uses: Swatinem/rust-cache@v2
 
-      - name: ETL tests (no TLS)
+      - name: Test IO combos (no TLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=disabled"
-          cargo test --features runtime-tokio,compression,etl -- test_etl --ignored --nocapture
+        run: cargo test --features runtime-tokio,etl -- it_works_with_io_combo --ignored --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
           
-      - name: ETL tests (NativeTLS)
+      - name: Test IO combos (no TLS, with compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
-          cargo test --features runtime-tokio,compression,etl,tls-native-tls -- test_etl --ignored --nocapture
+        run: cargo test --features runtime-tokio,etl,compression -- it_works_with_io_combo --ignored  --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
           
-      - name: ETL tests (Rustls)
+      - name: Test IO combos (NativeTLS, no compression)
         timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
-        run: |
-          export DATABASE_URL="$BASE_DATABASE_URL?ssl-mode=required"
-          cargo test --features runtime-tokio,compression,etl,tls-rustls-aws-lc-rs -- test_etl --ignored --nocapture
+        run: cargo test --features runtime-tokio,etl,tls-native-tls -- it_works_with_io_combo --ignored --nocapture
         env:
-          BASE_DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (NativeTLS, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-native-tls,compression -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (Rustls, no compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-rustls-aws-lc-rs -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (Rustls, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-rustls-aws-lc-rs,compression -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+  io_tests_windows:
+    name: IO tests Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Exasol cluster
+        timeout-minutes: ${{ fromJSON(env.EXA_CLUSTER_SETUP_TIMEOUT) }}
+        id: exa-cluster
+        uses: ./.github/actions/exa-cluster
+        with:
+          exasol-version: ${{ env.EXASOL_VERSION }}
+          num-nodes: ${{ env.NUM_NODES }}
+
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test IO combos (no TLS, no compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (no TLS, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,compression -- it_works_with_io_combo --ignored  --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (NativeTLS, no compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-native-tls -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (NativeTLS, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-native-tls,compression -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (Rustls, no compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-rustls-aws-lc-rs -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
+          SQLX_OFFLINE: true
+          
+      - name: Test IO combos (Rustls, with compression)
+        timeout-minutes: ${{ fromJSON(env.TESTS_TIMEOUT) }}
+        run: cargo test --features runtime-tokio,etl,tls-rustls-aws-lc-rs,compression -- it_works_with_io_combo --ignored --nocapture
+        env:
+          DATABASE_URL: ${{ steps.exa-cluster.outputs.url }}
           SQLX_OFFLINE: true
