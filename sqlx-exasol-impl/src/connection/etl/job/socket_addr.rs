@@ -6,7 +6,7 @@ use std::{
 use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
-    etl::{error::ExaEtlError, job::SocketHandshake},
+    etl::{error::ExaEtlError, job::ServerBootstrap},
     SqlxResult,
 };
 
@@ -28,9 +28,9 @@ where
 
 impl<T> WithSocket for WithSocketAddr<T>
 where
-    T: WithSocket<Output = SocketHandshake> + Send,
+    T: WithSocket<Output = ServerBootstrap> + Send,
 {
-    type Output = SqlxResult<(SocketAddrV4, SocketHandshake)>;
+    type Output = SqlxResult<(SocketAddrV4, ServerBootstrap)>;
 
     async fn with_socket<S: Socket>(self, mut socket: S) -> Self::Output {
         /// Special Exasol packet that enables tunneling.

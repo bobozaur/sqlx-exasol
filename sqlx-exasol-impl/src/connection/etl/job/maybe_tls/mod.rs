@@ -1,12 +1,13 @@
 #[cfg(feature = "tls")]
 pub mod tls;
 
-use futures_util::FutureExt;
+use std::io;
+
 use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
-    connection::websocket::socket::WithExaSocket,
-    etl::job::{SocketHandshake, WithSocketMaker},
+    connection::websocket::socket::{ExaSocket, WithExaSocket},
+    etl::job::WithSocketMaker,
     SqlxResult,
 };
 
@@ -49,11 +50,11 @@ pub enum WithMaybeTlsSocket {
 }
 
 impl WithSocket for WithMaybeTlsSocket {
-    type Output = SocketHandshake;
+    type Output = io::Result<ExaSocket>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         match self {
-            WithMaybeTlsSocket::NonTls(w) => w.with_socket(socket).map(Ok).boxed(),
+            WithMaybeTlsSocket::NonTls(w) => Ok(w.with_socket(socket).await),
             #[cfg(feature = "tls")]
             WithMaybeTlsSocket::Tls(w) => w.with_socket(socket).await,
         }

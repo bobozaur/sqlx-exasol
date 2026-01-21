@@ -129,6 +129,9 @@ flume = { version = "0.12", default-features = false, features = ["async"] }
 futures-io = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 futures-core = { version = "0.3", default-features = false }
+futures-channel = { version = "0.3", default-features = false, features = [
+  "sink",
+] }
 geo-types = { version = "0.7", default-features = false, features = ["std"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 hyper = { version = "1", default-features = false, features = [

@@ -1,21 +1,13 @@
-use std::{
-    fmt::Write,
-    io,
-    net::SocketAddrV4,
-    sync::{atomic::AtomicBool, Arc},
-};
-
-use flume::{Receiver, Sender};
-use futures_util::task::AtomicWaker;
-use sqlx_core::rt::JoinHandle;
+use std::{fmt::Write, net::SocketAddrV4};
 
 use super::{ExaImport, Trim};
 use crate::{
     connection::etl::RowSeparator,
     etl::{
-        import::{service::ImportService, ImportDataSender},
-        job::{EtlJob, SocketHandshake},
-        server::OneShotHttpServer,
+        import::{
+            service::ImportService, ImportChannelSender, ImportDataSender, ImportPartsReceiver,
+        },
+        job::EtlJob,
         EtlQuery,
     },
     ExaConnection, SqlxResult,
@@ -156,6 +148,7 @@ impl EtlJob for ImportBuilder<'_> {
     const JOB_TYPE: &'static str = "import";
 
     type Worker = ExaImport;
+    type Service = ImportService;
     type DataPipe = ImportDataSender;
 
     fn use_compression(&self) -> Option<bool> {
@@ -166,23 +159,12 @@ impl EtlJob for ImportBuilder<'_> {
         self.num_writers
     }
 
-    fn create_worker(&self, rx: Receiver<Self::DataPipe>, with_compression: bool) -> Self::Worker {
-        ExaImport::new(rx, self.buffer_size, with_compression)
+    fn create_worker(&self, parts_rx: ImportPartsReceiver, with_compression: bool) -> Self::Worker {
+        ExaImport::new(parts_rx, self.buffer_size, with_compression)
     }
 
-    fn create_server_task(
-        &self,
-        tx: Sender<Self::DataPipe>,
-        socket_future: SocketHandshake,
-        waker: Arc<AtomicWaker>,
-        stop: Arc<AtomicBool>,
-    ) -> JoinHandle<io::Result<()>> {
-        sqlx_core::rt::spawn(OneShotHttpServer::new(
-            socket_future,
-            ImportService::new(tx),
-            waker,
-            stop,
-        ))
+    fn create_service(&self, chan_tx: ImportChannelSender) -> Self::Service {
+        ImportService::new(chan_tx)
     }
 
     fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {

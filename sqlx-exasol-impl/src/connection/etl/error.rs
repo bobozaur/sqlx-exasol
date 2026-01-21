@@ -60,16 +60,14 @@ pub fn map_http_error(err: hyper::http::Error) -> io::Error {
     io::Error::new(io::ErrorKind::BrokenPipe, err)
 }
 
-pub fn recv_channel_error<T>(_: T) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::BrokenPipe,
-        "error receiving channel from the HTTP server",
-    )
+pub fn broken_pipe_error(msg: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::BrokenPipe, msg)
 }
 
-pub fn send_channel_error<T>(_: T) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::BrokenPipe,
-        "error sending channel to the ETL worker",
-    )
+pub fn server_bootstrap_error<T>(_: T) -> io::Error {
+    broken_pipe_error("error in HTTP service when bootstrapping ETL worker")
+}
+
+pub fn worker_bootstrap_error<T>(_: T) -> io::Error {
+    broken_pipe_error("error in ETL worker when being bootstrapped")
 }

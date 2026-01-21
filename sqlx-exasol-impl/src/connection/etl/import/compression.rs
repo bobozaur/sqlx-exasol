@@ -10,7 +10,7 @@ use async_compression::futures::write::GzipEncoder;
 use futures_io::AsyncWrite;
 
 use super::writer::ExaWriter;
-use crate::etl::import::ImportChannelReceiver;
+use crate::etl::import::ImportPartsReceiver;
 
 /// An [`AsyncWrite`] implementation for an `IMPORT` worker.
 ///
@@ -25,7 +25,7 @@ pub enum MaybeCompressedWriter {
 
 impl MaybeCompressedWriter {
     pub fn new(
-        rx: ImportChannelReceiver,
+        rx: ImportPartsReceiver,
         buffer_size: usize,
         #[allow(unused_variables, reason = "conditionally compiled")] with_compression: bool,
     ) -> Self {

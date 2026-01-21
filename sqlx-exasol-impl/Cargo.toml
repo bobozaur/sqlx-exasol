@@ -40,7 +40,7 @@ rustls = ["dep:rustls", "sqlx-core/_tls-rustls", "tls"]
 
 # Driver specific features
 compression = ["dep:async-compression"]
-etl = ["dep:flume", "dep:hyper"]
+etl = ["dep:flume", "dep:futures-channel", "dep:hyper"]
 
 
 [dependencies]
@@ -65,6 +65,7 @@ bigdecimal = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 dotenvy = { workspace = true, optional = true }
 flume = { workspace = true, optional = true }
+futures-channel = { workspace = true, optional = true }
 geo-types = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }

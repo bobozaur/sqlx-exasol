@@ -3,15 +3,12 @@ use std::{
     future::Future,
     io,
     pin::Pin,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
     task::{ready, Context, Poll},
 };
 
+use futures_core::FusedFuture;
 use futures_util::{
-    future::{maybe_done, MaybeDone},
+    future::{self, MaybeDone, TryJoinAll},
     FutureExt,
 };
 
@@ -21,7 +18,7 @@ use crate::{
         request::Execute,
         ExaWebSocket,
     },
-    etl::{error::ExaEtlError, server::ServerTask},
+    etl::{error::ExaEtlError, job::ServerBootstrap},
     responses::{QueryResult, SingleResult},
     ExaQueryResult, SqlxResult,
 };
@@ -36,23 +33,19 @@ use crate::{
 ///
 /// An [`EtlQuery`] is created by [`super::ImportBuilder::build`] or
 /// [`super::ExportBuilder::build`].
-#[derive(Debug)]
 pub struct EtlQuery<'c> {
-    query_future: MaybeDone<ExaFuture<'c, ExecuteEtl>>,
-    server_tasks: Vec<ServerTask>,
-    stop_tasks: Arc<AtomicBool>,
+    query: MaybeDone<ExaFuture<'c, ExecuteEtl>>,
+    bootstrap: MaybeDone<TryJoinAll<ServerBootstrap>>,
 }
 
 impl<'c> EtlQuery<'c> {
     pub(crate) fn new(
         query_future: ExaFuture<'c, ExecuteEtl>,
-        server_tasks: Vec<ServerTask>,
-        stop_tasks: Arc<AtomicBool>,
+        bootstrap_futures: Vec<ServerBootstrap>,
     ) -> Self {
         Self {
-            query_future: maybe_done(query_future),
-            server_tasks,
-            stop_tasks,
+            query: future::maybe_done(query_future),
+            bootstrap: future::maybe_done(future::try_join_all(bootstrap_futures)),
         }
     }
 }
@@ -61,48 +54,17 @@ impl Future for EtlQuery<'_> {
     type Output = SqlxResult<ExaQueryResult>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut all_ready = true;
-
-        // Poll the query future.
-        all_ready &= self.query_future.poll_unpin(cx).is_ready();
-
-        // Poll the HTTP server tasks.
-        for task in &mut self.server_tasks {
-            all_ready &= task.poll_unpin(cx).is_ready();
-        }
-
-        // If the query errored out, signal the HTTP server tasks to stop and wake them.
-        if let Some(Err(_)) = Pin::new(&mut self.query_future).output_mut() {
-            self.stop_tasks.store(true, Ordering::Release);
-            for task in &mut self.server_tasks {
-                task.wake();
+        if !self.query.is_terminated() && self.query.poll_unpin(cx).is_ready() {
+            if let Some(query_res) = Pin::new(&mut self.query).take_output() {
+                return Poll::Ready(query_res);
             }
         }
 
-        if !all_ready {
-            return Poll::Pending;
+        if !self.bootstrap.is_terminated() && self.bootstrap.poll_unpin(cx).is_ready() {
+            Pin::new(&mut self.bootstrap).take_output().transpose()?;
         }
 
-        // Query errors always have priority.
-        let qr = Pin::new(&mut self.query_future).take_output().unwrap()?;
-
-        // Check for errors in the server tasks.
-        self.server_tasks
-            .drain(..)
-            .try_for_each(ServerTask::take_output)?;
-
-        Poll::Ready(Ok(qr))
-    }
-}
-
-/// Ensures background server tasks are signaled to stop if the future is not awaited to completion.
-/// This prevents the tasks from running indefinitely in the background.
-impl Drop for EtlQuery<'_> {
-    fn drop(&mut self) {
-        self.stop_tasks.store(true, Ordering::Release);
-        for task in &self.server_tasks {
-            task.wake();
-        }
+        Poll::Pending
     }
 }
 
@@ -125,5 +87,11 @@ impl WebSocketFuture for ExecuteEtl {
             QueryResult::ResultSet { .. } => Err(io::Error::from(ExaEtlError::ResultSetFromEtl))?,
             QueryResult::RowCount { row_count } => Poll::Ready(Ok(ExaQueryResult::new(row_count))),
         }
+    }
+}
+
+impl Debug for EtlQuery<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EtlQuery").finish()
     }
 }

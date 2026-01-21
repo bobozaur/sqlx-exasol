@@ -5,15 +5,13 @@ use std::{
     future::Future,
     io,
     net::{IpAddr, SocketAddr, SocketAddrV4},
-    sync::{atomic::AtomicBool, Arc},
 };
 
 use flume::{Receiver, Sender};
 use futures_core::future::BoxFuture;
-use futures_util::task::AtomicWaker;
+use hyper::server::conn::http1::Connection;
 use sqlx_core::{
     net::WithSocket,
-    rt::JoinHandle,
     sql_str::{AssertSqlSafe, SqlSafeStr},
 };
 
@@ -26,19 +24,16 @@ use crate::{
     etl::{
         job::{maybe_tls::WithMaybeTlsSocketMaker, socket_addr::WithSocketAddr},
         query::ExecuteEtl,
-        server::ServerTask,
+        server::{OneShotService, WithHttpServer},
         EtlQuery,
     },
     ExaConnection, SqlxResult,
 };
 
-/// Alias for a future that sets up a socket to be used by an HTTP server.
-///
-/// This future will perform the necessary TCP connection and TLS handshake (if needed).
-/// The resulting [`ExaSocket`] is then used by the one-shot HTTP server for an ETL job.
-///
-/// This is necessary because Exasol initiates the TLS handshake for each socket sequentially.
-pub type SocketHandshake = BoxFuture<'static, io::Result<ExaSocket>>;
+/// Alias for futures that perform the TLS handshake (if needed), set up a one-shot HTTP Server,
+/// along with data channel and connection handover to the IO worker
+pub type ServerBootstrap = BoxFuture<'static, io::Result<()>>;
+pub type OneShotServer<S> = Connection<ExaSocket, S>;
 
 /// Interface for ETL jobs, containing common functionality required by both `IMPORT` and `EXPORT`
 /// operations.
@@ -60,8 +55,11 @@ pub trait EtlJob: Sized + Send + Sync {
     /// Either [`super::ExaImport`] or [`super::ExaExport`].
     type Worker: Send;
 
+    /// The HTTP service implementation.
+    type Service: OneShotService;
+
     /// The type of the channel half used to send data between the HTTP server and the worker.
-    type DataPipe: Send;
+    type DataPipe: Send + 'static;
 
     /// Whether to use compression for the ETL job.
     /// If `None`, the connection's setting is used.
@@ -75,19 +73,14 @@ pub trait EtlJob: Sized + Send + Sync {
     ///
     /// The worker will receive the data pipe from the HTTP server through the provided `rx`
     /// channel once the HTTP request is received.
-    fn create_worker(&self, rx: Receiver<Self::DataPipe>, with_compression: bool) -> Self::Worker;
-
-    /// Creates and spawns a one-shot HTTP server task.
-    ///
-    /// This task will handle one HTTP request from Exasol and transfer the data pipe to the
-    /// worker via the provided `tx` channel once the HTTP request is received.
-    fn create_server_task(
+    fn create_worker(
         &self,
-        tx: Sender<Self::DataPipe>,
-        socket_future: SocketHandshake,
-        waker: Arc<AtomicWaker>,
-        stop: Arc<AtomicBool>,
-    ) -> JoinHandle<io::Result<()>>;
+        rx: Receiver<(Self::DataPipe, OneShotServer<Self::Service>)>,
+        with_compression: bool,
+    ) -> Self::Worker;
+
+    /// Creates the HTTP service that will be used by the one-shot HTTP server.
+    fn create_service(&self, chan_tx: Sender<Self::DataPipe>) -> Self::Service;
 
     /// Connects a socket for each Exasol node, spawns a one-shot HTTP server task for each, and
     /// creates the ETL workers.
@@ -97,42 +90,44 @@ pub trait EtlJob: Sized + Send + Sync {
         ips: Vec<IpAddr>,
         port: u16,
         with_compression: bool,
-        stop_tasks: Arc<AtomicBool>,
     ) -> impl Future<Output = SqlxResult<JobComponents<Self::Worker>>> + Send {
         async move {
             let num = self.num_workers();
             let num = if num > 0 { num } else { ips.len() };
 
-            let (tx, rx) = flume::bounded(0);
+            let (parts_tx, parts_rx) = flume::bounded(0);
+            let (chan_tx, chan_rx) = flume::bounded(0);
             let mut addrs = Vec::with_capacity(num);
             let mut workers = Vec::with_capacity(num);
-            let mut server_tasks = Vec::with_capacity(num);
+            let mut conn_futures = Vec::with_capacity(num);
 
             for ip in ips.into_iter().take(num) {
-                let with_exa_socket = WithExaSocket(SocketAddr::new(ip, port));
-                let with_socket = WithSocketAddr(wsm.make_with_socket(with_exa_socket));
+                let service: <Self as EtlJob>::Service = self.create_service(chan_tx.clone());
 
-                let (addr, socket_fut) =
+                let with_exa_socket = WithExaSocket(SocketAddr::new(ip, port));
+                let with_maybe_tls_socket = wsm.make_with_socket(with_exa_socket);
+                let with_http_server = WithHttpServer::new(
+                    with_maybe_tls_socket,
+                    service,
+                    chan_rx.clone(),
+                    parts_tx.clone(),
+                );
+                let with_socket = WithSocketAddr(with_http_server);
+
+                let (addr, conn_future) =
                     sqlx_core::net::connect_tcp(&ip.to_string(), port, with_socket).await??;
 
-                let waker = Arc::new(AtomicWaker::new());
-                let worker = self.create_worker(rx.clone(), with_compression);
-                let handle = self.create_server_task(
-                    tx.clone(),
-                    socket_fut,
-                    waker.clone(),
-                    stop_tasks.clone(),
-                );
+                let worker = self.create_worker(parts_rx.clone(), with_compression);
 
                 addrs.push(addr);
                 workers.push(worker);
-                server_tasks.push(ServerTask::new(handle, waker));
+                conn_futures.push(conn_future);
             }
 
             Ok(JobComponents {
                 addrs,
                 workers,
-                server_tasks,
+                conn_futures,
             })
         }
     }
@@ -163,25 +158,19 @@ pub trait EtlJob: Sized + Send + Sync {
                 .use_compression()
                 .unwrap_or(conn.attributes().compression_enabled());
             let wsm = WithMaybeTlsSocketMaker::new(with_tls)?;
-            let stop_tasks = Arc::new(AtomicBool::new(false));
 
             // Get the internal Exasol node addresses and the workers
             let JobComponents {
                 addrs,
                 workers,
-                server_tasks,
-            } = self
-                .connect(wsm, ips, port, with_compression, stop_tasks.clone())
-                .await?;
+                conn_futures,
+            } = self.connect(wsm, ips, port, with_compression).await?;
 
             // Query execution driving future to be returned and awaited alongside the worker IO
             let query = AssertSqlSafe(self.query(addrs, with_tls, with_compression)).into_sql_str();
             let query_future = ExecuteEtl(ExaRoundtrip::new(Execute(query))).future(&mut conn.ws);
 
-            Ok((
-                EtlQuery::new(query_future, server_tasks, stop_tasks),
-                workers,
-            ))
+            Ok((EtlQuery::new(query_future, conn_futures), workers))
         }
     }
 
@@ -249,16 +238,16 @@ struct JobComponents<W> {
     addrs: Vec<SocketAddrV4>,
     /// The ETL workers.
     workers: Vec<W>,
-    /// The spawned HTTP server tasks.
-    server_tasks: Vec<ServerTask>,
+    /// The HTTP server bootstrap futures.
+    conn_futures: Vec<ServerBootstrap>,
 }
 
-/// A trait for creating a [`WithSocket`] instance that produces a [`SocketHandshake`].
+/// A trait for creating multiple [`WithSocket`] instances.
 ///
 /// This trait is mainly used to allow sharing the TLS config between sockets by creating
 /// multiple [`WithSocket`] instances.
 pub trait WithSocketMaker: Send + Sync {
-    type WithSocket: WithSocket<Output = SocketHandshake> + Send;
+    type WithSocket: WithSocket<Output = io::Result<ExaSocket>> + Send;
 
     fn make_with_socket(&self, with_socket: WithExaSocket) -> Self::WithSocket;
 }

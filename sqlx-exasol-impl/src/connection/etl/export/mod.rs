@@ -11,15 +11,17 @@ use std::{
 };
 
 use compression::MaybeCompressedReader;
-use flume::{Receiver, Sender};
+use futures_channel::mpsc::{Receiver, Sender};
 use futures_io::AsyncRead;
 use hyper::body::Bytes;
 pub use options::ExportBuilder;
 
+use crate::etl::{export::service::ExportService, job::OneShotServer};
+
 type ExportDataSender = Sender<Bytes>;
 type ExportDataReceiver = Receiver<Bytes>;
-type ExportChannelSender = Sender<ExportDataReceiver>;
-type ExportChannelReceiver = Receiver<ExportDataReceiver>;
+type ExportChannelSender = flume::Sender<ExportDataReceiver>;
+type ExportPartsReceiver = flume::Receiver<(ExportDataReceiver, OneShotServer<ExportService>)>;
 
 /// An ETL EXPORT worker.
 ///

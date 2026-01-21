@@ -5,7 +5,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use flume::r#async::{SendFut, SendSink};
+use flume::r#async::SendFut;
 use futures_util::{stream::Forward, FutureExt, Sink, SinkExt, Stream, StreamExt};
 use hyper::{
     body::{Body, Bytes, Incoming},
@@ -14,7 +14,7 @@ use hyper::{
 };
 
 use crate::etl::{
-    error::{map_http_error, map_hyper_err, send_channel_error},
+    error::{map_http_error, map_hyper_err, server_bootstrap_error},
     export::{ExportChannelSender, ExportDataReceiver, ExportDataSender},
 };
 
@@ -43,7 +43,7 @@ impl Service<Request<Incoming>> for ExportService {
     ///
     /// We can then use the sender to pipe data through.
     fn call(&self, req: Request<Incoming>) -> Self::Future {
-        let (tx, rx) = flume::bounded(0);
+        let (tx, rx) = futures_channel::mpsc::channel(0);
         let send_fut = self.0.clone().into_send_async(rx);
         let sink = ExportSink::SendChan(send_fut, Some(tx));
         ExportFuture(ExportStream(req.into_body()).forward(sink))
@@ -101,7 +101,7 @@ pub enum ExportSink {
         SendFut<'static, ExportDataReceiver>,
         Option<ExportDataSender>,
     ),
-    SendData(SendSink<'static, Bytes>),
+    SendData(ExportDataSender),
 }
 
 impl Sink<Bytes> for ExportSink {
@@ -111,8 +111,8 @@ impl Sink<Bytes> for ExportSink {
         loop {
             let state = match self.as_mut().get_mut() {
                 ExportSink::SendChan(send_fut, sender) => {
-                    ready!(send_fut.poll_unpin(cx)).map_err(send_channel_error)?;
-                    ExportSink::SendData(sender.take().unwrap().into_sink())
+                    ready!(send_fut.poll_unpin(cx)).map_err(server_bootstrap_error)?;
+                    ExportSink::SendData(sender.take().unwrap())
                 }
                 ExportSink::SendData(sink) => {
                     return sink.poll_ready_unpin(cx).map_err(server_send_data_error)
@@ -138,8 +138,8 @@ impl Sink<Bytes> for ExportSink {
         loop {
             let state = match self.as_mut().get_mut() {
                 ExportSink::SendChan(send_fut, sender) => {
-                    ready!(send_fut.poll_unpin(cx)).map_err(send_channel_error)?;
-                    ExportSink::SendData(sender.take().unwrap().into_sink())
+                    ready!(send_fut.poll_unpin(cx)).map_err(server_bootstrap_error)?;
+                    ExportSink::SendData(sender.take().unwrap())
                 }
                 ExportSink::SendData(sink) => {
                     return sink.poll_flush_unpin(cx).map_err(server_send_data_error)
@@ -154,8 +154,8 @@ impl Sink<Bytes> for ExportSink {
         loop {
             let state = match self.as_mut().get_mut() {
                 ExportSink::SendChan(send_fut, sender) => {
-                    ready!(send_fut.poll_unpin(cx)).map_err(send_channel_error)?;
-                    ExportSink::SendData(sender.take().unwrap().into_sink())
+                    ready!(send_fut.poll_unpin(cx)).map_err(server_bootstrap_error)?;
+                    ExportSink::SendData(sender.take().unwrap())
                 }
                 ExportSink::SendData(sink) => {
                     return sink.poll_close_unpin(cx).map_err(server_send_data_error)

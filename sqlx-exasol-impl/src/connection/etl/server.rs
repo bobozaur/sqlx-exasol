@@ -1,18 +1,9 @@
-use std::{
-    error::Error as StdError,
-    fmt::Debug,
-    io,
-    pin::Pin,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    task::{Context, Poll},
-};
+use std::{error::Error as StdError, io};
 
+use flume::{r#async::RecvFut, Receiver, Sender};
 use futures_util::{
-    future::{maybe_done, MaybeDone},
-    task::AtomicWaker,
+    self,
+    future::{self, Either},
     FutureExt,
 };
 use hyper::{
@@ -20,167 +11,120 @@ use hyper::{
     server::conn::http1::{Builder, Connection},
     service::HttpService,
 };
-use sqlx_core::rt::JoinHandle;
+use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
     connection::websocket::socket::ExaSocket,
-    etl::{error::map_hyper_err, job::SocketHandshake},
+    etl::{error::map_hyper_err, job::ServerBootstrap},
 };
 
-/// A future that handles a single HTTP connection for an ETL job.
-///
-/// This server will first await the `SocketHandshake` future to get a connected and
-/// TLS-handshaked socket. Then, it will serve a single HTTP connection on that socket.
-///
-/// The server is designed to be "one-shot," meaning it will handle one request and then
-/// terminate. This is because Exasol makes one HTTP request per worker.
-///
-/// The `stop` signal is used to gracefully shut down the server if the [`super::EtlQuery`] future
-/// is dropped.
-pub struct OneShotHttpServer<S>
+#[derive(Debug)]
+pub struct WithHttpServer<WS, SERVICE, CHANNEL>
 where
-    S: HttpService<Incoming>,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
-    S::ResBody: 'static,
-    <S::ResBody as Body>::Error: Into<Box<dyn StdError + Send + Sync>>,
+    WS: WithSocket,
+    CHANNEL: Send + 'static,
+    SERVICE: OneShotService,
 {
-    state: ServerState<S>,
-    waker: Arc<AtomicWaker>,
-    stop: Arc<AtomicBool>,
+    inner: WS,
+    service: SERVICE,
+    recv: RecvFut<'static, CHANNEL>,
+    sender: Sender<(CHANNEL, Connection<ExaSocket, SERVICE>)>,
 }
 
-impl<S> OneShotHttpServer<S>
+impl<WS, SERVICE, CHANNEL> WithHttpServer<WS, SERVICE, CHANNEL>
 where
-    S: HttpService<Incoming>,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
-    S::ResBody: 'static,
-    <S::ResBody as Body>::Error: Into<Box<dyn StdError + Send + Sync>>,
+    WS: WithSocket,
+    CHANNEL: Send + 'static,
+    SERVICE: OneShotService,
 {
     pub fn new(
-        future: SocketHandshake,
-        service: S,
-        waker: Arc<AtomicWaker>,
-        stop: Arc<AtomicBool>,
+        with_socket: WS,
+        service: SERVICE,
+        rx: Receiver<CHANNEL>,
+        tx: Sender<(CHANNEL, Connection<ExaSocket, SERVICE>)>,
     ) -> Self {
         Self {
-            state: ServerState::SocketHandshake {
-                future,
-                service: Some(service),
-            },
-            waker,
-            stop,
+            inner: with_socket,
+            service,
+            recv: rx.into_recv_async(),
+            sender: tx,
         }
     }
 }
 
-impl<S> Future for OneShotHttpServer<S>
+impl<WS, SERVICE, CHANNEL> WithSocket for WithHttpServer<WS, SERVICE, CHANNEL>
 where
-    S: HttpService<Incoming> + Unpin,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
-    S::ResBody: 'static,
-    <S::ResBody as Body>::Error: Into<Box<dyn StdError + Send + Sync>>,
+    WS: WithSocket<Output = io::Result<ExaSocket>> + Send + 'static,
+    CHANNEL: Send + 'static,
+    SERVICE: OneShotService,
 {
-    type Output = io::Result<()>;
+    type Output = ServerBootstrap;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.stop.load(Ordering::Relaxed) {
-            return Poll::Ready(Ok(()));
-        }
+    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
+        async {
+            let socket = self.inner.with_socket(socket).await?;
+            let conn = Builder::new()
+                .keep_alive(false)
+                .serve_connection(socket, self.service);
 
-        loop {
-            match &mut self.state {
-                ServerState::SocketHandshake { future, service } => {
-                    let socket = match future.poll_unpin(cx) {
-                        Poll::Ready(res) => res?,
-                        Poll::Pending => {
-                            self.waker.register(cx.waker());
-                            return Poll::Pending;
-                        }
-                    };
-                    let conn = Builder::new()
-                        .keep_alive(false)
-                        .serve_connection(socket, service.take().unwrap());
-                    self.state = ServerState::Serving(conn);
-                }
-                ServerState::Serving(connection) => {
-                    break match connection.poll_unpin(cx).map_err(map_hyper_err) {
-                        Poll::Ready(res) => Poll::Ready(res),
-                        Poll::Pending => {
-                            self.waker.register(cx.waker());
-                            return Poll::Pending;
-                        }
-                    }
-                }
-            }
+            let (chan, conn) = match future::select(conn, self.recv).await {
+                Either::Right((Ok(chan), conn)) => Ok((chan, conn)),
+                Either::Right((Err(_), _)) => Err(data_channel_recv_error()),
+                Either::Left((res, _)) => res
+                    .map_err(map_hyper_err)
+                    .and_then(|()| Err(early_finish_error())),
+            }?;
+
+            self.sender
+                .into_send_async((chan, conn))
+                .await
+                .map_err(|_| parts_send_error())
         }
+        .boxed()
     }
 }
 
-/// The internal state of the `OneShotHttpServer`.
-enum ServerState<S>
+pub trait OneShotService:
+    HttpService<
+        Incoming,
+        Future: Send,
+        Error: Into<Box<dyn StdError + Send + Sync>>,
+        ResBody: OneShotResBody,
+    > + Send
+    + 'static
+{
+}
+
+impl<S> OneShotService for S
 where
-    S: HttpService<Incoming>,
+    S: HttpService<Incoming> + Send + 'static,
+    S::Future: Send,
     S::Error: Into<Box<dyn StdError + Send + Sync>>,
-    S::ResBody: 'static,
-    <S::ResBody as Body>::Error: Into<Box<dyn StdError + Send + Sync>>,
+    S::ResBody: OneShotResBody,
 {
-    /// The server is waiting for the socket handshake to complete.
-    SocketHandshake {
-        future: SocketHandshake,
-        service: Option<S>,
-    },
-    /// The server is actively serving an HTTP connection.
-    Serving(Connection<ExaSocket, S>),
 }
 
-/// A handle to a spawned [`OneShotHttpServer`] task.
-///
-/// This struct holds the [`JoinHandle`] of the spawned server task and a waker that
-/// can be used to wake up the task.
-///
-/// The [`super::EtlQuery`] future uses this to poll the server tasks and ensure they complete or
-/// terminate them early in case of an error.
-pub struct ServerTask {
-    handle: MaybeDone<JoinHandle<io::Result<()>>>,
-    waker: Arc<AtomicWaker>,
+pub trait OneShotResBody:
+    Body<Data: Send, Error: Into<Box<dyn StdError + Send + Sync>>> + Send + 'static
+{
 }
 
-impl ServerTask {
-    pub fn new(handle: JoinHandle<io::Result<()>>, waker: Arc<AtomicWaker>) -> Self {
-        Self {
-            handle: maybe_done(handle),
-            waker,
-        }
-    }
-
-    /// Wakes up the server task.
-    pub fn wake(&self) {
-        self.waker.wake();
-    }
-
-    /// Takes the output of the completed server task.
-    ///
-    /// # Panics
-    ///
-    /// This will panic if the task has not completed yet.
-    pub fn take_output(mut self) -> io::Result<()> {
-        Pin::new(&mut self.handle).take_output().unwrap()
-    }
+impl<B> OneShotResBody for B
+where
+    B: Body + Send + 'static,
+    B::Data: Send,
+    B::Error: Into<Box<dyn StdError + Send + Sync>>,
+{
 }
 
-impl Future for ServerTask {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.handle.poll_unpin(cx)
-    }
+fn early_finish_error() -> io::Error {
+    io::Error::other("HTTP server finished early without piping data to/from IO worker")
 }
 
-impl Debug for ServerTask {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ServerTask")
-            .field("handle", &())
-            .field("waker", &self.waker)
-            .finish()
-    }
+fn data_channel_recv_error() -> io::Error {
+    io::Error::other("error receiving the data channel from the HTTP server")
+}
+
+fn parts_send_error() -> io::Error {
+    io::Error::other("error sending the HTTP server and data channel to worker")
 }
