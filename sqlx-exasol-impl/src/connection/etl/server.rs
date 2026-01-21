@@ -18,6 +18,17 @@ use crate::{
     etl::{error::map_hyper_err, job::ServerBootstrap},
 };
 
+/// A `WithSocket` implementation that wraps another `WithSocket` to layer a one-shot HTTP
+/// server on top of the established socket.
+///
+/// This struct is central to the ETL server bootstrap process. It is responsible for:
+/// 1. Establishing a connection using the inner `WithSocket`.
+/// 2. Creating an HTTP server ([`hyper::server::conn::http1::Connection`]).
+/// 3. Racing the HTTP server against receiving a data channel from the
+///    [`hyper::service::HttpService`]. The data channel is sent by the service when it receives a
+///    request from Exasol.
+/// 4. Sending the data channel and the paused HTTP connection to the IO worker, which will then
+///    take over polling the connection.
 #[derive(Debug)]
 pub struct WithHttpServer<WS, SERVICE, CHANNEL>
 where
@@ -60,6 +71,17 @@ where
 {
     type Output = ServerBootstrap;
 
+    /// The main logic for the server bootstrap.
+    ///
+    /// This method performs the following steps:
+    /// 1. Awaits the inner `with_socket` future to get a connected and TLS-handshaked socket.
+    /// 2. Creates an HTTP connection to serve the provided `service`.
+    /// 3. Races the `Connection` future against a future waiting to receive the data channel from
+    ///    the HTTP service. The service sends this channel when a request is received.
+    /// 4. If the data channel is received first, it sends the channel and the paused `Connection`
+    ///    to the IO worker.
+    /// 5. If the `Connection` future completes first, it's an error because it's expected to be a
+    ///    long-running task driven by the worker.
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         async {
             let socket = self.inner.with_socket(socket).await?;
@@ -84,6 +106,7 @@ where
     }
 }
 
+/// A marker trait for `hyper` services compatible with the one-shot ETL server.
 pub trait OneShotService:
     HttpService<
         Incoming,
@@ -104,6 +127,7 @@ where
 {
 }
 
+/// A marker trait for `hyper` body types compatible with the one-shot ETL server.
 pub trait OneShotResBody:
     Body<Data: Send, Error: Into<Box<dyn StdError + Send + Sync>>> + Send + 'static
 {

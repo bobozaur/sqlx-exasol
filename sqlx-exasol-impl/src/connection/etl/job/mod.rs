@@ -30,9 +30,14 @@ use crate::{
     ExaConnection, SqlxResult,
 };
 
-/// Alias for futures that perform the TLS handshake (if needed), set up a one-shot HTTP Server,
-/// along with data channel and connection handover to the IO worker
+/// Alias for futures that perform the necessary TCP connection, TLS handshake (if needed),
+/// set up a one-shot HTTP Server, and handle the data channel and connection handover to the IO
+/// worker.
 pub type ServerBootstrap = BoxFuture<'static, io::Result<()>>;
+
+/// Alias for a `hyper` one-shot HTTP connection.
+///
+/// The IO worker will poll this connection to completion.
 pub type OneShotServer<S> = Connection<ExaSocket, S>;
 
 /// Interface for ETL jobs, containing common functionality required by both `IMPORT` and `EXPORT`
@@ -71,19 +76,28 @@ pub trait EtlJob: Sized + Send + Sync {
 
     /// Creates a new worker instance.
     ///
-    /// The worker will receive the data pipe from the HTTP server through the provided `rx`
-    /// channel once the HTTP request is received.
+    /// The worker receives the data pipe and the HTTP connection from the server through the
+    /// provided `parts_rx` channel.
+    ///
+    /// The worker is responsible for polling the HTTP connection to completion after
+    /// the query future bootstraps it.
     fn create_worker(
         &self,
-        rx: Receiver<(Self::DataPipe, OneShotServer<Self::Service>)>,
+        parts_rx: Receiver<(Self::DataPipe, OneShotServer<Self::Service>)>,
         with_compression: bool,
     ) -> Self::Worker;
 
     /// Creates the HTTP service that will be used by the one-shot HTTP server.
+    ///
+    /// The service will send the data pipe to the worker through the provided `chan_tx` channel.
     fn create_service(&self, chan_tx: Sender<Self::DataPipe>) -> Self::Service;
 
-    /// Connects a socket for each Exasol node, spawns a one-shot HTTP server task for each, and
-    /// creates the ETL workers.
+    /// For each Exasol node, this method creates an ETL worker and a corresponding server bootstrap
+    /// future.
+    ///
+    /// The bootstrap future will connect a socket, perform the TLS handshake (if needed),
+    /// set up the HTTP server, and handle the handover of the data pipe and HTTP connection to the
+    /// worker.
     fn connect(
         &self,
         wsm: WithMaybeTlsSocketMaker,

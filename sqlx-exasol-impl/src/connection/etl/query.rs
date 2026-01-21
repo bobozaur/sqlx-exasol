@@ -25,11 +25,14 @@ use crate::{
 
 /// A future that drives an ETL query to completion.
 ///
-/// This future polls both the main query future and the background HTTP server tasks.
-/// It ensures that all server tasks are completed before returning the result of the query.
+/// This future polls two main components:
+/// 1. The main query future that sends the `IMPORT` or `EXPORT` statement to Exasol.
+/// 2. The server bootstrap futures, which handle the connection and setup of the one-shot HTTP
+///    servers for each ETL worker.
 ///
-/// If the [`EtlQuery`] future is dropped before completion, it will signal the server tasks to
-/// stop, preventing them from running indefinitely.
+/// Both sets of futures are polled, but the final result of this future is the result of the
+/// main database query. The bootstrap futures are expected to complete successfully much earlier
+/// than the query future.
 ///
 /// An [`EtlQuery`] is created by [`super::ImportBuilder::build`] or
 /// [`super::ExportBuilder::build`].
@@ -54,13 +57,18 @@ impl Future for EtlQuery<'_> {
     type Output = SqlxResult<ExaQueryResult>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // The query future is what we're ultimately interested in.
+        // If it's done, we can return its result.
         if !self.query.is_terminated() && self.query.poll_unpin(cx).is_ready() {
             if let Some(query_res) = Pin::new(&mut self.query).take_output() {
                 return Poll::Ready(query_res);
             }
         }
 
+        // The bootstrap futures run in the background to set up the servers.
+        // We need to poll them to make progress and check for errors.
         if !self.bootstrap.is_terminated() && self.bootstrap.poll_unpin(cx).is_ready() {
+            // If the bootstrap futures resulted in an error, propagate it.
             Pin::new(&mut self.bootstrap).take_output().transpose()?;
         }
 

@@ -62,13 +62,21 @@ impl AsyncBufRead for ExaReader {
 }
 
 /// A stream that receives data for an `EXPORT` worker.
+///
+/// This enum represents the state machine of the export worker's data stream.
+///
+/// 1. [`ReaderStream::RecvStream`]: The initial state. The stream is waiting to receive the data
+///    channel and the HTTP connection from the server bootstrap process.
+///
+/// 2. [`ReaderStream::StreamData`]: The active data transfer state. The stream yields data chunks
+///    received from the HTTP service. In this state, it also polls the connection future. Polling
+///    will continue until the entire HTTP request is processed and the response is sent.
 pub enum ReaderStream {
     RecvStream(RecvFut<'static, (ExportDataReceiver, OneShotServer<ExportService>)>),
     StreamData {
         stream: ExportDataReceiver,
-        conn: Option<OneShotServer<ExportService>>,
+        conn: OneShotServer<ExportService>,
     },
-    Respond(OneShotServer<ExportService>),
 }
 
 impl Stream for ReaderStream {
@@ -77,24 +85,25 @@ impl Stream for ReaderStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             let state = match self.as_mut().get_mut() {
+                // Initial state: Wait to receive the data channel and HTTP connection.
                 ReaderStream::RecvStream(recv_fut) => {
                     let (stream, conn) =
                         ready!(recv_fut.poll_unpin(cx)).map_err(worker_bootstrap_error)?;
 
-                    Self::StreamData {
-                        stream,
-                        conn: Some(conn),
-                    }
+                    Self::StreamData { stream, conn }
                 }
+                // Active state: Stream data chunks and poll the HTTP connection.
                 ReaderStream::StreamData { stream, conn } => {
-                    if let Poll::Ready(opt) = stream.poll_next_unpin(cx) {
-                        return Poll::Ready(opt.map(Ok));
+                    // Poll for the next data chunk.
+                    if let Poll::Ready(Some(data)) = stream.poll_next_unpin(cx) {
+                        return Poll::Ready(Some(Ok(data)));
                     }
-                    ready!(conn.as_mut().unwrap().poll_unpin(cx)).map_err(map_hyper_err)?;
-                    Self::Respond(conn.take().unwrap())
-                }
-                ReaderStream::Respond(conn) => {
+
+                    // The request is either pending or depleted.
+                    // Poll the connection to continue processing the request or respond.
                     ready!(conn.poll_unpin(cx)).map_err(map_hyper_err)?;
+
+                    // If we are here, we responded to Exasol and the connection completed.
                     return Poll::Ready(None);
                 }
             };

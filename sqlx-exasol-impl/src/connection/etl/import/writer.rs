@@ -16,6 +16,10 @@ use crate::etl::{
 };
 
 /// The inner [`AsyncWrite`] implementation for an `IMPORT` worker.
+///
+/// This enum represents the state machine for the writer. It starts in the [`ExaWriter::RecvParts`]
+/// state, waiting for the data channel and HTTP connection. Once received, it transitions to the
+/// [`ExaWriter::SinkData`] state, which handles the actual writing of data.
 #[derive(Debug)]
 pub enum ExaWriter {
     RecvParts {
@@ -128,6 +132,14 @@ impl AsyncWrite for ExaWriter {
     }
 }
 
+/// The active state of the [`ExaWriter`].
+///
+/// This struct contains the buffer for outgoing data, the sink to send the data to the HTTP
+/// service, and the HTTP connection itself.
+///
+/// The [`AsyncWrite`] implementation for this struct will buffer data and send it to the sink.
+/// It is also responsible for polling the `conn` future to completion to ensure the HTTP
+/// transaction is properly finished.
 pub struct ExaWriterInner {
     buffer: BytesMut,
     buffer_size: usize,
@@ -150,7 +162,10 @@ impl ExaWriterInner {
         cx: &mut Context<'_>,
         is_end: bool,
     ) -> Poll<io::Result<()>> {
+        // We must poll the connection to check if it has been closed by the server.
+        // If the server closes the connection prematurely, this will return an error.
         let _ = self.conn.poll_unpin(cx).map_err(map_hyper_err)?;
+
         if !self.buffer.is_empty() {
             ready!(self.sink.poll_ready_unpin(cx)).map_err(map_send_error)?;
             let buffer = self.take_buf(is_end);
@@ -206,11 +221,14 @@ impl AsyncWrite for ExaWriterInner {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        // First, flush any remaining data in the buffer and close the data sink.
         if !self.sink.is_closed() {
             ready!(self.as_mut().poll_flush_inner(cx, true))?;
             ready!(self.sink.poll_close_unpin(cx)).map_err(map_send_error)?;
         }
 
+        // After the sink is closed, the HTTP service will send the response.
+        // We must poll the connection to completion.
         ready!(self.conn.poll_unpin(cx)).map_err(map_hyper_err)?;
         Poll::Ready(Ok(()))
     }

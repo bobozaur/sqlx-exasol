@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- [#50](https://github.com/bobozaur/sqlx-exasol/issues/50) Fix ETL `IMPORT` deadlocks
+
 ## [0.9.0] - 2026-01-20
 
 ### Fixed
@@ -13,6 +19,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Do not attempt connecting to other hosts after successfully setting up a Websocket
 
 ### Added
+
 - [#47](https://github.com/bobozaur/sqlx-exasol/pull/47): Ability to specify additional connection hosts
   - `ExaConnectOptionsBuilder::extra_host`
   - `ExaConnectOptions::builder_from_url`
@@ -63,7 +70,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
-- [36](https://github.com/bobozaur/sqlx-exasol/issues/36) Fix chunked result set streaming
+- [#36](https://github.com/bobozaur/sqlx-exasol/issues/36) Fix chunked result set streaming
 
 ## [0.8.6] - 2025-06-03
 
