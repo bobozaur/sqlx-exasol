@@ -1,6 +1,9 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 //! **EXASOL** database driver.
 
+#[cfg(test)]
+extern crate sqlx_a_orig as sqlx;
+
 #[cfg(feature = "native-tls")]
 use native_tls as _;
 #[cfg(feature = "tls")]

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+### Added
+
+- [#57](https://github.com/bobozaur/sqlx-exasol/pull/57): Complete proc-macro override
+  - Removes conflicts with `sqlx` in the same crate when using proc-macros
+
 ### Fixed
 
 - [#50](https://github.com/bobozaur/sqlx-exasol/issues/50): Fix ETL `IMPORT` deadlocks

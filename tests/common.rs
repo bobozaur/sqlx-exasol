@@ -586,21 +586,21 @@ async fn test_fetch_many_works(mut con: PoolConnection<Exasol>) -> Result<(), Bo
 
 #[sqlx_exasol::test]
 async fn it_works_on_large_datasets(mut con: PoolConnection<Exasol>) -> Result<(), BoxDynError> {
-    sqlx::query("CREATE TABLE large_dataset (col1 VARCHAR(20), col2 VARCHAR(20));")
+    sqlx_exasol::query("CREATE TABLE large_dataset (col1 VARCHAR(20), col2 VARCHAR(20));")
         .execute(&mut *con)
         .await?;
 
     let data = vec!["test"; 100_000];
 
     for _ in 0..50 {
-        sqlx::query("INSERT INTO large_dataset VALUES(?, ?);")
+        sqlx_exasol::query("INSERT INTO large_dataset VALUES(?, ?);")
             .bind(&data)
             .bind(&data)
             .execute(&mut *con)
             .await?;
     }
 
-    let mut rows = sqlx::query("SELECT col1, col2 FROM large_dataset").fetch(&mut *con);
+    let mut rows = sqlx_exasol::query("SELECT col1, col2 FROM large_dataset").fetch(&mut *con);
 
     while let Some(row_result) = rows.try_next().await? {
         let row = row_result;
@@ -618,7 +618,7 @@ async fn it_selects_schema(
     let pool = pool_opts.connect_with(exa_opts).await?;
     let mut con = pool.acquire().await?;
 
-    let schema: Option<String> = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+    let schema: Option<String> = sqlx_exasol::query_scalar("SELECT CURRENT_SCHEMA")
         .fetch_one(&mut *con)
         .await?;
 
@@ -641,7 +641,7 @@ async fn it_switches_schema(
     ))
     .await?;
 
-    let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+    let new_schema: String = sqlx_exasol::query_scalar("SELECT CURRENT_SCHEMA")
         .fetch_one(&mut *con)
         .await?;
 
@@ -663,7 +663,7 @@ async fn it_switches_schema_from_attr(
     let pool = pool_opts.connect_with(exa_opts).await?;
     let mut con = pool.acquire().await?;
 
-    let orig_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+    let orig_schema: String = sqlx_exasol::query_scalar("SELECT CURRENT_SCHEMA")
         .fetch_one(&mut *con)
         .await?;
 
@@ -677,7 +677,7 @@ async fn it_switches_schema_from_attr(
     con.attributes_mut().set_current_schema(orig_schema.clone());
     con.flush_attributes().await?;
 
-    let new_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+    let new_schema: String = sqlx_exasol::query_scalar("SELECT CURRENT_SCHEMA")
         .fetch_one(&mut *con)
         .await?;
 
@@ -694,7 +694,7 @@ async fn it_closes_schema_and_returns_none(
     let pool = pool_opts.connect_with(exa_opts).await?;
     let mut con = pool.acquire().await?;
 
-    let orig_schema: String = sqlx::query_scalar("SELECT CURRENT_SCHEMA")
+    let orig_schema: String = sqlx_exasol::query_scalar("SELECT CURRENT_SCHEMA")
         .fetch_one(&mut *con)
         .await?;
 
