@@ -27,7 +27,7 @@ time = ["sqlx-core/time", "dep:time"]
 uuid = ["sqlx-core/uuid", "dep:uuid"]
 
 # TLS features
-tls = ["dep:rcgen"]
+tls = ["dep:rcgen", "dep:sha2"]
 native-tls = [
   "dep:native-tls",
   "sqlx-core/_tls-native-tls",
@@ -40,7 +40,7 @@ rustls = ["dep:rustls", "sqlx-core/_tls-rustls", "tls"]
 
 # Driver specific features
 compression = ["dep:async-compression"]
-etl = ["dep:flume", "dep:futures-channel", "dep:hyper", "dep:sha2"]
+etl = ["dep:flume", "dep:futures-channel", "dep:hyper"]
 
 
 [dependencies]
