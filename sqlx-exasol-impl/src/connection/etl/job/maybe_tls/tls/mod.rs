@@ -6,12 +6,13 @@ mod sync_socket;
 
 use std::io;
 
-use hex::ToHex;
+use base64::{engine::general_purpose::STANDARD as STD_BASE64_ENGINE, Engine};
 use rcgen::{CertificateParams, KeyPair};
 use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
     RsaPrivateKey,
 };
+use sha2::{Digest, Sha256};
 use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
@@ -40,7 +41,10 @@ impl WithTlsSocketMaker {
             .map_err(SqlxError::Tls)?;
 
         let key_pair = KeyPair::from_pem(&key).map_err(ToSqlxError::to_sqlx_err)?;
-        let public_key = with_pub_key.then(|| key_pair.public_key_der().encode_hex_upper());
+        let public_key = with_pub_key
+            .then(|| key_pair.public_key_der())
+            .map(Sha256::digest)
+            .map(|data| STD_BASE64_ENGINE.encode(data));
         let cert = CertificateParams::default()
             .self_signed(&key_pair)
             .map_err(ToSqlxError::to_sqlx_err)?;
