@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
-- [#50](https://github.com/bobozaur/sqlx-exasol/issues/50) Fix ETL `IMPORT` deadlocks
+- [#50](https://github.com/bobozaur/sqlx-exasol/issues/50): Fix ETL `IMPORT` deadlocks
+- [#53](https://github.com/bobozaur/sqlx-exasol/issues/53): Allow specifying schema for `IMPORT` jobs
 
 ## [0.9.0] - 2026-01-20
 

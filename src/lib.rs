@@ -188,7 +188,9 @@
 //!     .await?;
 //!
 //! // Build IMPORT job
-//! let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut con2).await?;
+//! let (import_fut, writers) = ImportBuilder::new("TEST_ETL", None)
+//!     .build(&mut con2)
+//!     .await?;
 //!
 //! // Use readers and writers in some futures
 //! let transport_futs = std::iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
