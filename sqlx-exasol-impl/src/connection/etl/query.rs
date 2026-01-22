@@ -57,22 +57,18 @@ impl Future for EtlQuery<'_> {
     type Output = SqlxResult<ExaQueryResult>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // The query future is what we're ultimately interested in.
-        // If it's done, we can return its result.
-        if !self.query.is_terminated() && self.query.poll_unpin(cx).is_ready() {
-            if let Some(query_res) = Pin::new(&mut self.query).take_output() {
-                return Poll::Ready(query_res);
-            }
+        if !self.bootstrap.is_terminated() {
+            let _ = self.bootstrap.poll_unpin(cx);
         }
 
-        // The bootstrap futures run in the background to set up the servers.
-        // We need to poll them to make progress and check for errors.
-        if !self.bootstrap.is_terminated() && self.bootstrap.poll_unpin(cx).is_ready() {
-            // If the bootstrap futures resulted in an error, propagate it.
-            Pin::new(&mut self.bootstrap).take_output().transpose()?;
+        if !self.query.is_terminated() {
+            let _ = self.query.poll_unpin(cx);
         }
 
-        Poll::Pending
+        // Give priority to query errors
+        let query_res = Pin::new(&mut self.query).take_output().transpose()?;
+        Pin::new(&mut self.bootstrap).take_output().transpose()?;
+        query_res.map(Ok).map_or(Poll::Pending, Poll::Ready)
     }
 }
 
