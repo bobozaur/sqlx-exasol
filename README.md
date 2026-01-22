@@ -25,20 +25,9 @@ it can do all the drivers shipped with `sqlx` do, with some caveats:
 
 ## Compile-time query checks
 
-The driver now supports compile-time query validation.
-
-However, full functionality is implemented through path overrides and due to `sqlx` macros
-implementation details you will currently need to either add `extern crate sqlx_exasol as sqlx;`
-to the root of your crate or rename the crate import to `sqlx` in `Cargo.toml`:
-
-```toml
-sqlx = { version = "*", package = "sqlx-exasol" }
-```
-
-This implies that the compile time query macros from both `sqlx-exasol` and `sqlx`
-cannot co-exist within the same crate without collisions or unexpected surprises.
-
-See <https://github.com/launchbadge/sqlx/pull/3944> for more details.
+The driver now supports compile-time query validation and can be used alongside
+`sqlx` within the same crate. Note however that derive proc-macros from `sqlx` are
+database agnostic and thus `sqlx-exasol` just re-exports them as-is.
 
 ## CLI utility
 

@@ -42,10 +42,10 @@ features = [
 [features]
 default = ["any", "macros", "migrate", "json"]
 
-derive = ["sqlx/derive", "sqlx-exasol-macros?/derive"]
-macros = ["derive", "sqlx/macros", "sqlx-exasol-macros/macros"]
+derive = ["sqlx-a-orig/derive", "sqlx-exasol-macros?/derive"]
+macros = ["derive", "sqlx-a-orig/macros", "sqlx-exasol-macros/macros"]
 migrate = [
-  "sqlx/migrate",
+  "sqlx-a-orig/migrate",
   "sqlx-exasol-impl/migrate",
   "sqlx-exasol-macros?/migrate",
 ]
@@ -53,47 +53,47 @@ migrate = [
 sqlx-toml = ["sqlx-exasol-impl/sqlx-toml", "sqlx-exasol-macros?/sqlx-toml"]
 
 # Base runtime features without TLS
-runtime-async-std = ["sqlx/runtime-async-std"]
-runtime-tokio = ["sqlx/runtime-tokio"]
+runtime-async-std = ["sqlx-a-orig/runtime-async-std"]
+runtime-tokio = ["sqlx-a-orig/runtime-tokio"]
 
 # TLS features
-tls-native-tls = ["sqlx/tls-native-tls", "sqlx-exasol-impl/native-tls"]
+tls-native-tls = ["sqlx-a-orig/tls-native-tls", "sqlx-exasol-impl/native-tls"]
 tls-rustls-aws-lc-rs = [
-  "sqlx/tls-rustls-aws-lc-rs",
+  "sqlx-a-orig/tls-rustls-aws-lc-rs",
   "sqlx-exasol-impl/rustls-aws-lc-rs",
 ]
 tls-rustls-ring-webpki = [
-  "sqlx/tls-rustls-ring-webpki",
+  "sqlx-a-orig/tls-rustls-ring-webpki",
   "sqlx-exasol-impl/rustls-ring",
 ]
 tls-rustls-ring-native-roots = [
-  "sqlx/tls-rustls-ring-native-roots",
+  "sqlx-a-orig/tls-rustls-ring-native-roots",
   "sqlx-exasol-impl/rustls-ring",
 ]
 
 # Database
-any = ["sqlx/any", "sqlx-exasol-impl/any"]
+any = ["sqlx-a-orig/any", "sqlx-exasol-impl/any"]
 
 # Types
 bigdecimal = [
-  "sqlx/bigdecimal",
+  "sqlx-a-orig/bigdecimal",
   "sqlx-exasol-impl/bigdecimal",
   "sqlx-exasol-macros?/bigdecimal",
 ]
 chrono = [
-  "sqlx/chrono",
+  "sqlx-a-orig/chrono",
   "sqlx-exasol-impl/chrono",
   "sqlx-exasol-macros?/chrono",
 ]
 geo-types = ["sqlx-exasol-impl/geo-types", "sqlx-exasol-macros?/geo-types"]
-json = ["sqlx/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
+json = ["sqlx-a-orig/json", "sqlx-exasol-impl/json", "sqlx-exasol-macros?/json"]
 rust_decimal = [
-  "sqlx/rust_decimal",
+  "sqlx-a-orig/rust_decimal",
   "sqlx-exasol-impl/rust_decimal",
   "sqlx-exasol-macros?/rust_decimal",
 ]
-time = ["sqlx/time", "sqlx-exasol-impl/time", "sqlx-exasol-macros?/time"]
-uuid = ["sqlx/uuid", "sqlx-exasol-impl/uuid", "sqlx-exasol-macros?/uuid"]
+time = ["sqlx-a-orig/time", "sqlx-exasol-impl/time", "sqlx-exasol-macros?/time"]
+uuid = ["sqlx-a-orig/uuid", "sqlx-exasol-impl/uuid", "sqlx-exasol-macros?/uuid"]
 
 # Driver specific features
 compression = ["sqlx-exasol-impl/compression"]
@@ -140,6 +140,9 @@ hyper = { version = "1", default-features = false, features = [
 ] }
 native-tls = { version = "0.2", default-features = false }
 paste = { version = "1", default-features = false }
+proc-macro2 = { version = "1", default-features = false, features = [
+  "proc-macro",
+] }
 quote = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = [
   "std",
@@ -162,16 +165,21 @@ serde_json = { version = "1", default-features = false, features = [
   "raw_value",
 ] }
 sha2 = { version = "0.10", default-features = false, features = ["std"] }
-sqlx = { version = "0.9.0-alpha.1", default-features = false }
 sqlx-cli = { version = "0.9.0-alpha.1", default-features = false }
 sqlx-core = { version = "0.9.0-alpha.1", default-features = false, features = [
   "offline",
   "migrate",
 ] }
 sqlx-macros-core = { version = "0.9.0-alpha.1", default-features = false }
+# Purposely named like this to prevent formatting reordering.
+# We also get the benefit of ensuring that our overrides work correctly since `sqlx` is not available
+sqlx-a-orig = { version = "0.9.0-alpha.1", default-features = false, package = "sqlx" }
 syn = { version = "2", default-features = false, features = [
+  "full",
   "parsing",
+  "printing",
   "proc-macro",
+  "visit-mut",
 ] }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false, features = [
@@ -195,7 +203,7 @@ wkt = { version = "0.14", default-features = false, features = [
 [dependencies]
 sqlx-exasol-macros = { workspace = true, optional = true }
 sqlx-exasol-impl = { workspace = true }
-sqlx = { workspace = true }
+sqlx-a-orig = { workspace = true }
 
 [dev-dependencies]
 dotenvy = { workspace = true }
@@ -225,4 +233,3 @@ unused_extern_crates = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
-# Enable parsing of `sqlx.toml` for configuring macros and migrations.
