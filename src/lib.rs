@@ -1,13 +1,11 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![doc = include_str!("lib.md")]
 
+/// Ain't nobody got time to track what needs to be re-exported from `sqlx` so I'll just do a
+/// glob re-export and override some things. Ideally a single module containing all the
+/// re-exports that an external driver should have should be made in `sqlx-core`.
 pub use sqlx_a_orig::*;
 pub use sqlx_exasol_impl::*;
-
-/// Prevent re-exporting other drivers if used alongside `sqlx`.
-mod postgres {}
-mod sqlite {}
-mod mysql {}
 
 pub mod any {
     pub use sqlx_a_orig::any::*;
