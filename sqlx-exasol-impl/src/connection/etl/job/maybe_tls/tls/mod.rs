@@ -4,6 +4,8 @@ mod native_tls;
 mod rustls;
 mod sync_socket;
 
+use std::io;
+
 use rcgen::{CertificateParams, KeyPair};
 use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
@@ -12,9 +14,9 @@ use rsa::{
 use sqlx_core::net::{Socket, WithSocket};
 
 use crate::{
-    connection::websocket::socket::WithExaSocket,
+    connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::job::{SocketHandshake, WithSocketMaker},
+    etl::job::WithSocketMaker,
     SqlxError, SqlxResult,
 };
 
@@ -73,7 +75,7 @@ pub enum WithTlsSocket {
 }
 
 impl WithSocket for WithTlsSocket {
-    type Output = SocketHandshake;
+    type Output = io::Result<ExaSocket>;
 
     async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         match self {

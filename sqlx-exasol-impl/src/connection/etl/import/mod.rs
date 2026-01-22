@@ -11,15 +11,17 @@ use std::{
 };
 
 use compression::MaybeCompressedWriter;
-use flume::{Receiver, Sender};
+use futures_channel::mpsc::{Receiver, Sender};
 use futures_io::AsyncWrite;
 pub use options::ImportBuilder;
 use sqlx_core::bytes::BytesMut;
 
+use crate::etl::{import::service::ImportService, job::OneShotServer};
+
 type ImportDataSender = Sender<BytesMut>;
 type ImportDataReceiver = Receiver<BytesMut>;
-type ImportChannelSender = Sender<ImportDataSender>;
-type ImportChannelReceiver = Receiver<ImportDataSender>;
+type ImportChannelSender = flume::Sender<ImportDataSender>;
+type ImportPartsReceiver = flume::Receiver<(ImportDataSender, OneShotServer<ImportService>)>;
 
 /// An ETL IMPORT worker.
 ///
@@ -70,7 +72,7 @@ type ImportChannelReceiver = Receiver<ImportDataSender>;
 pub struct ExaImport(MaybeCompressedWriter);
 
 impl ExaImport {
-    fn new(rx: ImportChannelReceiver, buffer_size: usize, with_compression: bool) -> Self {
+    fn new(rx: ImportPartsReceiver, buffer_size: usize, with_compression: bool) -> Self {
         Self(MaybeCompressedWriter::new(
             rx,
             buffer_size,

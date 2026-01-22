@@ -5,7 +5,6 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use futures_util::FutureExt;
 use rcgen::{Certificate, KeyPair};
 use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 use sqlx_core::{
@@ -17,7 +16,7 @@ use super::sync_socket::SyncSocket;
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::job::{SocketHandshake, WithSocketMaker},
+    etl::job::WithSocketMaker,
     SqlxError, SqlxResult,
 };
 
@@ -63,8 +62,12 @@ impl WithRustlsSocket {
     fn new(inner: WithExaSocket, config: Arc<ServerConfig>) -> Self {
         Self { inner, config }
     }
+}
 
-    async fn wrap_socket<S: Socket>(self, socket: S) -> io::Result<ExaSocket> {
+impl WithSocket for WithRustlsSocket {
+    type Output = io::Result<ExaSocket>;
+
+    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let state = ServerConnection::new(self.config)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
@@ -80,14 +83,6 @@ impl WithRustlsSocket {
 
         let socket = self.inner.with_socket(socket).await;
         Ok(socket)
-    }
-}
-
-impl WithSocket for WithRustlsSocket {
-    type Output = SocketHandshake;
-
-    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        self.wrap_socket(socket).boxed()
     }
 }
 

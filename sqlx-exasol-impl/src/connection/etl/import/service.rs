@@ -5,17 +5,16 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use flume::r#async::{RecvStream, SendFut};
+use flume::r#async::SendFut;
 use futures_util::{FutureExt, Stream, StreamExt};
 use hyper::{
     body::{Body, Bytes, Frame, Incoming},
     service::Service,
     Request, Response, StatusCode,
 };
-use sqlx_core::bytes::BytesMut;
 
 use crate::etl::{
-    error::{map_http_error, map_hyper_err, send_channel_error},
+    error::{map_http_error, map_hyper_err, server_bootstrap_error},
     import::{ImportChannelSender, ImportDataReceiver, ImportDataSender},
 };
 
@@ -45,7 +44,7 @@ impl Service<Request<Incoming>> for ImportService {
     ///
     /// We can then use the receiver to pipe data through.
     fn call(&self, req: Request<Incoming>) -> Self::Future {
-        let (tx, rx) = flume::bounded(0);
+        let (tx, rx) = futures_channel::mpsc::channel(0);
         let send_fut = self.0.clone().into_send_async(tx);
         ImportFuture::new(req, ImportStream::SendChan(send_fut, Some(rx)))
     }
@@ -103,7 +102,7 @@ pub enum ImportStream {
         SendFut<'static, ImportDataSender>,
         Option<ImportDataReceiver>,
     ),
-    RecvData(RecvStream<'static, BytesMut>),
+    RecvData(ImportDataReceiver),
 }
 
 impl Stream for ImportStream {
@@ -113,8 +112,8 @@ impl Stream for ImportStream {
         loop {
             let state = match self.as_mut().get_mut() {
                 ImportStream::SendChan(send_fut, receiver) => {
-                    ready!(send_fut.poll_unpin(cx)).map_err(send_channel_error)?;
-                    ImportStream::RecvData(receiver.take().unwrap().into_stream())
+                    ready!(send_fut.poll_unpin(cx)).map_err(server_bootstrap_error)?;
+                    ImportStream::RecvData(receiver.take().unwrap())
                 }
                 ImportStream::RecvData(receiver) => {
                     let out = ready!(receiver.poll_next_unpin(cx))

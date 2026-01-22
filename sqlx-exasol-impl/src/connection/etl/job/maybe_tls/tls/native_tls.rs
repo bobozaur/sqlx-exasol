@@ -5,7 +5,6 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use futures_util::FutureExt;
 use native_tls::{HandshakeError, Identity, TlsAcceptor, TlsStream};
 use rcgen::{Certificate, KeyPair};
 use sqlx_core::{
@@ -16,7 +15,7 @@ use sqlx_core::{
 use crate::{
     connection::websocket::socket::{ExaSocket, WithExaSocket},
     error::ToSqlxError,
-    etl::job::{maybe_tls::tls::sync_socket::SyncSocket, SocketHandshake, WithSocketMaker},
+    etl::job::{maybe_tls::tls::sync_socket::SyncSocket, WithSocketMaker},
     SqlxError, SqlxResult,
 };
 
@@ -57,8 +56,12 @@ impl WithNativeTlsSocket {
     fn new(inner: WithExaSocket, acceptor: Arc<TlsAcceptor>) -> Self {
         Self { inner, acceptor }
     }
+}
 
-    async fn wrap_socket<S: Socket>(self, socket: S) -> io::Result<ExaSocket> {
+impl WithSocket for WithNativeTlsSocket {
+    type Output = io::Result<ExaSocket>;
+
+    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
         let mut res = self.acceptor.accept(SyncSocket(socket));
 
         loop {
@@ -74,14 +77,6 @@ impl WithNativeTlsSocket {
                 }
             }
         }
-    }
-}
-
-impl WithSocket for WithNativeTlsSocket {
-    type Output = SocketHandshake;
-
-    async fn with_socket<S: Socket>(self, socket: S) -> Self::Output {
-        self.wrap_socket(socket).boxed()
     }
 }
 

@@ -4,14 +4,15 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use flume::r#async::{RecvFut, RecvStream};
+use flume::r#async::RecvFut;
 use futures_io::{AsyncBufRead, AsyncRead};
 use futures_util::{stream::IntoAsyncRead, FutureExt, Stream, StreamExt, TryStreamExt};
 use hyper::body::Bytes;
 
 use crate::etl::{
-    error::recv_channel_error,
-    export::{ExportChannelReceiver, ExportDataReceiver},
+    error::{map_hyper_err, worker_bootstrap_error},
+    export::{service::ExportService, ExportDataReceiver, ExportPartsReceiver},
+    job::OneShotServer,
 };
 
 /// The inner `AsyncRead` implementation for an `EXPORT` worker.
@@ -21,7 +22,7 @@ use crate::etl::{
 pub struct ExaReader(IntoAsyncRead<ReaderStream>);
 
 impl ExaReader {
-    pub fn new(rx: ExportChannelReceiver) -> Self {
+    pub fn new(rx: ExportPartsReceiver) -> Self {
         Self(ReaderStream::RecvStream(rx.into_recv_async()).into_async_read())
     }
 }
@@ -62,14 +63,20 @@ impl AsyncBufRead for ExaReader {
 
 /// A stream that receives data for an `EXPORT` worker.
 ///
-/// This enum represents the two states of the stream:
-/// 1. [`ReaderStream::RecvStream`]: The stream is waiting to receive the data channel from the
-///    [`super::service::ExportService`].
-/// 2. [`ReaderStream::StreamData`]: The data channel has been received, and the stream is now
-///    yielding data chunks.
+/// This enum represents the state machine of the export worker's data stream.
+///
+/// 1. [`ReaderStream::RecvStream`]: The initial state. The stream is waiting to receive the data
+///    channel and the HTTP connection from the server bootstrap process.
+///
+/// 2. [`ReaderStream::StreamData`]: The active data transfer state. The stream yields data chunks
+///    received from the HTTP service. In this state, it also polls the connection future. Polling
+///    will continue until the entire HTTP request is processed and the response is sent.
 pub enum ReaderStream {
-    RecvStream(RecvFut<'static, ExportDataReceiver>),
-    StreamData(RecvStream<'static, Bytes>),
+    RecvStream(RecvFut<'static, (ExportDataReceiver, OneShotServer<ExportService>)>),
+    StreamData {
+        stream: ExportDataReceiver,
+        conn: OneShotServer<ExportService>,
+    },
 }
 
 impl Stream for ReaderStream {
@@ -77,17 +84,31 @@ impl Stream for ReaderStream {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            match self.as_mut().get_mut() {
+            let state = match self.as_mut().get_mut() {
+                // Initial state: Wait to receive the data channel and HTTP connection.
                 ReaderStream::RecvStream(recv_fut) => {
-                    let stream = ready!(recv_fut.poll_unpin(cx))
-                        .map_err(recv_channel_error)?
-                        .into_stream();
-                    self.set(Self::StreamData(stream));
+                    let (stream, conn) =
+                        ready!(recv_fut.poll_unpin(cx)).map_err(worker_bootstrap_error)?;
+
+                    Self::StreamData { stream, conn }
                 }
-                ReaderStream::StreamData(stream) => {
-                    break Poll::Ready(ready!(stream.poll_next_unpin(cx)).map(Ok))
+                // Active state: Stream data chunks and poll the HTTP connection.
+                ReaderStream::StreamData { stream, conn } => {
+                    // Poll for the next data chunk.
+                    if let Poll::Ready(Some(data)) = stream.poll_next_unpin(cx) {
+                        return Poll::Ready(Some(Ok(data)));
+                    }
+
+                    // The request is either pending or depleted.
+                    // Poll the connection to continue processing the request or respond.
+                    ready!(conn.poll_unpin(cx)).map_err(map_hyper_err)?;
+
+                    // If we are here, we responded to Exasol and the connection completed.
+                    return Poll::Ready(None);
                 }
-            }
+            };
+
+            self.set(state);
         }
     }
 }

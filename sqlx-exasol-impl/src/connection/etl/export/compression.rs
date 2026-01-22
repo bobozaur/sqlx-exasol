@@ -10,7 +10,7 @@ use async_compression::futures::bufread::GzipDecoder;
 use futures_io::AsyncRead;
 
 use super::reader::ExaReader;
-use crate::etl::export::ExportChannelReceiver;
+use crate::etl::export::ExportPartsReceiver;
 
 /// An [`AsyncRead`] implementation for an `EXPORT` worker.
 ///
@@ -25,7 +25,7 @@ pub enum MaybeCompressedReader {
 
 impl MaybeCompressedReader {
     #[allow(unused_variables, reason = "conditionally compiled")]
-    pub fn new(rx: ExportChannelReceiver, with_compression: bool) -> Self {
+    pub fn new(rx: ExportPartsReceiver, with_compression: bool) -> Self {
         let reader = ExaReader::new(rx);
 
         #[cfg(feature = "compression")]
