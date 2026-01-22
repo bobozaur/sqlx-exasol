@@ -1,3 +1,4 @@
+use semver::Version;
 use serde::Deserialize;
 
 use crate::options::ProtocolVersion;
@@ -8,7 +9,7 @@ use crate::options::ProtocolVersion;
 pub struct SessionInfo {
     protocol_version: ProtocolVersion,
     session_id: u64,
-    release_version: String,
+    release_version: Version,
     database_name: String,
     product_name: String,
     max_data_message_size: u64,
@@ -31,7 +32,7 @@ impl SessionInfo {
     }
 
     #[must_use]
-    pub fn release_version(&self) -> &str {
+    pub fn release_version(&self) -> &Version {
         &self.release_version
     }
 

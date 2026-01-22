@@ -152,11 +152,16 @@ rustls = { version = "0.23", default-features = false, features = [
   "std",
   "tls12",
 ] }
+semver = { version = "1", default-features = false, features = [
+  "serde",
+  "std",
+] }
 serde = { version = "1", default-features = false, features = ["derive", "rc"] }
 serde_json = { version = "1", default-features = false, features = [
   "std",
   "raw_value",
 ] }
+sha2 = { version = "0.10", default-features = false, features = ["std"] }
 sqlx = { version = "0.9.0-alpha.1", default-features = false }
 sqlx-cli = { version = "0.9.0-alpha.1", default-features = false }
 sqlx-core = { version = "0.9.0-alpha.1", default-features = false, features = [

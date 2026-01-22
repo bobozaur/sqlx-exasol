@@ -27,7 +27,7 @@ time = ["sqlx-core/time", "dep:time"]
 uuid = ["sqlx-core/uuid", "dep:uuid"]
 
 # TLS features
-tls = ["dep:rcgen"]
+tls = ["dep:rcgen", "dep:sha2"]
 native-tls = [
   "dep:native-tls",
   "sqlx-core/_tls-native-tls",
@@ -52,6 +52,7 @@ futures-util = { workspace = true }
 futures-core = { workspace = true }
 rand = { workspace = true }
 rsa = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx-core = { workspace = true }
@@ -73,6 +74,7 @@ native-tls = { workspace = true, optional = true }
 rcgen = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rust_decimal = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 sqlx-macros-core = { workspace = true, optional = true }
 time = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }

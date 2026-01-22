@@ -69,14 +69,16 @@ runs:
 
         sudo openssl req -x509 -new -nodes -key ~/sqlx1/etc/ssl/ssl.ca.key -sha256 -days 3650 -out ~/sqlx1/etc/ssl/ssl.ca -subj "/CN=exacluster.local"
         sudo openssl req -new -key ~/sqlx1/etc/ssl/ssl.key -out ~/ssl.csr -subj "/CN=exacluster.local"
-        sudo openssl x509 -req -in ~/ssl.csr -CA ~/sqlx1/etc/ssl/ssl.ca -CAkey ~/sqlx1/etc/ssl/ssl.ca.key -CAcreateserial -out ~/sqlx1/etc/ssl/ssl.crt -days 365 -sha256 -extfile ~/v3.ext
+        sudo openssl x509 -req -in ~/ssl.csr -CA ~/sqlx1/etc/ssl/ssl.ca -CAkey ~/sqlx1/etc/ssl/ssl.ca.key -CAcreateserial \
+          -out ~/sqlx1/etc/ssl/ssl.crt -days 365 -sha256 -extfile ~/v3.ext
 
       shell: bash
 
     - name: Start Exasol cluster
       run: |
         for (( i=1; i<=${{ inputs.num-nodes }}; i++ )); do
-          docker run --name sqlx$i --detach --network=sqlx --ip 10.10.10.1$i --privileged --stop-timeout 120 -v ~/sqlx$i:/exa exasol/docker-db:${{ inputs.exasol-version }} init-sc --node-id 1$i
+          docker run --name sqlx$i --detach --network=sqlx --ip 10.10.10.1$i --privileged --stop-timeout 120 \
+            -v ~/sqlx$i:/exa exasol/docker-db:${{ inputs.exasol-version }} init-sc --node-id 1$i
         done
       shell: bash
 
@@ -88,7 +90,11 @@ runs:
         FINGERPRINT=`sudo openssl x509 -in ~/sqlx1/etc/ssl/ssl.crt -outform DER | sudo openssl dgst -sha256 | awk '{print $2}'`
 
         while [[ $RC -ne 0 ]]; do
-          docker exec -e FINGERPRINT="$FINGERPRINT" sqlx1 /bin/bash -c '`find /usr/opt -name exaplus | head -1` -c localhost/$FINGERPRINT:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"' &>/dev/null
+          docker exec -e FINGERPRINT="$FINGERPRINT" sqlx1 /bin/bash -c '
+            $(which exaplus || find /usr/opt -name exaplus | head -1) \
+              -c localhost/$FINGERPRINT:8563 -u sys -p exasol -sql "SELECT * FROM DUAL;"
+          ' &>/dev/null
+          
           RC=$?
           sleep 5
         done

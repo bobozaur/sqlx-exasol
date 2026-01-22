@@ -19,14 +19,17 @@ pub enum WithMaybeTlsSocketMaker {
 }
 
 impl WithMaybeTlsSocketMaker {
-    #[allow(unused_variables, reason = "conditionally compiled")]
-    pub fn new(with_tls: bool) -> SqlxResult<Self> {
+    pub fn new(
+        #[allow(unused_variables, reason = "conditionally compiled")] with_tls: bool,
+        #[allow(unused_variables, reason = "conditionally compiled")] with_pub_key: bool,
+    ) -> SqlxResult<(Self, Option<String>)> {
         #[cfg(feature = "tls")]
         if with_tls {
-            return tls::WithTlsSocketMaker::new().map(Self::Tls);
+            let (wsm, public_key) = tls::WithTlsSocketMaker::new(with_pub_key)?;
+            return Ok((Self::Tls(wsm), public_key));
         }
 
-        Ok(Self::NonTls)
+        Ok((Self::NonTls, None))
     }
 }
 

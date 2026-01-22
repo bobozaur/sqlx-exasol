@@ -155,7 +155,13 @@ impl EtlJob for ExportBuilder<'_> {
         ExportService::new(chan_tx)
     }
 
-    fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String {
+    fn query(
+        &self,
+        addrs: Vec<SocketAddrV4>,
+        with_tls: bool,
+        with_compression: bool,
+        public_key: Option<String>,
+    ) -> String {
         let mut query = String::new();
 
         if let Some(comment) = self.comment {
@@ -182,7 +188,7 @@ impl EtlJob for ExportBuilder<'_> {
         query.push(' ');
 
         query.push_str(" INTO CSV ");
-        Self::append_files(&mut query, addrs, with_tls, with_compression);
+        Self::append_files(&mut query, addrs, with_tls, with_compression, public_key);
 
         if let Some(enc) = self.encoding {
             Self::push_key_value(&mut query, "ENCODING", enc);
