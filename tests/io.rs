@@ -147,7 +147,7 @@ async fn export_import(
     #[allow(unused_mut, reason = "conditionally compiled")]
     let mut export_builder = ExportBuilder::new_from_table("TLS_COMP_COMBO", None);
     #[allow(unused_mut, reason = "conditionally compiled")]
-    let mut import_builder = ImportBuilder::new("TLS_COMP_COMBO");
+    let mut import_builder = ImportBuilder::new("TLS_COMP_COMBO", None);
 
     #[cfg(feature = "compression")]
     if let Some(compression) = etl_compression {

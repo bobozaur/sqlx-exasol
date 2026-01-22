@@ -21,21 +21,21 @@ test_etl_single_threaded!(
     "simple",
     "TEST_ETL",
     ExportBuilder::new_from_table("TEST_ETL", None),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
 );
 
 test_etl_multi_threaded!(
     "simple",
     "TEST_ETL",
     ExportBuilder::new_from_table("TEST_ETL", None),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
 );
 
 test_etl_single_threaded!(
     "query_export",
     "TEST_ETL",
     ExportBuilder::new_from_query("SELECT * FROM TEST_ETL"),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
 );
 
 test_etl_single_threaded!(
@@ -43,7 +43,7 @@ test_etl_single_threaded!(
     0,
     "TEST_ETL",
     ExportBuilder::new_from_table("TEST_ETL", None),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
 );
 
 test_etl_multi_threaded!(
@@ -51,7 +51,7 @@ test_etl_multi_threaded!(
     0,
     "TEST_ETL",
     ExportBuilder::new_from_table("TEST_ETL", None),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
 );
 
 test_etl_single_threaded!(
@@ -66,7 +66,7 @@ test_etl_single_threaded!(
         .column_separator("|")
         .column_delimiter("\\\\")
         .with_column_names(true),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
         .skip(1)
         .buffer_size(20000)
         .columns(Some(&["col", "num", "empty"]))
@@ -87,8 +87,61 @@ test_etl!(
     "TEST_ETL",
     |(r, w)| pipe_flush_writers(r, w),
     ExportBuilder::new_from_table("TEST_ETL", None),
-    ImportBuilder::new("TEST_ETL")
+    ImportBuilder::new("TEST_ETL", None)
 );
+
+#[ignore]
+#[sqlx_exasol::test]
+async fn test_etl_with_schema(
+    pool_opts: PoolOptions<Exasol>,
+    exa_opts: ExaConnectOptions,
+) -> Result<(), BoxDynError> {
+    {
+        let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
+        let mut conn1 = pool.acquire().await?;
+        let mut conn2 = pool.acquire().await?;
+
+        sqlx_exasol::query("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
+            .execute(&mut *conn1)
+            .await?;
+
+        sqlx_exasol::query("INSERT INTO TEST_ETL VALUES (?)")
+            .bind(vec!["dummy"; NUM_ROWS])
+            .execute(&mut *conn1)
+            .await?;
+
+        let schema = conn1.attributes().current_schema().unwrap().to_owned();
+
+        let (export_fut, readers) = (ExportBuilder::new_from_table("TEST_ETL", Some(&schema)))
+            .num_readers(0)
+            .build(&mut conn1)
+            .await?;
+
+        let (import_fut, writers) = (ImportBuilder::new("TEST_ETL", Some(&schema)))
+            .num_writers(0)
+            .build(&mut conn2)
+            .await?;
+
+        let transport_futs = iter::zip(readers, writers).map(|(r, w)| pipe(r, w));
+        let (export_res, import_res, _) = try_join3(
+            export_fut.map_err(From::from),
+            import_fut.map_err(From::from),
+            try_join_all(transport_futs),
+        )
+        .await?;
+
+        assert_eq!(NUM_ROWS as u64, export_res.rows_affected(), "exported rows");
+        assert_eq!(NUM_ROWS as u64, import_res.rows_affected(), "imported rows");
+
+        let num_rows: i64 = sqlx_exasol::query_scalar("SELECT COUNT(*) FROM TEST_ETL")
+            .fetch_one(&mut *conn1)
+            .await?;
+
+        assert_eq!(num_rows, 2 * NUM_ROWS as i64, "export + import rows");
+
+        Ok(())
+    }
+}
 
 // ##########################################
 // ################ Failures ################
@@ -195,7 +248,7 @@ async fn test_etl_transaction_import_rollback(
 
     let mut tx = conn.begin().await?;
 
-    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut tx).await?;
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL", None).build(&mut tx).await?;
 
     let transport_futs = writers.into_iter().map(write_one_row);
 
@@ -227,7 +280,7 @@ async fn test_etl_transaction_import_commit(
 
     let mut tx = conn.begin().await?;
 
-    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut tx).await?;
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL", None).build(&mut tx).await?;
     let num_writers = writers.len();
 
     let transport_futs = writers.into_iter().map(write_one_row);
@@ -268,7 +321,9 @@ async fn test_etl_close_all_but_one_writers(
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut conn).await?;
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL", None)
+        .build(&mut conn)
+        .await?;
     let winner = rand::random::<usize>() % writers.len();
 
     let transport_futs = writers
@@ -345,7 +400,9 @@ async fn test_etl_drop_writer_without_deadlock(
     conn.execute("CREATE TABLE TEST_ETL ( col VARCHAR(200) );")
         .await?;
 
-    let (import_fut, writers) = ImportBuilder::new("TEST_ETL").build(&mut conn).await?;
+    let (import_fut, writers) = ImportBuilder::new("TEST_ETL", None)
+        .build(&mut conn)
+        .await?;
 
     let transport_futs = writers
         .into_iter()

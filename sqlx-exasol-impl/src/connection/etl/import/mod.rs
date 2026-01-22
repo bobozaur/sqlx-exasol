@@ -51,7 +51,9 @@ type ImportPartsReceiver = flume::Receiver<(ImportDataSender, OneShotServer<Impo
 /// let mut con = pool.acquire().await?;
 /// let mut tx = con.begin().await?;
 ///
-/// let (query_fut, writers) = ImportBuilder::new("SOME_TABLE").build(&mut *tx).await?;
+/// let (query_fut, writers) = ImportBuilder::new("SOME_TABLE", None)
+///     .build(&mut *tx)
+///     .await?;
 ///
 /// // concurrently use the writers and await the query future
 ///
