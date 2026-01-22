@@ -29,7 +29,7 @@ async fn it_works_with_io_combo_disabled(
 
 #[ignore]
 #[sqlx_exasol::test]
-async fn it_works_with_io_combo_preferred(
+async fn it_works_with_io_combo_tls_preferred(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {
@@ -54,7 +54,7 @@ async fn it_works_with_io_combo_preferred(
 #[ignore]
 #[allow(unreachable_code, reason = "conditionally compiled")]
 #[sqlx_exasol::test]
-async fn it_works_with_io_combo_required(
+async fn it_works_with_io_combo_tls_required(
     pool_opts: PoolOptions<Exasol>,
     exa_opts: ExaConnectOptions,
 ) -> Result<(), BoxDynError> {

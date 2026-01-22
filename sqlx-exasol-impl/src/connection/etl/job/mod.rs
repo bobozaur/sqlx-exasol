@@ -2,6 +2,7 @@ pub mod maybe_tls;
 mod socket_addr;
 
 use std::{
+    fmt::Write,
     future::Future,
     io,
     net::{IpAddr, SocketAddr, SocketAddrV4},
@@ -10,6 +11,7 @@ use std::{
 use flume::{Receiver, Sender};
 use futures_core::future::BoxFuture;
 use hyper::server::conn::http1::Connection;
+use semver::Version;
 use sqlx_core::{
     net::WithSocket,
     sql_str::{AssertSqlSafe, SqlSafeStr},
@@ -53,6 +55,10 @@ pub trait EtlJob: Sized + Send + Sync {
 
     const HTTP_SCHEME: &'static str = "http";
     const HTTPS_SCHEME: &'static str = "https";
+
+    /// Version since the public key from the self-signed certificate used in ETL jobs must be
+    /// included in the query. Note that this is also conditioned by whether TLS is used.
+    const PK_FP_VER: Version = Version::new(8, 32, 0);
 
     const JOB_TYPE: &'static str;
 
@@ -146,7 +152,13 @@ pub trait EtlJob: Sized + Send + Sync {
         }
     }
 
-    fn query(&self, addrs: Vec<SocketAddrV4>, with_tls: bool, with_compression: bool) -> String;
+    fn query(
+        &self,
+        addrs: Vec<SocketAddrV4>,
+        with_tls: bool,
+        with_compression: bool,
+        public_key: Option<String>,
+    ) -> String;
 
     /// Builds an ETL job, returning the query future and the ETL workers.
     ///
@@ -167,11 +179,13 @@ pub trait EtlJob: Sized + Send + Sync {
                 .await?
                 .into();
 
+            let with_pub_key = conn.session_info().release_version() >= &Self::PK_FP_VER;
             let with_tls = conn.attributes().encryption_enabled();
             let with_compression = self
                 .use_compression()
                 .unwrap_or(conn.attributes().compression_enabled());
-            let wsm = WithMaybeTlsSocketMaker::new(with_tls)?;
+
+            let (wsm, public_key) = WithMaybeTlsSocketMaker::new(with_tls, with_pub_key)?;
 
             // Get the internal Exasol node addresses and the workers
             let JobComponents {
@@ -181,7 +195,8 @@ pub trait EtlJob: Sized + Send + Sync {
             } = self.connect(wsm, ips, port, with_compression).await?;
 
             // Query execution driving future to be returned and awaited alongside the worker IO
-            let query = AssertSqlSafe(self.query(addrs, with_tls, with_compression)).into_sql_str();
+            let query = AssertSqlSafe(self.query(addrs, with_tls, with_compression, public_key))
+                .into_sql_str();
             let query_future = ExecuteEtl(ExaRoundtrip::new(Execute(query))).future(&mut conn.ws);
 
             Ok((EtlQuery::new(query_future, conn_futures), workers))
@@ -195,6 +210,7 @@ pub trait EtlJob: Sized + Send + Sync {
         addrs: Vec<SocketAddrV4>,
         with_tls: bool,
         with_compression: bool,
+        public_key: Option<String>,
     ) {
         let prefix = if with_tls {
             Self::HTTPS_SCHEME
@@ -208,16 +224,17 @@ pub trait EtlJob: Sized + Send + Sync {
             Self::CSV_FILE_EXT
         };
 
+        let public_key = public_key
+            .map(|pk| format!("PUBLIC KEY 'sha256//{pk}'"))
+            .unwrap_or_default();
+
         for (idx, addr) in addrs.into_iter().enumerate() {
-            let filename = format!(
-                "AT '{}://{}' FILE '{}_{:0>5}.{}'\n",
-                prefix,
-                addr,
-                Self::JOB_TYPE,
-                idx,
-                ext
-            );
-            query.push_str(&filename);
+            writeln!(
+                query,
+                "AT '{prefix}://{addr}' {public_key} FILE '{job_type}_{idx:0>5}.{ext}'",
+                job_type = Self::JOB_TYPE
+            )
+            .expect("writing to a String cannot fail");
         }
     }
 

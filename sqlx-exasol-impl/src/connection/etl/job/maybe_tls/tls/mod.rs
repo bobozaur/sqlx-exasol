@@ -6,6 +6,7 @@ mod sync_socket;
 
 use std::io;
 
+use hex::ToHex;
 use rcgen::{CertificateParams, KeyPair};
 use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
@@ -28,7 +29,7 @@ pub enum WithTlsSocketMaker {
 }
 
 impl WithTlsSocketMaker {
-    pub fn new() -> SqlxResult<WithTlsSocketMaker> {
+    pub fn new(with_pub_key: bool) -> SqlxResult<(WithTlsSocketMaker, Option<String>)> {
         let bits = 2048;
         let private_key =
             RsaPrivateKey::new(&mut rand::thread_rng(), bits).map_err(ToSqlxError::to_sqlx_err)?;
@@ -39,16 +40,19 @@ impl WithTlsSocketMaker {
             .map_err(SqlxError::Tls)?;
 
         let key_pair = KeyPair::from_pem(&key).map_err(ToSqlxError::to_sqlx_err)?;
+        let public_key = with_pub_key.then(|| key_pair.public_key_der().encode_hex_upper());
         let cert = CertificateParams::default()
             .self_signed(&key_pair)
             .map_err(ToSqlxError::to_sqlx_err)?;
 
         #[cfg(feature = "rustls")]
-        return rustls::WithRustlsSocketMaker::new(&cert, &key_pair).map(Self::Rustls);
+        return rustls::WithRustlsSocketMaker::new(&cert, &key_pair)
+            .map(|wsm| (Self::Rustls(wsm), public_key));
 
         #[cfg(feature = "native-tls")]
         #[allow(unreachable_code, reason = "conditionally compiled")]
-        return native_tls::WithNativeTlsSocketMaker::new(&cert, &key_pair).map(Self::NativeTls);
+        return native_tls::WithNativeTlsSocketMaker::new(&cert, &key_pair)
+            .map(|wsm| (Self::NativeTls(wsm), public_key));
     }
 }
 
