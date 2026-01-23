@@ -14,68 +14,46 @@ authors.workspace = true
 proc-macro = true
 
 [features]
-# SQLx features
-derive = ["dep:sqlx-macros-core", "sqlx-macros-core?/derive"]
-macros = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/macros",
-  "sqlx-exasol-impl?/macros",
-]
-migrate = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/migrate",
-  "sqlx-exasol-impl?/migrate",
-]
-sqlx-toml = ["dep:sqlx-macros-core", "sqlx-macros-core?/sqlx-toml"]
+default = []
 
-# Types
-bigdecimal = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/bigdecimal",
-  "sqlx-exasol-impl?/bigdecimal",
+# for conditional compilation
+_rt-async-global-executor = ["sqlx-macros-core/_rt-async-global-executor"]
+_rt-async-std = ["sqlx-macros-core/_rt-async-std"]
+_rt-smol = ["sqlx-macros-core/_rt-smol"]
+_rt-tokio = ["sqlx-macros-core/_rt-tokio"]
+
+_tls-native-tls = ["sqlx-macros-core/_tls-native-tls"]
+_tls-rustls-aws-lc-rs = ["sqlx-macros-core/_tls-rustls-aws-lc-rs"]
+_tls-rustls-ring-webpki = ["sqlx-macros-core/_tls-rustls-ring-webpki"]
+_tls-rustls-ring-native-roots = [
+  "sqlx-macros-core/_tls-rustls-ring-native-roots",
 ]
-chrono = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/chrono",
-  "sqlx-exasol-impl?/chrono",
-]
-geo-types = ["dep:sqlx-exasol-impl", "sqlx-exasol-impl?/geo-types"]
-json = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/json",
-  "sqlx-exasol-impl?/json",
-]
+
+# SQLx features
+derive = ["sqlx-macros-core/derive"]
+macros = ["sqlx-macros-core/macros", "sqlx-exasol-impl/macros"]
+migrate = ["sqlx-macros-core/migrate", "sqlx-exasol-impl/migrate"]
+
+sqlx-toml = ["sqlx-macros-core/sqlx-toml"]
+
+# type
+bigdecimal = ["sqlx-macros-core/bigdecimal", "sqlx-exasol-impl/bigdecimal"]
+chrono = ["sqlx-macros-core/chrono", "sqlx-exasol-impl/chrono"]
+geo-types = ["sqlx-exasol-impl/geo-types"]
+json = ["sqlx-macros-core/json", "sqlx-exasol-impl/json"]
 rust_decimal = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/rust_decimal",
-  "sqlx-exasol-impl?/rust_decimal",
+  "sqlx-macros-core/rust_decimal",
+  "sqlx-exasol-impl/rust_decimal",
 ]
-time = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/time",
-  "sqlx-exasol-impl?/time",
-]
-uuid = [
-  "dep:sqlx-macros-core",
-  "dep:sqlx-exasol-impl",
-  "sqlx-macros-core?/uuid",
-  "sqlx-exasol-impl?/uuid",
-]
+time = ["sqlx-macros-core/time", "sqlx-exasol-impl/time"]
+uuid = ["sqlx-macros-core/uuid", "sqlx-exasol-impl/uuid"]
 
 [dependencies]
 proc-macro2 = { workspace = true }
+sqlx-macros-core = { workspace = true }
+sqlx-exasol-impl = { workspace = true }
 syn = { workspace = true }
 quote = { workspace = true }
-
-sqlx-macros-core = { workspace = true, optional = true }
-sqlx-exasol-impl = { workspace = true, optional = true }
 
 [lints]
 workspace = true

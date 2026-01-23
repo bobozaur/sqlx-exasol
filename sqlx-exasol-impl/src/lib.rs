@@ -1,8 +1,9 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 //! **EXASOL** database driver.
 
+// Provide correct path resolution in proc-macros for testing
 #[cfg(test)]
-extern crate sqlx_a_orig as sqlx;
+extern crate sqlx_orig as sqlx;
 
 #[cfg(feature = "native-tls")]
 use native_tls as _;
@@ -65,6 +66,9 @@ pub type ExaPoolOptions = sqlx_core::pool::PoolOptions<Exasol>;
 /// An alias for [`Executor<'_, Database = Exasol>`][Executor].
 pub trait ExaExecutor<'c>: Executor<'c, Database = Exasol> {}
 impl<'c, T: Executor<'c, Database = Exasol>> ExaExecutor<'c> for T {}
+
+/// An alias for [`Transaction`][sqlx_core::transaction::Transaction], specialized for Exasol.
+pub type ExaTransaction<'c> = sqlx_core::transaction::Transaction<'c, Exasol>;
 
 impl_into_arguments_for_arguments!(ExaArguments);
 impl_acquire!(Exasol, ExaConnection);

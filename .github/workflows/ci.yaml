@@ -42,10 +42,21 @@ jobs:
         run: cargo doc --workspace --no-deps --document-private-items --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+          
+  docs_rs:
+    name: Emulate docs.rs build
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/install@cargo-docs-rs
+      - run: cargo +nightly docs-rs
 
   clippy:
     name: Clippy
-    needs: [format, docs]
+    needs: [format, docs, docs_rs]
     runs-on: ubuntu-latest
     strategy:
       matrix:
