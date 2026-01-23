@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.9.2] - 2026-01-23
+
+### Fixed
+
+- [#59](https://github.com/bobozaur/sqlx-exasol/pull/59): More closely mimic sqlx feature flags
+  - mimic `sqlx` feature flags more closely to avoid surprises
+  - fix `docs.rs` build
+  - add `cargo docs-rs` CI job
+  - selective re-exports from `sqlx` and `sqlx-core`
+  - add latest Exasol IO tests to publish workflow
+
 ## [0.9.1] - 2026-01-22
 
 ### Added

@@ -11,22 +11,25 @@ categories.workspace = true
 authors.workspace = true
 
 [features]
-# SQLx inherited features
 any = ["sqlx-core/any"]
+json = ["sqlx-core/json"]
 migrate = ["sqlx-core/migrate", "dep:dotenvy", "dep:hex"]
-macros = ["dep:sqlx-macros-core", "sqlx-macros-core?/macros"]
-sqlx-toml = ["sqlx-core/sqlx-toml"]
+offline = ["sqlx-core/offline"]
 
 # Type Integration features
 bigdecimal = ["sqlx-core/bigdecimal", "dep:bigdecimal"]
 chrono = ["sqlx-core/chrono", "dep:chrono"]
 geo-types = ["dep:geo-types", "dep:wkt"]
-json = ["sqlx-core/json"]
 rust_decimal = ["sqlx-core/rust_decimal", "dep:rust_decimal"]
 time = ["sqlx-core/time", "dep:time"]
 uuid = ["sqlx-core/uuid", "dep:uuid"]
 
-# TLS features
+# Driver specific features
+compression = ["dep:async-compression"]
+etl = ["dep:flume", "dep:futures-channel", "dep:hyper"]
+macros = ["dep:sqlx-macros-core", "sqlx-macros-core?/macros"]
+
+# TLS features for ETL
 tls = ["dep:rcgen", "dep:sha2"]
 native-tls = [
   "dep:native-tls",
@@ -37,11 +40,6 @@ native-tls = [
 rustls-aws-lc-rs = ["rustls", "rcgen?/aws_lc_rs"]
 rustls-ring = ["rustls", "rcgen?/ring"]
 rustls = ["dep:rustls", "sqlx-core/_tls-rustls", "tls"]
-
-# Driver specific features
-compression = ["dep:async-compression"]
-etl = ["dep:flume", "dep:futures-channel", "dep:hyper"]
-
 
 [dependencies]
 arrayvec = { workspace = true }
@@ -81,7 +79,7 @@ uuid = { workspace = true, optional = true }
 wkt = { workspace = true, optional = true }
 
 [dev-dependencies]
-sqlx-a-orig = { workspace = true, features = [
+sqlx-orig = { workspace = true, features = [
   "runtime-tokio",
   "macros",
   "migrate",

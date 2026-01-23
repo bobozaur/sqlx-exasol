@@ -20,18 +20,6 @@ path = "src/sqlx-exasol.rs"
 name = "cargo-sqlx-exasol"
 path = "src/cargo-sqlx-exasol.rs"
 
-[features]
-default = ["native-tls", "completions", "sqlx-toml"]
-
-rustls = ["sqlx-cli/rustls"]
-native-tls = ["sqlx-cli/native-tls"]
-
-openssl-vendored = ["sqlx-cli/openssl-vendored"]
-
-completions = ["sqlx-cli/completions"]
-
-sqlx-toml = ["sqlx-cli/sqlx-toml"]
-
 [dependencies]
 clap = { workspace = true }
 console = { workspace = true }
@@ -42,6 +30,20 @@ sqlx-exasol = { workspace = true, features = [
 ] }
 sqlx-cli = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+default = ["native-tls", "completions", "sqlx-toml"]
+
+# TLS options
+rustls = ["sqlx-cli/rustls"]
+native-tls = ["sqlx-cli/native-tls"]
+
+# workaround for musl + openssl issues
+openssl-vendored = ["sqlx-cli/openssl-vendored"]
+
+completions = ["sqlx-cli/completions"]
+
+sqlx-toml = ["sqlx-cli/sqlx-toml"]
 
 [lints]
 workspace = true

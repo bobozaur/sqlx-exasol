@@ -1,5 +1,3 @@
-#![cfg_attr(not(test), warn(unused_crate_dependencies))]
-
 mod parse;
 
 #[allow(unused_imports, reason = "built-in; conditionally compiled")]
