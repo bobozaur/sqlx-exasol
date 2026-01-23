@@ -15,7 +15,6 @@ it can do all the drivers shipped with `sqlx` do, with some caveats:
 
 - Limitations
   - separate CLI utility (`sqlx-exasol` instead of `sqlx`)
-  - compile time query macros cannot work along the ones from `sqlx` within the same crate
   - no locking migrations support<sup>[1](#no_locks)</sup>
   - no column nullability checks<sup>[2](#nullable)</sup>
 
