@@ -135,11 +135,15 @@ macro_rules! test_type_invalid {
 
 #[macro_export]
 macro_rules! test_etl {
-    ($kind:literal, $name:literal, $num_workers:expr, $table:literal, $proc:expr, $export:expr, $import:expr) => {
+    ($name:literal, $table:literal, $export:expr, $import:expr) => {
+        $crate::test_etl!($name, 1, $table, |(r, w)| pipe(r, w), $export, $import);
+    };
+
+    ($name:literal, $num_workers:expr, $table:literal, $proc:expr, $export:expr, $import:expr) => {
         paste::item! {
             #[ignore]
             #[sqlx_exasol::test]
-            async fn [< test_etl_ $kind _ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> Result<(), BoxDynError> {
+            async fn [< test_etl_ $name >](pool_opts: PoolOptions<Exasol>, exa_opts: ExaConnectOptions) -> Result<(), BoxDynError> {
                 let pool = pool_opts.min_connections(2).connect_with(exa_opts).await?;
 
                 let mut conn1 = pool.acquire().await?;
@@ -176,44 +180,6 @@ macro_rules! test_etl {
                 Ok(())
             }
         }
-    };
-}
-
-#[macro_export]
-macro_rules! test_etl_single_threaded {
-    ($name:literal, $table:literal, $export:expr, $import:expr) => {
-        $crate::test_etl_single_threaded!($name, 1, $table, $export, $import);
-    };
-
-    ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr) => {
-        $crate::test_etl!(
-            "single_threaded",
-            $name,
-            $num_workers,
-            $table,
-            |(r, w)| pipe(r, w),
-            $export,
-            $import
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! test_etl_multi_threaded {
-    ($name:literal, $table:literal, $export:expr, $import:expr) => {
-        $crate::test_etl_multi_threaded!($name, 1, $table, $export, $import);
-    };
-
-    ($name:literal, $num_workers:expr, $table:literal, $export:expr, $import:expr) => {
-        $crate::test_etl!(
-            "multi_threaded",
-            $name,
-            $num_workers,
-            $table,
-            |(r, w)| sqlx_exasol::__rt::spawn(pipe(r, w)),
-            $export,
-            $import
-        );
     };
 }
 
